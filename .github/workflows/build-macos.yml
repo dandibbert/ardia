@@ -57,11 +57,10 @@ jobs:
             build 2>&1 | tee build.log | grep -E "error:|warning: .*Ardia|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
-      - name: Own bundle id (own data dir, never the installed Ardia's profile) and no Sparkle
+      - name: Real login keychain (the installed Ardia's logins stay readable) and no Sparkle
         working-directory: apps/browser/build/Build/Products/Release
         run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.ardia.browser.test" Ardia.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName Ardia Test" Ardia.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :ACUsesLoginKeychain bool true" Ardia.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" Ardia.app/Contents/Info.plist
           codesign --force --sign - Ardia.app
           codesign --verify --verbose Ardia.app
@@ -87,7 +86,7 @@ jobs:
           tag="build-${{ steps.package.outputs.short }}"
           gh release create "$tag" "${{ steps.package.outputs.zip }}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease --title "Ardia test build ${{ steps.package.outputs.short }}" \
-            --notes "Ad hoc signed test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Bundle id com.ardia.browser.test: its own data in ~/Library/Application Support/com.ardia.browser.test, never the installed Ardia's. Unzip, run: xattr -cr Ardia.app"
+            --notes "Ad hoc signed test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Uses the installed Ardia's profile and its Ardia Safe Storage key in the login keychain: macOS asks once per build, choose Always Allow. Unzip, run: xattr -cr Ardia.app"
 
       - name: Upload build log on failure
         if: failure()
