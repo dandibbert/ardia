@@ -1581,6 +1581,10 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
 - (void)applyPainting {
   self.alphaValue = _visible || _revealed || !(_warm || _leaving) ? 1 : 0;
   const BOOL shown = self.paints;
+  NSWindow *window = self.window;
+  NSResponder *responder = window.firstResponder;
+  if (!_visible && !_standalone && [responder isKindOfClass:NSView.class] && [(NSView *)responder isDescendantOf:self])
+    [window makeFirstResponder:nil];
   for (NSView *sub in self.subviews) {
     sub.hidden = !shown;
     AcceptDrops(sub, _visible);
@@ -1708,9 +1712,26 @@ static BOOL InTabPage(NSView *view) {
   return NO;
 }
 
+static BOOL StrayResponder(NSView *focused, NSWindow *window) {
+  if (!focused) return NO;
+  if (focused.window != window || focused.isHiddenOrHasHiddenAncestor) return YES;
+  for (NSView *v = focused; v; v = v.superview)
+    if ([v isKindOfClass:ArdiaCoreWebView.class]) return !((ArdiaCoreWebView *)v)->_visible;
+  return NO;
+}
+
 + (void)installOutgoingFocusSnapshots {
-  static id snapshots, ends;
+  static id snapshots, ends, strayFocusClicks;
   if (snapshots) return;
+  strayFocusClicks = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *event) {
+    ArdiaCoreWebView *page = PageViewUnder(event);
+    NSWindow *window = event.window;
+    NSResponder *responder = window.firstResponder;
+    NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
+    if (page && page->_visible && !page->_standalone && focused && ![focused isDescendantOf:page] && StrayResponder(focused, window))
+      [window makeFirstResponder:nil];
+    return event;
+  }];
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
   snapshots = [center addObserverForName:@"ArdiaOutgoingFocus" object:nil queue:nil usingBlock:^(NSNotification *note) {
     if (ArdiaCoreWebView *view = [ArdiaCoreWebView holding:note.object]) {
@@ -1786,8 +1807,9 @@ static BOOL InTabPage(NSView *view) {
   _focusOnActivate = NO;
   NSResponder *responder = window.firstResponder;
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
-  if (view && [view isDescendantOf:self]) return;
-  if (responder && responder != window && !(view && InTabPage(view))) return;
+  const BOOL stray = StrayResponder(view, window);
+  if (view && !stray && [view isDescendantOf:self]) return;
+  if (responder && responder != window && !stray && !(view && InTabPage(view))) return;
   NSView *devTools = _focusedDevTools;
   if (_pageFocus == ACPageFocus::DevTools && devTools.window == window && _devtoolsView && [devTools isDescendantOf:_devtoolsView]) {
     [window makeFirstResponder:devTools];
