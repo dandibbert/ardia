@@ -8,8 +8,9 @@ import { usePagerPages, type PagerPage } from "../layout/profilePager";
 import { useHover } from "../primitives";
 
 export const PROFILE_DOTS_HEIGHT = 41;
-const CELL = 12;
-const DOT = 6;
+const CELL = 24;
+const DOT = 7;
+const HOVER_PAD = 20;
 const BAND = 28;
 const SELECTED = 0.85;
 const HOVERED = 0.4;
@@ -47,6 +48,17 @@ function Dot({ id, windowId, page, pos }: { id: string; windowId: string; page: 
     <View {...hoverProps} tooltip={name}>
       <Pressable accessibilityRole="button" accessibilityLabel={name} onPress={() => switchProfile(windowId, id, true)}>
         <View style={{ width: CELL, height: BAND, alignItems: "center", justifyContent: "center" }}>
+          {hovered ? (
+            <View
+              style={{
+                position: "absolute",
+                width: HOVER_PAD,
+                height: HOVER_PAD,
+                borderRadius: 6,
+                backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+              }}
+            />
+          ) : null}
           <Animated.View style={{ width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: theme.dark ? "#FFFFFF" : "#000000", opacity }} />
         </View>
       </Pressable>

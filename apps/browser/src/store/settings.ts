@@ -168,8 +168,23 @@ export function choose(settings: Settings, patch: Partial<Settings>): Settings {
   return { ...settings, ...patch, ...(added.length ? { chosen: [...chosen, ...added] } : {}), ...(inferred ? { inferred } : {}) };
 }
 
+const RECORDABLE_CONTROL_KEYS = new Set(["\u0003", "\b", "\t", "\r", "\u001b", "\u007f"]);
+
+export function isRecordableShortcut(override: unknown): boolean {
+  if (!Array.isArray(override) || typeof override[0] !== "string" || !override[0]) return false;
+  return [...override[0]].every((c) => c >= " " || RECORDABLE_CONTROL_KEYS.has(c));
+}
+
+function dropBrokenShortcuts(shortcuts: Record<string, string[]> | undefined): Record<string, string[]> | undefined {
+  if (!shortcuts || Object.values(shortcuts).every(isRecordableShortcut)) return shortcuts;
+  return Object.fromEntries(Object.entries(shortcuts).filter(([, o]) => isRecordableShortcut(o)));
+}
+
 export function migrateSavedSettings(saved: (Partial<Settings> & { batterySaver?: unknown }) | undefined): Partial<Settings> | undefined {
-  if (!saved || !("batterySaver" in saved)) return saved;
+  if (!saved) return saved;
+  const shortcuts = dropBrokenShortcuts(saved.shortcuts);
+  if (shortcuts !== saved.shortcuts) saved = { ...saved, shortcuts };
+  if (!("batterySaver" in saved)) return saved;
   const { batterySaver, ...rest } = saved;
   const explicit = batterySaver === false || (batterySaver === true && !!rest.chosen?.includes("batterySaver") && !rest.inferred?.includes("batterySaver"));
   const without = (keys: string[]) => keys.filter((k) => k !== "batterySaver");

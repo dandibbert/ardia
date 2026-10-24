@@ -16,12 +16,11 @@ import {
   type InstalledExtension,
 } from "@ardia/ardiacore";
 import { confirm, showMenu } from "@ardia/shell";
-import { openWindow } from "../../lib/actions";
+import { openUrls, openWindow } from "../../lib/actions";
 import { webviews } from "../../lib/webviews";
 import { useBrowser, type BrowserState } from "../../store/browser";
 import { engineProfile } from "../../store/model";
 import { shownPageId } from "../../store/peek";
-import { openSettings } from "../settings/windows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
 import { browserIdOf, extensionProfile, pageProfile, shownIn, useExtensions, windowExtensions, type Anchor } from "./store";
 
@@ -196,7 +195,7 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
   if (ext.optionsUrl) useBrowser.getState().newTab(windowId, { url: ext.optionsUrl });
 }
 
-export const openManageExtensions = () => openSettings("extensions");
+export const openManageExtensions = (windowId?: string | null) => openUrls(["chrome://extensions"], windowId);
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
 export const openWebStore = (windowId: string) =>
   useBrowser.getState().newTab(windowId, { url: "https://chromewebstore.google.com/category/extensions" });
@@ -257,7 +256,7 @@ export async function showExtensionMenu(windowId: string, ext: InstalledExtensio
   if (choice === "enable") void setEnabled(profile, ext.id, !ext.enabled);
   if (choice === "remove") void removeExtension(profile, ext, windowId);
   if (choice === "sidePanel") void toggleSidePanel(windowId, ext.id);
-  if (choice === "manage") openManageExtensions();
+  if (choice === "manage") openManageExtensions(windowId);
 }
 
 function message(error: unknown): string {
