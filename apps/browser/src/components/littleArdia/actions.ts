@@ -1,5 +1,7 @@
 import { type LinkRoute, routeLinkTabs } from "@ardia/ardiacore";
-import { focus, openWindow } from "../../lib/actions";
+import { showMenu, type MenuItem } from "@ardia/shell";
+import { focus, moveTabToProfile, openWindow } from "../../lib/actions";
+import { profileAccent } from "../../lib/theme";
 import { routedLinks, type RoutedLinks } from "../../lib/linkRoutes";
 import { runsJavaScript } from "../../lib/scriptUrls";
 import { useBrowser } from "../../store/browser";
@@ -76,6 +78,27 @@ export function openInMainWindow(windowId: string) {
   }
   const moved = s.moveTabsToWindow([tab.id], target ?? null);
   if (moved) focus(moved);
+}
+
+export async function openInProfileMenu(windowId: string) {
+  const s = store();
+  const w = s.windows[windowId];
+  if (!w || w.incognito || !isSmall(s, windowId)) return;
+  const tabId = activeTabId(s, windowId);
+  const current = (tabId && s.tabs[tabId]?.profileId) || w.profileId;
+  const items: MenuItem[] = s.profileOrder.map((id) => ({
+    id,
+    title: `Open in ${s.profiles[id]!.name}`,
+    checked: id === current,
+    swatch: profileAccent(s.profiles[id]),
+  }));
+  const choice = await showMenu(items);
+  if (!choice || !store().profiles[choice]) return;
+  if (choice !== current && tabId) {
+    await moveTabToProfile(tabId, choice);
+    if (store().tabs[tabId]?.profileId !== choice) return;
+  }
+  openInMainWindow(windowId);
 }
 
 export function closeLittleArdia(windowId: string) {

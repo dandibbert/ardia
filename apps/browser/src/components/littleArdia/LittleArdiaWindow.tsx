@@ -13,7 +13,7 @@ import { setUrlAnchor } from "../layout/windowLayout";
 import { showUrlBarMenu } from "../omnibox/paste";
 import { useHover } from "../primitives";
 import { copyPageUrl } from "../site/selection";
-import { openInMainWindow } from "./actions";
+import { openInMainWindow, openInProfileMenu } from "./actions";
 import { PageLabel, SMALL_BAR_HEIGHT, SMALL_INSET, SmallBar } from "./SmallChrome";
 
 const LIGHTS_CENTER: [number, number] = [20, SMALL_BAR_HEIGHT / 2];
@@ -41,6 +41,7 @@ function LittleArdiaBar() {
   const windowId = useWindowId();
   const tab = useActiveTab();
   const panelOpen = useWindowUi().panel.open;
+  const pickProfile = useBrowser((s) => s.profileOrder.length > 1 && !s.windows[windowId]?.incognito);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
@@ -63,6 +64,7 @@ function LittleArdiaBar() {
       buttons={[
         { icon: copied ? "checkmark" : "link", size: 14, disabled: !tab?.url, tooltip: "Copy Link (⇧⌘C)", onPress: copy },
         { icon: "arrow.up.left.and.arrow.down.right", size: 13, tooltip: "Open in Ardia (⌘O)", onPress: () => openInMainWindow(windowId) },
+        ...(pickProfile ? [{ icon: "chevron.down", size: 11, tooltip: "Open in Profile…", onPress: () => void openInProfileMenu(windowId) }] : []),
       ]}
     >
       <WindowDragRegion style={StyleSheet.absoluteFill} />
