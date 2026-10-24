@@ -1,0 +1,93 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "claude/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      ARDIACORE_PREBUILT_REPO: mantrakp04/ardia
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.1.3
+
+      - name: Select Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$latest" ] && sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pods
+        working-directory: apps/browser/macos
+        run: pod install
+
+      - name: Build Release app (ad hoc signed, upstream prebuilt engine)
+        working-directory: apps/browser
+        run: |
+          set -o pipefail
+          xcodebuild -workspace macos/Ardia.xcworkspace -scheme Ardia-macOS -configuration Release \
+            -destination 'generic/platform=macOS' ARCHS=arm64 -derivedDataPath build \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            CODE_SIGN_ENTITLEMENTS= ENABLE_HARDENED_RUNTIME=NO AC_UPDATE_CHANNEL=nightly \
+            build 2>&1 | tee build.log | grep -E "error:|warning: .*Ardia|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Turn off Sparkle so upstream updates don't replace this build
+        working-directory: apps/browser/build/Build/Products/Release
+        run: |
+          /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" Ardia.app/Contents/Info.plist
+          codesign --force --sign - Ardia.app
+          codesign --verify --verbose Ardia.app
+
+      - name: Package
+        id: package
+        run: |
+          short=$(git rev-parse --short HEAD)
+          zip="Ardia-${short}-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent apps/browser/build/Build/Products/Release/Ardia.app "$zip"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip }}
+          path: ${{ steps.package.outputs.zip }}
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${{ steps.package.outputs.short }}"
+          gh release create "$tag" "${{ steps.package.outputs.zip }}" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease --title "Ardia test build ${{ steps.package.outputs.short }}" \
+            --notes "Ad hoc signed build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Unzip, move to a test folder, run: xattr -cr Ardia.app"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: apps/browser/build.log
