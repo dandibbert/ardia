@@ -1523,6 +1523,11 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
   }
 }
 
+- (NSView *)hitTest:(NSPoint)point {
+  if (!_visible && !_standalone) return nil;
+  return [super hitTest:point];
+}
+
 - (BOOL)paints {
   return _visible || (_warm && !self.neighbourPageAsleep) || _leaving || _revealed;
 }
