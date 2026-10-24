@@ -1726,8 +1726,24 @@ static BOOL StrayResponder(NSView *focused, NSWindow *window) {
 }
 
 + (void)installOutgoingFocusSnapshots {
-  static id snapshots, ends, strayFocusClicks;
+  static id snapshots, ends, strayFocusClicks, windowKeys;
   if (snapshots) return;
+  windowKeys = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+    __weak NSWindow *weakWindow = note.object;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow *window = weakWindow;
+      if (!window.isKeyWindow) return;
+      NSResponder *responder = window.firstResponder;
+      NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
+      if (focused ? !StrayResponder(focused, window) : (responder && responder != window)) return;
+      for (ArdiaCoreWebView *view in LiveViews().allObjects)
+        if (view.window == window && view->_visible && !view->_standalone && view->_tab && view->_pageFocus != ACPageFocus::Elsewhere) {
+          if (focused) [window makeFirstResponder:nil];
+          [view focusPage];
+          return;
+        }
+    });
+  }];
   strayFocusClicks = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *event) {
     ArdiaCoreWebView *page = PageViewUnder(event);
     NSWindow *window = event.window;

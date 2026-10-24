@@ -17,6 +17,31 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private(set) var auxKinds: [String: String] = [:]
   private(set) var smallIds = Set<String>()
 
+  override init() {
+    super.init()
+    for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification] {
+      NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged), name: name, object: nil)
+    }
+  }
+
+  private static func shownOnScreen(_ window: NSWindow) -> Bool {
+    window.isVisible && window.alphaValue > 0.01 && !window.isMiniaturized
+      && NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+  }
+
+  @objc private func keyWindowChanged() {
+    DispatchQueue.main.async { [weak self] in self?.moveKeyOffHiddenWindow() }
+  }
+
+  private func moveKeyOffHiddenWindow() {
+    guard NSApp.isActive, NSApp.modalWindow == nil, ProcessInfo.processInfo.environment["ARDIA_BACKGROUND"] != "1" else { return }
+    let key = NSApp.keyWindow
+    if let key, id(of: key) != nil || Self.shownOnScreen(key) { return }
+    guard let target = NSApp.orderedWindows.first(where: { id(of: $0) != nil && Self.shownOnScreen($0) && $0.canBecomeKey }) else { return }
+    NSLog("[shell] key window was hidden (%@); giving the keyboard to window %@", key.map { String(describing: type(of: $0)) } ?? "none", id(of: target) ?? "")
+    target.makeKey()
+  }
+
   private func isBrowserWindow(_ window: NSWindow?) -> Bool {
     guard let id = id(of: window) else { return false }
     return auxKinds[id] == nil
