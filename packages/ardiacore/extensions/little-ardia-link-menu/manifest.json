@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Little Ardia",
+  "version": "1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmS4jAE/VVz5rNn8ztEQ76WD081gofa/envIr1GIzZF6NeeHC3Y751x9k8qwPNGjKyt/i8WCj/DfIsBDTAwuv8cdn5ja7FodgB5P4JNV6kKeK0hAEso++PndusP7GNVViTiBYoGN9pikfzTgHoc6ZbE7hU2KFtzZwg0z2dVfsXExwSOoXUwkdpSpQS8wnYMSvaPaWr4TkLyXi0ClG3zfxstXK7fm1a/WlxX+lLe7xPyM/U3u7mllORun1duJLqO+/Awu6kuJdmlvaD/NiLZwRdXodBv9Y7hVUcrdUFmhRKNvFGaRBaPWuGHKHT1KCnsgnDatg+QvSh8KGYtnCjO5tewIDAQAB",
+  "permissions": ["contextMenus"],
+  "icons": { "16": "icon16.png", "32": "icon32.png" },
+  "background": { "service_worker": "background.js" }
+}

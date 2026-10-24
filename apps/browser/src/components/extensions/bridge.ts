@@ -20,6 +20,8 @@ import { changedIds } from "../../store/changes";
 import { activeTabId, engineProfile } from "../../store/model";
 import { shownPageId } from "../../store/peek";
 import { tabForBrowser, usePages } from "../layout/pageState";
+import { openLittleArdia } from "../littleArdia/actions";
+import { littleArdiaLinkOf } from "./littleArdiaLink";
 import { refreshActionStates } from "./actions";
 import { startExtensionSearchEngines } from "./searchEngines";
 import * as state from "./state";
@@ -65,8 +67,18 @@ export function startExtensionsBridge() {
   if (__DEV__) Object.assign(globalThis, { acExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 
+function openLinkInLittleArdia(request: TabsRequest, link: string) {
+  const s = useBrowser.getState();
+  const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.profileId) === request.profile;
+  const shown = s.ui.focusOrder.find(ofProfile);
+  const profileId = shown ? s.windows[shown]!.profileId : s.profileOrder.find((p) => engineProfile(p) === request.profile);
+  openLittleArdia(link, profileId);
+}
+
 function openRequestedTab(request: TabsRequest) {
   if (request.action === "closeWindow") return closeChromeMadeWindow(request.chromeWindow);
+  const littleArdiaLink = littleArdiaLinkOf(request.url);
+  if (littleArdiaLink) return openLinkInLittleArdia(request, littleArdiaLink);
   if (request.chromeWindow && request.tabKey) return moveIntoChromeMadeWindow(request, request.chromeWindow, request.tabKey);
   if (request.chromeWindow && request.adoptId) return openChromeMadeTab(request, request.chromeWindow, request.adoptId);
   if (!request.url) return;

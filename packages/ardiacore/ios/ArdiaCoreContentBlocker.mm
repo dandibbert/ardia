@@ -770,8 +770,20 @@ void PrepareContentBlocker() {
   StartPreparing();
 }
 
+void LoadLinkMenu(NSString *profile) {
+  NSString *path = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:[@"Extensions" stringByAppendingPathComponent:@"little-ardia-link-menu"]];
+  if (![NSFileManager.defaultManager fileExistsAtPath:[path stringByAppendingPathComponent:@"manifest.json"]]) return;
+  WithProfile(profile, ^(ArdiaCoreProfile *p) {
+    if (!p || ![p respondsToSelector:@selector(loadComponentExtension:)]) return;
+    NSString *loaded = [p loadComponentExtension:path];
+    if (!loaded.length) NSLog(@"[link-menu] component load failed in \"%@\"", profile);
+  });
+}
+
 void LoadContentBlocker(NSString *profile) {
-  if (!IsIncognito(profile)) LoadHeld(profile ?: @"");
+  if (IsIncognito(profile)) return;
+  LoadHeld(profile ?: @"");
+  LoadLinkMenu(profile ?: @"");
 }
 }
 
