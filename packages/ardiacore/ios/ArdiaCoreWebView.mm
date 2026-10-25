@@ -252,6 +252,23 @@ static const CFTimeInterval kPeekGestureLifetime = 10;
 static const CFTimeInterval kPeekFallbackLifetime = 60;
 static char kScriptFramesKey;
 
+static void RefreshPageKeyState(NSView *root, NSWindow *window) {
+  if (!root || !window.isKeyWindow) return;
+  SEL becameKey = NSSelectorFromString(@"windowDidBecomeKey:");
+  NSNotification *note = [NSNotification notificationWithName:NSWindowDidBecomeKeyNotification object:window];
+  NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:root];
+  while (queue.count) {
+    NSView *view = queue.firstObject;
+    [queue removeObjectAtIndex:0];
+    if (view.window == window && [NSStringFromClass(view.class) isEqualToString:@"RenderWidgetHostViewCocoa"] &&
+        [view respondsToSelector:becameKey]) {
+      IMP imp = [view methodForSelector:becameKey];
+      ((void (*)(id, SEL, NSNotification *))imp)(view, becameKey, note);
+    }
+    [queue addObjectsFromArray:view.subviews];
+  }
+}
+
 static ArdiaCoreWebView *PageViewUnder(NSEvent *event) {
   NSView *content = event.window.contentView;
   NSView *root = content.superview ?: content;
@@ -1671,6 +1688,13 @@ static void ExpireLaunchTab(ArdiaCoreTab *tab) {
   if (!visible) [self storePageFocus];
   _visible = visible;
   if (visible) [self settleRevealsInWindow];
+  if (visible) {
+    __weak ArdiaCoreWebView *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      ArdiaCoreWebView *shown = weakSelf;
+      if (shown && shown->_visible) RefreshPageKeyState(shown->_tab.view, shown.window);
+    });
+  }
   if (!visible && [_tab respondsToSelector:@selector(exitExclusiveAccess)]) [_tab exitExclusiveAccess];
   if (visible && self.alphaValue < 1 && _tab.view.superview == self && !_tab.view.hidden) self.alphaValue = 1;
   [self schedulePainting];
@@ -1759,6 +1783,8 @@ static BOOL StrayResponder(NSView *focused, NSWindow *window) {
     dispatch_async(dispatch_get_main_queue(), ^{
       NSWindow *window = weakWindow;
       if (!window.isKeyWindow) return;
+      for (ArdiaCoreWebView *view in LiveViews().allObjects)
+        if (view.window == window && view->_visible) RefreshPageKeyState(view->_tab.view, window);
       NSResponder *responder = window.firstResponder;
       NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
       if (focused ? !StrayResponder(focused, window) : (responder && responder != window)) return;
@@ -1777,6 +1803,7 @@ static BOOL StrayResponder(NSView *focused, NSWindow *window) {
     NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
     if (page && page->_visible && !page->_standalone && focused && ![focused isDescendantOf:page] && StrayResponder(focused, window))
       [window makeFirstResponder:nil];
+    if (page && page->_visible) RefreshPageKeyState(page->_tab.view, window);
     return event;
   }];
   NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
@@ -1852,6 +1879,7 @@ static BOOL StrayResponder(NSView *focused, NSWindow *window) {
   }
   if (!_visible || page.isHiddenOrHasHiddenAncestor) return;
   _focusOnActivate = NO;
+  RefreshPageKeyState(page, window);
   NSResponder *responder = window.firstResponder;
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
   const BOOL stray = StrayResponder(view, window);
@@ -2694,6 +2722,7 @@ static NSString *LinkKeyAction(NSString *key) {
 
 - (void)focusPage {
   if ([ArdiaCoreEarlyWindow veils:_tab]) return [ArdiaCoreEarlyWindow requestFocus:_tab];
+  RefreshPageKeyState(_tab.view, self.window);
   [_tab focus];
 }
 

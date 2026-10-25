@@ -41,8 +41,23 @@ import {
   windowExtensions,
 } from "./state";
 
+function openLittleArdiaLinkTabs(s: BrowserState, prev: BrowserState) {
+  if (s.tabs === prev.tabs) return;
+  for (const id of changedIds(s.tabs, prev.tabs)) {
+    const tab = s.tabs[id];
+    const link = tab ? littleArdiaLinkOf(tab.url) : null;
+    if (!tab || !link) continue;
+    queueMicrotask(() => {
+      if (!useBrowser.getState().tabs[id]) return;
+      useBrowser.getState().closeTab(id);
+      openLittleArdia(link, tab.profileId);
+    });
+  }
+}
+
 export function startExtensionsBridge() {
   onExtensionTabsRequest(openRequestedTab);
+  useBrowser.subscribe(openLittleArdiaLinkTabs);
   startExtensionSearchEngines();
   onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
 

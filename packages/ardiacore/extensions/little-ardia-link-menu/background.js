@@ -2,7 +2,7 @@ const MENU_ID = "open-link-in-little-ardia";
 
 function ensureMenu() {
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: MENU_ID, title: "Open Link in Little Ardia", contexts: ["link"] });
+    chrome.contextMenus.create({ id: MENU_ID, title: "Open Link in Little Ardia", contexts: ["link"] }, () => void chrome.runtime.lastError);
   });
 }
 
