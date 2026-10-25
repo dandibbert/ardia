@@ -17,11 +17,31 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private(set) var auxKinds: [String: String] = [:]
   private(set) var smallIds = Set<String>()
 
+  private var keyTrace: Any?
+
   override init() {
     super.init()
     for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged), name: name, object: nil)
     }
+    keyTrace = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      self?.traceKey(event)
+      return event
+    }
+  }
+
+  private func traceKey(_ event: NSEvent) {
+    guard !event.modifierFlags.contains(.command) else { return }
+    let window = event.window ?? NSApp.keyWindow
+    let responder = window?.firstResponder
+    let switcher = SwitcherHold.capturing
+    let ahead = typeAhead != nil
+    let gate = FocusHandoff.shared.gatesKeyWindow
+    let recording = ShortcutRecorder.shared.isRecording
+    guard switcher || ahead || gate || recording || !Self.takesTyping(responder) else { return }
+    let name = id(of: window) ?? window.map { String(describing: type(of: $0)) } ?? "none"
+    let responderName = responder.map { String(describing: type(of: $0)) } ?? "nil"
+    NSLog("%@", "[keytrace] window=\(name) key=\(window?.isKeyWindow == true) responder=\(responderName) switcher=\(switcher) typeAhead=\(ahead) gate=\(gate) recorder=\(recording)")
   }
 
   private static func shownOnScreen(_ window: NSWindow) -> Bool {
@@ -285,7 +305,14 @@ final class WindowManager: NSObject, NSWindowDelegate {
     held.passing = true
     now.forEach { NSApp.sendEvent($0) }
     held.passing = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.typeAheadLimit) { [weak self, weak held] in
+      guard let self, let held, self.typeAhead === held else { return }
+      NSLog("%@", "[keytrace] type-ahead held keys past its limit; sending them")
+      self.endTypeAhead(send: true)
+    }
   }
+
+  private static let typeAheadLimit: TimeInterval = 2
 
   private static func retarget(_ event: NSEvent, to window: NSWindow) -> NSEvent? {
     if event.windowNumber == window.windowNumber { return event }

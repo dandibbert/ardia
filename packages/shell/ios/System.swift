@@ -136,6 +136,7 @@ final class ShortcutRecorder {
   static let shared = ShortcutRecorder()
   private var monitor: Any?
   private var promise: Promise?
+  var isRecording: Bool { monitor != nil }
 
   func record(_ promise: Promise) {
     finish(nil)
