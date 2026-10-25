@@ -38,10 +38,22 @@ final class WindowManager: NSObject, NSWindowDelegate {
     let ahead = typeAhead != nil
     let gate = FocusHandoff.shared.gatesKeyWindow
     let recording = ShortcutRecorder.shared.isRecording
-    guard switcher || ahead || gate || recording || !Self.takesTyping(responder) else { return }
-    let name = id(of: window) ?? window.map { String(describing: type(of: $0)) } ?? "none"
+    let verbose = UserDefaults.standard.bool(forKey: "ArdiaKeyTrace")
+    guard verbose || switcher || ahead || gate || recording || !Self.takesTyping(responder) else { return }
     let responderName = responder.map { String(describing: type(of: $0)) } ?? "nil"
-    NSLog("%@", "[keytrace] window=\(name) key=\(window?.isKeyWindow == true) responder=\(responderName) switcher=\(switcher) typeAhead=\(ahead) gate=\(gate) recorder=\(recording)")
+    var line = "[keytrace] window=\(describe(window)) key=\(window?.isKeyWindow == true) responder=\(responderName) switcher=\(switcher) typeAhead=\(ahead) gate=\(gate) recorder=\(recording)"
+    if verbose {
+      let view = responder as? NSView
+      line += " keyWindow=\(describe(NSApp.keyWindow)) mainWindow=\(describe(NSApp.mainWindow)) eventWindow=\(describe(event.window))"
+      line += " responderWindow=\(describe(view?.window)) responderHidden=\(view?.isHiddenOrHasHiddenAncestor ?? false) active=\(NSApp.isActive)"
+    }
+    NSLog("%@", line)
+  }
+
+  private func describe(_ window: NSWindow?) -> String {
+    guard let window else { return "none" }
+    let name = id(of: window) ?? String(describing: type(of: window))
+    return "\(name)#\(window.windowNumber)(visible=\(window.isVisible) alpha=\(window.alphaValue))"
   }
 
   private static func shownOnScreen(_ window: NSWindow) -> Bool {
@@ -516,8 +528,12 @@ final class WindowManager: NSObject, NSWindowDelegate {
       let helper = self.keyCycleWindow
       helper.orderFrontRegardless()
       helper.makeKey()
+      let helperTookKey = helper.isKeyWindow
       window.makeKey()
       helper.orderOut(nil)
+      if UserDefaults.standard.bool(forKey: "ArdiaKeyTrace") {
+        NSLog("%@", "[keytrace] key cycle window=\(self.describe(window)) helperTookKey=\(helperTookKey) backToWindow=\(window.isKeyWindow)")
+      }
     }
   }
 
