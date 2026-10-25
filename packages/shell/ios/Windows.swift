@@ -487,7 +487,38 @@ final class WindowManager: NSObject, NSWindowDelegate {
   func windowDidBecomeKey(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window) else { return }
     if isMainWindow(window) { lastPlaced = window }
-    emit?("onWindowEvent", ["type": "focus", "id": id])
+    if !keyCycling { emit?("onWindowEvent", ["type": "focus", "id": id]) }
+    cycleKey(of: window)
+  }
+
+  private final class KeyCycleWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+  }
+
+  private var keyCycling = false
+  private lazy var keyCycleWindow: NSWindow = {
+    let window = KeyCycleWindow(contentRect: NSRect(x: -20000, y: -20000, width: 1, height: 1), styleMask: .borderless, backing: .buffered, defer: true)
+    window.alphaValue = 0
+    window.ignoresMouseEvents = true
+    window.isReleasedWhenClosed = false
+    window.collectionBehavior = [.transient, .ignoresCycle, .stationary]
+    return window
+  }()
+
+  private func cycleKey(of window: NSWindow) {
+    guard !keyCycling, typeAhead == nil, NSApp.modalWindow == nil, window.attachedSheet == nil, isBrowserWindow(window),
+      ProcessInfo.processInfo.environment["ARDIA_BACKGROUND"] != "1" else { return }
+    keyCycling = true
+    DispatchQueue.main.async { [weak self, weak window] in
+      guard let self else { return }
+      defer { self.keyCycling = false }
+      guard let window, window.isKeyWindow, self.typeAhead == nil else { return }
+      let helper = self.keyCycleWindow
+      helper.orderFrontRegardless()
+      helper.makeKey()
+      window.makeKey()
+      helper.orderOut(nil)
+    }
   }
 
   func windowWillClose(_ notification: Notification) {
