@@ -10,6 +10,7 @@ import {
   onWindowEvent,
   openWindow,
   replyToTerminate,
+  restoreFullScreen,
   setAppearance,
   setMenuStateParts,
   setTrafficLightsCenter,
@@ -22,6 +23,7 @@ import { Appearance } from "react-native";
 import { folderChildren, isBookmarked } from "../store/bookmarks";
 import { useBrowser, type BrowserState } from "../store/browser";
 import { activeTab, bookmarkProfileId, engineProfile, IDLE_LIVE, isPinnedRow, tabLabel, togglePinTitle, windowTitle } from "../store/model";
+import { canSwitchEngine, tabEngine } from "../store/engines";
 import { setLastTabKeepsWindow } from "../store/newTabBar";
 import { peekTabId } from "../store/peek";
 import { splitOf } from "../store/splits";
@@ -35,6 +37,7 @@ import { openWindow as createWindow } from "./actions";
 import { windowOpens } from "./windowOpenOrder";
 import { openExternalUrls } from "../components/littleArdia/actions";
 import { LITTLE_ARDIA_DISABLED_COMMANDS } from "../components/littleArdia/menu";
+import { SMALL_LIGHTS_CENTER } from "../components/littleArdia/SmallChrome";
 import { runCommand } from "./commands";
 import { setFocusSenders } from "./focusClaims";
 import { cancelAbandonedFocusMoves, settlingCommandFocus } from "./focusHandoff";
@@ -83,6 +86,7 @@ export function startNativeSync() {
     const s = store.getState();
     if (e.type === "focus") s.setFocusedWindow(e.id);
     if (e.type === "frame") s.setWindowFrame(e.id, e.frame);
+    if (e.type === "fullScreen" && !quitting) s.setWindowFullScreen(e.id, e.on);
     if (e.type === "close") {
       if (quitting) return;
       open.delete(e.id);
@@ -111,7 +115,7 @@ export function startNativeSync() {
         ? { kind: "small" as const, size: s.settings.littleArdiaSize, ...(claim?.startsWith("link:") ? { claim } : {}), ...(w.linkPointer ? { pointer: w.linkPointer } : {}) }
         : {};
       const made = w.chromeWindow ? { chromeWindow: w.chromeWindow } : {};
-      if (w.kind !== "small") void setTrafficLightsCenter(id, openingLightsCenter(s, id));
+      void setTrafficLightsCenter(id, w.kind === "small" ? SMALL_LIGHTS_CENTER : openingLightsCenter(s, id));
       void openWindow(id, { frame: w.frame, incognito: w.incognito, title: titles.get(id), focus, profile, ...(behind ? { behind } : {}), ...small, ...made });
     }
     for (const id of [...open]) {
@@ -150,6 +154,7 @@ export function startNativeSync() {
 
   syncWindows(store.getState());
   syncMenu();
+  restoreFullScreenWindows(store.getState());
   store.subscribe((s, prev) => {
     syncWindows(s, prev);
     menuTimer ??= setTimeout(syncMenu, 120);
@@ -172,6 +177,12 @@ export function startNativeSync() {
       void setWindowTitle(id, title);
     }
   });
+}
+
+function restoreFullScreenWindows(s: BrowserState) {
+  const stamp = (id: string) => s.windows[id]?.fullScreen ?? 0;
+  const ids = s.windowOrder.filter((id) => stamp(id) > 0).sort((a, b) => stamp(a) - stamp(b));
+  if (ids.length) void restoreFullScreen(ids, s.ui.focusedWindowId);
 }
 
 const PAGE_COMMANDS = [
@@ -267,6 +278,8 @@ export function menuState(s: BrowserState): MenuState {
   if (isPinnedRow(tab)) titles["togglePin:tile"] = "Move to Top Apps";
   else disabled.push("togglePin:tile");
   if (page?.muted) titles.toggleMute = "Unmute Site";
+  if (page && tabEngine(s, page.id) === "webkit") titles.togglePageEngine = "Open Page in Chromium";
+  if (!canSwitchEngine(page?.url)) disabled.push("togglePageEngine");
   if (page?.url && isBookmarked(s.bookmarks, bookmarkProfile, page.url)) {
     titles.bookmarkPage = "Edit Bookmark…";
   }

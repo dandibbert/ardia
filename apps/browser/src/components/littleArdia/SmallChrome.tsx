@@ -11,6 +11,7 @@ import { Favicon, IconButton, useHover } from "../primitives";
 
 export const SMALL_BAR_HEIGHT = 38;
 export const SMALL_INSET = 6;
+export const SMALL_LIGHTS_CENTER: [number, number] = [20, SMALL_BAR_HEIGHT / 2];
 export const SMALL_WINDOW_RADIUS = 16;
 export const SMALL_WINDOW_FRAME = {
   dark: { outerRim: "rgba(0,0,0,0.95)", innerRim: "rgba(255,255,255,0.1)", shadowOpacity: 0.66, shadowRadius: 23, shadowOffset: [0, 21] as [number, number] },
@@ -18,7 +19,7 @@ export const SMALL_WINDOW_FRAME = {
 };
 const MID = SMALL_BAR_HEIGHT / 2;
 const FIELD_HEIGHT = 28;
-const BUTTON = 28;
+export const SMALL_BAR_BUTTON = 28;
 const BUTTON_GAP = 2;
 const FIELD_GAP = 6;
 
@@ -38,14 +39,14 @@ export function SmallBar({
   children?: ReactNode;
 }) {
   const count = buttons.length + (trailing ? 1 : 0);
-  const buttonsWidth = count * BUTTON + Math.max(0, count - 1) * BUTTON_GAP;
+  const buttonsWidth = count * SMALL_BAR_BUTTON + Math.max(0, count - 1) * BUTTON_GAP;
   return (
     <View style={{ height: SMALL_BAR_HEIGHT }}>
       {children}
       <View style={{ position: "absolute", left: fieldLeft, right: SMALL_INSET + buttonsWidth + FIELD_GAP, top: MID - FIELD_HEIGHT / 2, height: FIELD_HEIGHT }}>{field}</View>
-      <View style={{ position: "absolute", right: SMALL_INSET, top: MID - BUTTON / 2, flexDirection: "row", gap: BUTTON_GAP }}>
+      <View style={{ position: "absolute", right: SMALL_INSET, top: MID - SMALL_BAR_BUTTON / 2, flexDirection: "row", gap: BUTTON_GAP }}>
         {buttons.map((b) => (
-          <IconButton key={b.tooltip} icon={b.icon} size={b.size} box={BUTTON} radius={7} disabled={b.disabled} tooltip={b.tooltip} onPress={b.onPress} />
+          <IconButton key={b.tooltip} icon={b.icon} size={b.size} box={SMALL_BAR_BUTTON} radius={7} disabled={b.disabled} tooltip={b.tooltip} onPress={b.onPress} />
         ))}
         {trailing}
       </View>
@@ -62,8 +63,8 @@ export function SmallBarBadgeButton({ tooltip, onPress, children }: { tooltip: s
         {({ pressed }) => (
           <View
             style={{
-              width: BUTTON,
-              height: BUTTON,
+              width: SMALL_BAR_BUTTON,
+              height: SMALL_BAR_BUTTON,
               borderRadius: 7,
               alignItems: "center",
               justifyContent: "center",

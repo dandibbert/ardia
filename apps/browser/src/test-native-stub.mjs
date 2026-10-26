@@ -13,6 +13,7 @@ export const saveDocument = (name, contents) =>
 export const setZoom = () => Promise.resolve();
 export const setBatterySaver = () => Promise.resolve(null);
 export const launchEnvironment = () => null;
+export const updaterState = () => Promise.resolve({ available: false });
 export const killSwitchEnvironment = () => null;
 export const appInfo = { appVersion: "1.0" };
 export const systemInfo = () => ({ ...appInfo });
@@ -30,9 +31,20 @@ export const onAppEvent = () => ({ remove() {} });
 export const postNotification = () => Promise.resolve(null);
 export const removeNotifications = () => Promise.resolve();
 export const fetchFavicon = () => Promise.resolve(null);
+export const storeFavicon = (profile, page, icon, png) => engineCall("ac_favicons_set", profile, { page, icon, png });
 export const iconTheme = () => Promise.resolve(null);
 export const cancelledDownloads = [];
 export const cancelDownload = (id) => (cancelledDownloads.push(id), Promise.resolve());
+export const endedWebKitSessions = [];
+export const endWebKitPrivateSession = (session) => (endedWebKitSessions.push(session), Promise.resolve());
+export const removedStagings = [];
+export const stagingRemovals = { ok: true };
+export const leftDownloadStaging = (download) => {
+  const uuid = download.stagingId ?? (download.id.startsWith("wk-download-") ? download.id.slice(12) : "");
+  const folder = (download.destination ?? "").slice(0, (download.destination ?? "").lastIndexOf("/"));
+  return download.staging && uuid && folder && download.state !== "downloading" ? { path: download.staging, uuid, folder } : null;
+};
+export const removeLeftDownloadStaging = (download) => (removedStagings.push(download.staging), Promise.resolve(stagingRemovals.ok));
 export const deletedProfileData = [];
 export const profileDataLeft = new Map();
 export const deleteProfileData = (profile) => (deletedProfileData.push(profile), Promise.resolve(profileDataLeft.get(profile) ?? []));

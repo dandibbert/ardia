@@ -4,6 +4,7 @@ import { activeTabId } from "../../store/model";
 import { groupEntries, sidebarEntries } from "./entries";
 
 export const GROUP_PAD = 2;
+export const GROUP_INDENT = 16;
 export const GROUP_BORDER = 0.5;
 export const GROUP_RADIUS = 12;
 export const GROUP_HEADER_RADIUS = GROUP_RADIUS - GROUP_BORDER;
@@ -11,6 +12,8 @@ const ROW = layout.rowHeight;
 const GAP = layout.rowGap;
 
 export type Section = "pinnedGroups" | "list";
+
+export const headGap = (first: string | null | undefined): number => (first?.startsWith("g:") ? GAP : 0);
 
 export function keptEntry(s: BrowserState, windowId: string, profileId: string, entries: string[]): string | null {
   const active = activeTabId(s, windowId, profileId);
@@ -27,9 +30,9 @@ export function holdsTab(s: BrowserState, entry: string, tabId: string): boolean
 
 function membersHeight(s: BrowserState, windowId: string, profileId: string, groupId: string): number {
   const entries = groupEntries(s, groupId);
-  if (!s.groups[groupId]?.collapsed) return entries.length ? entriesHeight(s, windowId, profileId, entries) + GROUP_PAD : GROUP_PAD;
+  if (!s.groups[groupId]?.collapsed) return entries.length ? headGap(entries[0]) + entriesHeight(s, windowId, profileId, entries) + GROUP_PAD : GROUP_PAD;
   const kept = keptEntry(s, windowId, profileId, entries);
-  return kept ? entryHeight(s, windowId, profileId, kept) + GROUP_PAD : 0;
+  return kept ? headGap(kept) + entryHeight(s, windowId, profileId, kept) + GROUP_PAD : 0;
 }
 
 export function entryHeight(s: BrowserState, windowId: string, profileId: string, entry: string): number {
@@ -77,9 +80,9 @@ export function rowSpan(
         const id = entry.slice(2);
         const members = groupEntries(s, id);
         const header = top + GROUP_BORDER;
-        if (!s.groups[id]!.collapsed) return within(members, header + ROW);
+        if (!s.groups[id]!.collapsed) return within(members, header + ROW + headGap(members[0]));
         const kept = keptEntry(s, windowId, profileId, members);
-        return kept && holdsTab(s, kept, tabId) ? within([kept], header + ROW) : header;
+        return kept && holdsTab(s, kept, tabId) ? within([kept], header + ROW + headGap(kept)) : header;
       }
       top += entryHeight(s, windowId, profileId, entry) + GAP;
     }

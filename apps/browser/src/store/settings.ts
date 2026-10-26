@@ -10,6 +10,7 @@ import {
   type ExtensionSearchEngine,
   type SearchEngine,
 } from "@ardia/core";
+import type { PageEngine } from "@ardia/ardiacore";
 import type { StateCreator } from "zustand";
 import type { BrowserState } from "./browser";
 
@@ -26,6 +27,7 @@ export type Settings = {
   customSearchEngines: CustomSearchEngine[];
   extensionSearchEngines: ExtensionSearchEngine[];
   searchSuggestions: boolean;
+  showSelectionSearch: boolean;
   commandBarPreference: "website" | "search";
 
   tabLayout: "sidebar" | "top";
@@ -51,7 +53,11 @@ export type Settings = {
   sidebarMediaControls: boolean;
   sidebarWidth: number;
   showSidebarButton: boolean;
+  showClearButton: boolean;
   balancedTopApps: boolean;
+  pinnedTabIconRing: boolean;
+  fadeUnloadedTabs: boolean;
+  warnBeforeClosingTabGroup: boolean;
   batterySaverWhen: BatterySaverWhen;
   extensionSidePanelWidth: number;
 
@@ -71,6 +77,9 @@ export type Settings = {
 
   openLinksInLittleArdia: boolean;
   littleArdiaSize: [number, number];
+
+  pageEngine: PageEngine;
+  websiteEngines: Record<string, PageEngine>;
 
   chosen?: string[];
   inferred?: string[];
@@ -102,6 +111,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customSearchEngines: [],
   extensionSearchEngines: [],
   searchSuggestions: true,
+  showSelectionSearch: true,
   commandBarPreference: "website",
   tabLayout: "sidebar",
   hideToolbarWhileScrolling: true,
@@ -126,7 +136,11 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarMediaControls: true,
   sidebarWidth: 190,
   showSidebarButton: true,
+  showClearButton: true,
   balancedTopApps: false,
+  pinnedTabIconRing: false,
+  fadeUnloadedTabs: false,
+  warnBeforeClosingTabGroup: true,
   batterySaverWhen: "lowBattery",
   extensionSidePanelWidth: 360,
   showFullUrl: false,
@@ -141,6 +155,8 @@ export const DEFAULT_SETTINGS: Settings = {
   shortcuts: {},
   openLinksInLittleArdia: true,
   littleArdiaSize: [900, 640],
+  pageEngine: "chromium",
+  websiteEngines: {},
 };
 
 const NO_CUSTOM_ENGINES: CustomSearchEngine[] = [];
