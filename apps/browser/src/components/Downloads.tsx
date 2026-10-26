@@ -1,7 +1,8 @@
 import { cancelDownload, pauseDownload, resumeDownload, type Download } from "@ardia/ardiacore";
-import { ContextMenuArea, copyText, fileExists, fileIcon, MouseArea, moveToTrash, openFile, PopoverBubble, popoverBubbleAvailable, revealFile, showMenu, Surface, Symbol, VisualEffect, type MenuItem } from "@ardia/shell";
+import { ContextMenuArea, copyText, fileExists, fileIcon, MouseArea, moveToTrash, openFile, PopoverBubble, revealFile, showMenu, Symbol, type MenuItem } from "@ardia/shell";
 import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { useShortcutHint, withShortcut } from "../lib/commandShortcuts";
 import { hex, layout, useTheme } from "../lib/theme";
 import { useShallow } from "zustand/react/shallow";
 import { useBrowser } from "../store/browser";
@@ -160,6 +161,7 @@ async function locateDownloadsButton(windowId: string, origin: Rect): Promise<Re
 
 export function DownloadsButton({ windowId }: { windowId: string }) {
   const open = useBrowser((s) => !!s.windowUi[windowId]?.downloadsOpen);
+  const hint = useShortcutHint("downloads");
   const view = useRef<View>(null);
   useEffect(() => {
     const node = view.current;
@@ -180,7 +182,7 @@ export function DownloadsButton({ windowId }: { windowId: string }) {
         box={SIDEBAR_FOOTER_DOWNLOADS.size}
         radius={10}
         active={open}
-        tooltip={open ? undefined : "Downloads (⇧⌘J)"}
+        tooltip={open ? undefined : withShortcut("Downloads", hint)}
         onPress={() => {
           const s = useBrowser.getState();
           s.setDownloadsOpen(windowId, !s.windowUi[windowId]?.downloadsOpen);
@@ -323,41 +325,23 @@ function PanelBackground({ placement }: { placement: DownloadsPlacement }) {
   const theme = useTheme();
   const edge = hex(theme.dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)");
   const tint = theme.dark ? "rgba(38,36,37,0.3)" : "rgba(252,251,252,0.3)";
-  if (popoverBubbleAvailable) {
-    return (
-      <PopoverBubble
-        material="popover"
-        dark={theme.dark}
-        cornerRadius={PANEL.radius}
-        arrowEdge={placement.arrow}
-        arrowX={placement.arrowX}
-        arrowWidth={DOWNLOADS_PANEL.arrowWidth}
-        arrowHeight={DOWNLOADS_PANEL.arrowHeight}
-        tint={hex(tint)}
-        edgeColor={edge}
-        edgeWidth={0.5}
-        shadowOpacity={theme.dark ? 0.45 : 0.16}
-        shadowRadius={18}
-        shadowOffsetY={8}
-        style={StyleSheet.absoluteFill}
-      />
-    );
-  }
-  const arrowRoom = placement.arrow === "none" ? 0 : DOWNLOADS_PANEL.arrowHeight;
   return (
-    <Surface
+    <PopoverBubble
+      material="popover"
+      dark={theme.dark}
       cornerRadius={PANEL.radius}
-      borderColor={edge}
-      borderWidth={0.5}
-      shadowColor="#000000"
+      arrowEdge={placement.arrow}
+      arrowX={placement.arrowX}
+      arrowWidth={DOWNLOADS_PANEL.arrowWidth}
+      arrowHeight={DOWNLOADS_PANEL.arrowHeight}
+      tint={hex(tint)}
+      edgeColor={edge}
+      edgeWidth={0.5}
       shadowOpacity={theme.dark ? 0.45 : 0.16}
       shadowRadius={18}
-      shadowOffset={[0, 8]}
-      style={{ ...StyleSheet.absoluteFillObject, top: placement.arrow === "top" ? arrowRoom : 0, bottom: placement.arrow === "bottom" ? arrowRoom : 0 }}
-    >
-      <VisualEffect material="popover" cornerRadius={PANEL.radius} style={StyleSheet.absoluteFill} />
-      <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: PANEL.radius, backgroundColor: tint }} />
-    </Surface>
+      shadowOffsetY={8}
+      style={StyleSheet.absoluteFill}
+    />
   );
 }
 

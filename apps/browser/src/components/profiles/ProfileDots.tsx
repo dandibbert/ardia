@@ -68,7 +68,7 @@ function Dot({ id, windowId, page, pos }: { id: string; windowId: string; page: 
                 width: HOVER_PAD,
                 height: HOVER_PAD,
                 borderRadius: 6,
-                backgroundColor: theme.dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                backgroundColor: theme.rowHover,
               }}
             />
           ) : null}

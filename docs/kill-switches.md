@@ -44,7 +44,7 @@ the updater both read it). A test instance has no updater, so it never fetches.
 |---|---|---|
 | `newTabPrewarm` | a New Tab page's tab is made by Enter, as before the prewarm | yes |
 | `lazySidebarRows` | a launch mounts 64 rows per page and every profile page at once | no |
-| `updatePrewarm` | a staged update waits for the quit without the hidden first run (read natively: `KillSwitch` in `Updater.swift`) | yes |
+| `updatePrewarm` | a staged update waits for the quit without the hidden first run (read natively: `KillSwitch.swift`) | yes |
 | `launchTab` | session.json keeps no launch hint and a launch claims nothing: the restored page loads once its window's content mounts, and the early window stays off (it also has its own environment switch, `ARDIA_EARLY_WINDOW=off`) | no |
 | `focusedWindowFirst` | a launch opens every window at once, the focused one last | no |
 | `sidebarSlide` | hiding or showing the sidebar jumps instead of sliding (it stays mounted either way); with the address bar in the sidebar, a hidden sidebar's bar moves to a toolbar on the card and the peek is Dia's | yes |
@@ -64,6 +64,14 @@ Read once at launch from the environment, for a bench or a bisect; each falls ba
 | `ARDIA_WALLET_PASSES=on` | Chrome's `AutofillAiWalletPrivatePasses` stays on, and every new tab asks LocalAuthentication about Touch ID |
 | `ARDIA_SYSTEM_FONTS=on` | expo-constants lists every font family at launch (`patches/expo-constants@18.0.14.patch`) |
 | `ARDIA_EARLY_NAVIGATE=off` | a navigation is sent to the engine by its view's effect after React re-renders, not by the store action (`lib/earlyNavigate.ts`) |
+
+## Developer flags (off by default, debug builds only)
+
+Read through `launchEnvironment`, so a release build never sees them. A prototype lives here until the owner decides.
+
+| Variable | On means |
+|---|---|
+| `ARDIA_WEBKIT_SIGN_IN=on` | moving a Chromium page to WebKit first copies the cookies that page's own address gets (HttpOnly included, partitioned ones left out) into the profile's WebKit store, so a cookie sign-in (Netflix, Spotify…) comes along; at most 1.5 s, then the move goes ahead either way (`lib/engineSignIn.ts`, `WebKitCookieImport.swift`) |
 
 ## Staged rollout
 

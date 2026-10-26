@@ -5,6 +5,8 @@ Ardia, a macOS browser that must reach **full feature and visual parity with Dia
 (The Browser Company). The feature checklist is `docs/dia-feature-parity.md`; the
 visual spec (colors, sizes, animations recovered from Dia's binary) is `docs/dia-spec.md`.
 The user is demanding: no sloppy work, every hover state/animation/detail matters.
+How the code is laid out and named (folders, import direction, tokens, state, the translation layer, environment
+variables) is in `docs/conventions.md`, enforced by `apps/browser/src/conventions.test.mjs`.
 
 ## Stack
 - Turborepo + pnpm (hoisted `node_modules` at the repo root).
@@ -12,7 +14,7 @@ The user is demanding: no sloppy work, every hover state/animation/detail matter
   inline styles.
 - Native code lives in Expo modules under `packages/*/ios` (Swift / Objective-C++):
   - `packages/ardiacore`: the web engine, **ArdiaCore**: Chrome's own framework (`Chromium Framework.framework`,
-    Chromium 155.0.8059.84 + Helium 0.19.4 + our patch series, `docs/engine-build.md`) with our layer linked
+    Chromium 156.0.8078.47 + Helium 0.20.1 + our patch series, `docs/engine-build.md`) with our layer linked
     in, and the Expo modules and JS API the app uses (`docs/ardiacore-spike.md`, `docs/ardiacore-parity.md`).
     - **Chromium runs the process.** `main.swift` calls `ArdiaCoreHost.run`: `ChromeMain` starts with our
       `ACMainDelegate`, `NSApp` is Chrome's `BrowserCrApplication`, and the React Native host (`AppDelegate`) starts
@@ -82,7 +84,7 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
 | --- | --- | --- | --- |
 | Windows, tab ownership | `ac_browser.h` (`WindowHost`, `ACWebContentsDelegate`, `TabBridge`), `ac_browser_window.mm` | `ArdiaCoreChromeWindow.mm`, `ArdiaCoreTabStrip.mm` | `lib/chromeTabs.ts`, `store/liveTabs.ts` |
 | Tab activation | `ardiacore_api.mm` `-activateTab:`, `ac_browser.mm` `ActiveTabChanged` | `ArdiaCoreWebView.mm` `-activate`, `ArdiaCoreTabStrip.mm` | same |
-| Focus guard (test instances) | `ac_browser.mm` (`WindowHost` activation) | `ArdiaCoreActivation.mm` (`activation.log`), `ArdiaCoreChromeWindow.mm` | `packages/shell/ios/Windows.swift` |
+| Focus guard (test instances) | `ac_browser.mm` (`WindowHost` activation) | `ArdiaCoreActivation.mm` (`activation.log`), `ArdiaCoreChromeWindow.mm` | `packages/shell/ios/WindowManager.swift` |
 | Fullscreen | `ac_browser_window.mm` (`ExclusiveAccessContext`), `ac_browser.mm` `FullscreenChanged` | `ArdiaCoreChromeWindow.mm` (acted out in test instances) | `components/ContentCard.tsx`, `components/layout/pageState.ts` |
 | Picture in Picture | `ac_picture_in_picture.mm`; Dia's window and controls in `engine/chromium/…/ardia/pip/`; the auto-PiP hook in `engine/ardiacore/apply.sh` | `ArdiaCorePictureInPicture.mm` | `components/media/pip.ts` |
 | Password and autofill bubbles | `ac_password_prompt.mm`, `ac_browser_window.h` (`ACAutofillBubbleHandler`), `ac_autofill_trigger.mm` (dropdown) | `ArdiaCoreChromeWindow.mm` (`window:passwordPrompt:forTab:`) → `ArdiaCoreWebView` event | `components/site/Prompts.tsx`, `site/Autofill.tsx` |
@@ -179,7 +181,7 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
     Same lock for `pnpm install` and edits to apps/browser/package.json. A new Expo module in an
     existing source file only needs its `expo-module.config.json` entry (the build regenerates
     the module provider).
-- **Shared files** several agents must touch — `packages/shell/ios/Menus.swift`,
+- **Shared files** several agents must touch — `packages/shell/ios/MainMenu.swift`,
   `apps/browser/src/lib/commands.ts`, `apps/browser/src/App.tsx`, `apps/browser/src/store/settings.ts`,
   `apps/browser/src/lib/theme.ts`, `packages/ardiacore/ios/ArdiaCoreInternal.h`, `packages/ardiacore/ios/ArdiaCore.podspec`,
   `packages/ardiacore/ios/ArdiaCoreWebView.mm`, `packages/ardiacore/scripts/acceptance.mjs`, ArdiaCore's `public/ArdiaCore.h`,

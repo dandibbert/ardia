@@ -48,8 +48,7 @@ function openLittleArdiaLinkTabs(s: BrowserState, prev: BrowserState) {
     const link = tab ? littleArdiaLinkOf(tab.url) : null;
     if (!tab || !link) continue;
     queueMicrotask(() => {
-      if (!useBrowser.getState().tabs[id]) return;
-      useBrowser.getState().closeTab(id);
+      s.closeTab(id);
       openLittleArdia(link, tab.profileId);
     });
   }
@@ -83,18 +82,8 @@ export function startExtensionsBridge() {
   if (__DEV__) Object.assign(globalThis, { acExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 
-function openLinkInLittleArdia(request: TabsRequest, link: string) {
-  const s = useBrowser.getState();
-  const ofProfile = (id: string) => !!s.windows[id] && !s.windows[id]!.incognito && engineProfile(s.windows[id]!.profileId) === request.profile;
-  const shown = s.ui.focusOrder.find(ofProfile);
-  const profileId = shown ? s.windows[shown]!.profileId : s.profileOrder.find((p) => engineProfile(p) === request.profile);
-  openLittleArdia(link, profileId);
-}
-
 function openRequestedTab(request: TabsRequest) {
   if (request.action === "closeWindow") return closeChromeMadeWindow(request.chromeWindow);
-  const littleArdiaLink = littleArdiaLinkOf(request.url);
-  if (littleArdiaLink) return openLinkInLittleArdia(request, littleArdiaLink);
   if (request.chromeWindow && request.tabKey) return moveIntoChromeMadeWindow(request, request.chromeWindow, request.tabKey);
   if (request.chromeWindow && request.adoptId) return openChromeMadeTab(request, request.chromeWindow, request.adoptId);
   if (!request.url) return;

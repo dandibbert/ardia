@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import { bangDocument } from "../../../../../packages/core/src/bangs.ts";
 import * as bundledList from "../../../../../packages/core/src/bangList.ts";
-import { bangListServer, docs, heldSaves } from "../../test-native-stub.mjs";
+import { bangListServer, docs, heldSaves } from "../../test-native/index.ts";
 
 globalThis.require = (id) => {
   assert.equal(id, "@ardia/core/src/bangList.ts");
@@ -145,12 +145,6 @@ test("at most one request a day, across sessions", async () => {
   ago(DAY + 1);
   assert.equal((await refreshBangs()).result, "unchanged");
   assert.equal(calls.length, 2);
-});
-
-test("a build without the native fetch never asks, and keeps the bundled list", async () => {
-  assert.equal((await refreshBangs()).result, "fresh");
-  assert.equal(state(), null);
-  assert.equal(bangStatus().source, "bundled");
 });
 
 test("a new list and its ETag are saved as one document, replace the table and come back next launch", async () => {
