@@ -128,6 +128,8 @@
     send("nowPlaying", state && { ...state, timestamp: Date.now() });
   }, 100);
   let blockAutoplay = false;
+  let pipTrace = false;
+  let pipHandlerSet = null;
   const playingMedia = new Set();
   const onMediaEvent = (e) => {
     const m = e.target;
@@ -154,8 +156,6 @@
       reportNowPlaying();
     });
   };
-  document.addEventListener("enterpictureinpicture", (e) => send("pip", { active: true, kind: "video" }), true);
-  document.addEventListener("leavepictureinpicture", (e) => send("pip", { active: false, kind: "video" }), true);
   const mediaEvents = ["play", "playing", "pause", "ended", "volumechange", "emptied", "seeked", "ratechange", "loadedmetadata"];
   for (const e of mediaEvents) document.addEventListener(e, onMediaEvent, true);
   const detachedMediaWatchers = [];
@@ -186,7 +186,10 @@
     wrapSetter("playbackState");
     const setActionHandler = proto.setActionHandler;
     proto.setActionHandler = function (action, handler) {
-      if (action === "enterpictureinpicture") send("pipTrace", { event: "setActionHandler", action, set: !!handler });
+      if (action === "enterpictureinpicture") {
+        pipHandlerSet = !!handler;
+        if (pipTrace) send("pipTrace", { event: "setActionHandler", action, set: pipHandlerSet });
+      }
       const result = setActionHandler.apply(this, arguments);
       if (handler) actions.set(action, handler);
       else actions.delete(action);
@@ -795,11 +798,13 @@
   handlers.config = (config) => {
     handlers.peekConfig({ modifier: config.peek, split: config.split, trace: config.peekTrace });
     blockAutoplay = !!config.blockAutoplay;
+    pipTrace = !!config.pipTrace;
+    if (pipTrace && pipHandlerSet !== null)
+      send("pipTrace", { event: "setActionHandler", action: "enterpictureinpicture", set: pipHandlerSet });
     if (blockAutoplay)
       pauseUnasked([...playingMedia, ...document.querySelectorAll("video, audio")], !!(navigator.userActivation && navigator.userActivation.hasBeenActive));
     if (config.displayMediaPicker) installDisplayMedia();
     if (config.fieldTiming) setFieldTiming(true);
-    if (config.broadThemeObserver) broadThemeObserver = true;
     if (typeof config.selectionPopover === "boolean" && handlers.selectionPopover) handlers.selectionPopover(config.selectionPopover);
   };
   send("hello", { top: isTop, url: location.href });
@@ -899,9 +904,7 @@
     send("theme", { color, source });
   });
   let themeQueued = false;
-  let broadThemeObserver = false;
   const themeTouched = (records) => {
-    if (broadThemeObserver) return true;
     for (const r of records) {
       if (r.type === "childList") {
         for (const n of r.addedNodes) if (n.nodeName === "META") return true;

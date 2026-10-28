@@ -1,4 +1,5 @@
 #import "ArdiaWebViewInternal.h"
+#import "ArdiaLaunchConfig.h"
 #import "ArdiaPictureInPicture.h"
 
 #import <objc/runtime.h>
@@ -96,7 +97,7 @@ void InstallControlPressMonitor() {
 }
 
 BOOL TracingPictureInPicture() {
-  static const BOOL tracing = getenv("ARDIA_TRACE_PIP") != nullptr;
+  static const BOOL tracing = [ArdiaLaunchConfig.shared traced:@"pip"];
   return tracing;
 }
 }
@@ -145,7 +146,7 @@ BOOL TracingPictureInPicture() {
 
 - (void)requestPictureInPictureForClickAt:(double)clickMs control:(NSInteger)target completion:(void (^)(BOOL))completion {
   if (_inPictureInPicture) return completion(YES);
-  if (![_tab respondsToSelector:@selector(enterPictureInPictureForClickAt:completion:)]) return completion(NO);
+  if (!_tab) return completion(NO);
   const NSTimeInterval clickAt = TakeControlPress(clickMs, target, self.window);
   [self traceManualPictureInPicture:[NSString stringWithFormat:@"%@ %@ (control %ld)", clickMs > 0 ? @"click" : @"key or accessibility press", clickAt > 0 ? @"verified" : @"not verified", (long)target]];
   if (clickAt <= 0) return completion(NO);
@@ -183,24 +184,19 @@ BOOL TracingPictureInPicture() {
   }
 }
 
-- (void)exitPictureInPictureInFrame:(NSString *)frameId {
-  if (frameId.length && _tab)
-    [_tab executeJavaScript:@"document.pictureInPictureElement && document.exitPictureInPicture()" frame:frameId];
-  else
-    [self exitPictureInPicture];
-}
-
 - (void)exitPictureInPicture {
-  if ([_tab respondsToSelector:@selector(exitPictureInPicture)]) return [_tab exitPictureInPicture];
-  [self executeJavaScript:@"document.pictureInPictureElement && document.exitPictureInPicture();"
-                           "window.documentPictureInPicture && documentPictureInPicture.window && documentPictureInPicture.window.close()"];
+  [_tab exitPictureInPicture];
 }
 
 - (void)tab:(ArdiaCoreTab *)tab didChangePictureInPicture:(NSDictionary<NSString *, id> *)state {
   if (![state[@"kind"] isEqual:@"document"]) {
-    if ([state[@"active"] boolValue] || !_inPictureInPicture) return;
-    _inPictureInPicture = NO;
-    [self emit:@"pictureInPicture" payload:@{@"kind" : @"video", @"active" : @NO}];
+    const BOOL active = [state[@"active"] boolValue];
+    if (!active && !_inPictureInPicture) return;
+    _inPictureInPicture = active;
+    [self emit:@"pictureInPicture" payload:@{@"kind" : @"video", @"active" : @(active)}];
+    if (!active) return;
+    ardia_pip::WatchZoom();
+    ardia_pip::VideoEntered(self, [NSURL URLWithString:tab.url ?: @""].host ?: @"");
     return;
   }
   _inPictureInPicture = [state[@"active"] boolValue];

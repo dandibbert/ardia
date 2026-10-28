@@ -1,4 +1,5 @@
 #import "ArdiaPictureInPictureInternal.h"
+#import "ArdiaLaunchConfig.h"
 #import "ArdiaChromeWindowHost.h"
 #import "ArdiaPiPThrowMath.h"
 
@@ -20,8 +21,6 @@ void InstallMenuMonitor() {
                                                     [NSMenu popUpContextMenu:[controller menu] withEvent:event forView:controller.overlay];
                                                     return nil;
                                                   }];
-}
-
 }
 
 NSPoint ScreenLocation(NSEvent *event) {
@@ -107,16 +106,16 @@ void InstallZoomMonitor() {
                                                   }];
 }
 
-bool Attach(ArdiaWebView *view, NSString *host, NSString *frameId) {
+bool Attach(ArdiaWebView *view, NSString *host) {
   for (NSWindow *window in NSApp.windows) {
     ArdiaPiPController *controller = [ArdiaPiPController forWindow:window];
     if (!IsChromeVideoPictureInPicture(window) && !(controller && window.visible)) continue;
     if (!window.hasShadow) continue;
+    if (controller.view && controller.view.browserId != view.browserId) continue;
     BOOL fresh = !controller;
     if (fresh) controller = [[ArdiaPiPController alloc] initWithWindow:window];
     controller.view = view;
     controller.host = host;
-    [controller setVideoFrame:frameId];
     [controller roundCorners];
     PreventActivation(window);
     if (ardia_host::Background()) {
@@ -126,13 +125,15 @@ bool Attach(ArdiaWebView *view, NSString *host, NSString *frameId) {
     InstallMenuMonitor();
     InstallDragMonitor();
     InstallZoomMonitor();
-    NSString *selfTest = NSProcessInfo.processInfo.environment[@"ARDIA_PIP_SELFTEST"];
+    NSString *selfTest = ardia_host::Background() ? [ArdiaLaunchConfig.shared testValue:@"pipSelfTest"] : nil;
     if (fresh && [@[ @"close", @"backToTab" ] containsObject:selfTest]) [controller runButtonSelfTest:selfTest];
     else if (fresh && [selfTest isEqual:@"hover"]) [controller runHoverSelfTest];
     else if (fresh && selfTest) [controller runSelfTest];
     return true;
   }
   return false;
+}
+
 }
 
 namespace ardia_pip {
@@ -145,14 +146,13 @@ void TabRequestedActivation(ArdiaWebView *view) {
       return ActivateApp(@"Back to Tab (Chrome's button)");
 }
 
-void VideoChanged(ArdiaWebView *view, NSString *host, NSString *frameId, bool active) {
-  if (!active) return;
+void VideoEntered(ArdiaWebView *view, NSString *host) {
   __block int tries = 0;
   __block void (^look)(void);
   __weak ArdiaWebView *weakView = view;
   look = ^{
     ArdiaWebView *strongView = weakView;
-    if (!strongView || Attach(strongView, host, frameId) || ++tries >= 20) {
+    if (!strongView || Attach(strongView, host) || ++tries >= 20) {
       look = nil;
       return;
     }

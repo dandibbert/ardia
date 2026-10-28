@@ -1,14 +1,14 @@
-import { Symbol, VisualEffect, WindowDragRegion } from "@ardia/shell";
+import { Symbol, VisualEffect, WindowDragRegion, Button, font, Toggle, useHover, weight } from "../ui";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useTheme } from "../../lib/theme";
-import { useBrowser } from "../../store/browser";
-import { trackSettingsSection } from "../../telemetry/track";
-import { IconButton, useHover } from "../primitives";
-import { useFormColors } from "./controls";
-import { preparePane, usePaneLoaded } from "./paneData";
-import { anchorView, flashSetting, useSettingsSearch } from "./searchState";
-import { PANES, setting } from "./settingsIndex";
+import { useTheme } from "../ui/theme";
+import { useProfile, useSettings } from "../../state/browser/hooks";
+import { updateSettings } from "../../state/settings/actions";
+import { trackSettingsSection } from "../../state/telemetry/track";
+import { preparePane, usePaneLoaded } from "../../state/settings/paneData";
+import { anchorView, clearSettingsReveal, flashSetting, settingsSectionKey, useSettingsSearch } from "../../state/settings/searchState";
+import { ADVANCED_PANES, PANES, setting } from "./settingsIndex";
+import { SettingsPaneContext } from "./Form";
 import { SettingsSearchField, SettingsSearchResults } from "./SettingsSearch";
 import { AdvancedPane } from "./panes/Advanced";
 import { AppearancePane } from "./panes/Appearance";
@@ -25,9 +25,10 @@ import { EnginesPane } from "./panes/Engines";
 import { ShortcutsPane } from "./panes/Shortcuts";
 import { SyncPane } from "./panes/Sync";
 import { TabsPane } from "./panes/Tabs";
-import { useSettingsSheet } from "./sheet";
-import { useSettingsNav, type SettingsPlace } from "./windows";
-import { settingsProfileFor } from "../extensions/store";
+import { useSettingsSheet } from "../../state/settings/sheet";
+import { goToSettingsPane, settingsBack, settingsForward, useSettingsNav, type SettingsPlace } from "../../state/settings/settingsWindows";
+import { settingsProfileFor } from "../../state/extensions/store";
+import { useSettingsColors } from "./useSettingsColors";
 
 
 const SIDEBAR = 214;
@@ -66,10 +67,11 @@ function usePrefetchAllPanes(enabled: boolean) {
 
 export function SettingsWindow() {
   const theme = useTheme();
+  const look = useSettingsColors();
   const nav = useSettingsNav();
   const shown = useShownPane();
   usePrefetchAllPanes(!!shown);
-  const profileName = useBrowser((s) => (shown?.profileId ? s.profiles[shown.profileId]?.name : undefined));
+  const profileName = useProfile(shown?.profileId, (p) => p?.name);
   const title = shown ? (shown.pane === "profiles" && profileName ? profileName : PANES.find((p) => p.id === shown.pane)!.title) : "";
   const sheet = useSettingsSheet((s) => s.sheet);
   useEffect(() => trackSettingsSection(nav.pane), [nav.pane]);
@@ -82,10 +84,15 @@ export function SettingsWindow() {
   const query = useSettingsSearch((s) => s.query);
   const reveal = useSettingsSearch((s) => s.reveal);
   const revealPane = reveal ? setting(reveal.id).pane : null;
+  const showAdvanced = useSettings((s) => s.showAdvancedSettings);
+  const revealedSections = useSettingsSearch((s) => s.revealedSections);
+  const panes = PANES.filter(
+    (p) => showAdvanced || !ADVANCED_PANES.has(p.id) || nav.pane === p.id || revealedSections.some((k) => k.startsWith(settingsSectionKey(p.id, ""))),
+  );
   const switched = useRef(key);
   useEffect(() => {
     if (!reveal) return;
-    if (nav.pane !== revealPane) return void useSettingsSearch.setState({ reveal: null });
+    if (nav.pane !== revealPane) return void clearSettingsReveal();
     if (shown?.pane !== revealPane) return;
     const animated = switched.current === key;
     const frame = requestAnimationFrame(() => {
@@ -110,7 +117,7 @@ export function SettingsWindow() {
   }, [key]);
 
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.dark ? "#1E1E1E" : "#F2F2F2" }}>
+    <View style={{ flex: 1, flexDirection: "row", backgroundColor: look.windowFill }}>
       <View style={{ width: SIDEBAR }}>
         <VisualEffect material="sidebar" blendingMode="behindWindow" style={StyleSheet.absoluteFill} />
         <WindowDragRegion style={{ height: TOOLBAR }} />
@@ -118,20 +125,21 @@ export function SettingsWindow() {
         {query.trim() ? (
           <SettingsSearchResults query={query} />
         ) : (
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
-            {PANES.map((p) => (
-              <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => nav.go(p.id, settingsProfileFor(p.id, nav))} />
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 1 }}>
+            {panes.map((p) => (
+              <SidebarItem key={p.id} title={p.title} icon={p.icon} selected={nav.pane === p.id} onPress={() => goToSettingsPane(p.id, settingsProfileFor(p.id, nav))} />
             ))}
           </ScrollView>
         )}
+        <AdvancedToggle />
       </View>
-      <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: theme.dark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.1)" }} />
+      <View style={{ width: StyleSheet.hairlineWidth * 2, backgroundColor: look.sidebarDivider }} />
       <View style={{ flex: 1 }}>
         <View style={{ height: TOOLBAR, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 2 }}>
           <WindowDragRegion style={StyleSheet.absoluteFill} />
-          <IconButton icon="chevron.left" size={13} box={28} radius={6} disabled={!nav.back.length} onPress={nav.goBack} tooltip="Back" />
-          <IconButton icon="chevron.right" size={13} box={28} radius={6} disabled={!nav.forward.length} onPress={nav.goForward} tooltip="Forward" />
-          <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: "600", color: theme.textPrimary }}>{title}</Text>
+          <Button variant="icon" icon="chevron.left" size={13} box={28} radius={6} disabled={!nav.back.length} onPress={settingsBack} tooltip="Back" />
+          <Button variant="icon" icon="chevron.right" size={13} box={28} radius={6} disabled={!nav.forward.length} onPress={settingsForward} tooltip="Forward" />
+          <Text style={{ marginLeft: 8, ...font.heading, fontWeight: weight.semibold, color: theme.textPrimary }}>{title}</Text>
         </View>
         <ScrollView
           ref={scroller}
@@ -140,7 +148,11 @@ export function SettingsWindow() {
           onLayout={(e) => void (viewport.current = e.nativeEvent.layout.height)}
           contentContainerStyle={{ alignItems: "center", paddingBottom: 40 }}>
           <View key={key} ref={content} collapsable={false} style={{ width: "100%", maxWidth: 600, paddingHorizontal: 24 }}>
-            {shown ? <Pane {...shown} /> : null}
+            {shown ? (
+              <SettingsPaneContext.Provider value={shown.pane}>
+                <Pane {...shown} />
+              </SettingsPaneContext.Provider>
+            ) : null}
           </View>
         </ScrollView>
       </View>
@@ -186,7 +198,6 @@ function Pane({ pane, profileId, detail }: SettingsPlace): ReactNode {
 
 function SidebarItem({ title, icon, selected, onPress }: { title: string; icon: string; selected: boolean; onPress: () => void }) {
   const theme = useTheme();
-  const colors = useFormColors();
   const { hovered, hoverProps } = useHover();
   return (
     <View {...hoverProps}>
@@ -199,13 +210,24 @@ function SidebarItem({ title, icon, selected, onPress }: { title: string; icon: 
             alignItems: "center",
             paddingHorizontal: 8,
             gap: 9,
-            backgroundColor: selected ? colors.accent : hovered ? colors.selected : undefined,
+            backgroundColor: selected ? theme.formAccent : hovered ? theme.rowHover : undefined,
           }}
         >
-          <Symbol name={icon} size={13} color={selected ? "#FFFFFF" : theme.icon} style={{ width: 20, height: 20 }} />
-          <Text style={{ fontSize: 13, color: selected ? "#FFFFFF" : theme.textPrimary }}>{title}</Text>
+          <Symbol name={icon} size={13} color={selected ? theme.onAccent : theme.icon} style={{ width: 20, height: 20 }} />
+          <Text style={{ ...font.body, color: selected ? theme.onAccent : theme.textPrimary }}>{title}</Text>
         </View>
       </Pressable>
+    </View>
+  );
+}
+
+function AdvancedToggle() {
+  const theme = useTheme();
+  const shown = useSettings((s) => s.showAdvancedSettings);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: theme.divider }}>
+      <Text style={{ flex: 1, ...font.small, color: theme.textSecondary }}>Show advanced settings</Text>
+      <Toggle value={shown} onChange={(v) => updateSettings({ showAdvancedSettings: v })} />
     </View>
   );
 }

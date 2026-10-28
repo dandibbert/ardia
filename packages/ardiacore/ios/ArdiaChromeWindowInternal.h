@@ -12,6 +12,10 @@
 - (void)uncover:(BOOL)fade;
 @end
 
+@interface ArdiaPopupOriginStrip : NSView
+- (void)showURL:(NSString *)url security:(NSString *)level;
+@end
+
 @interface ArdiaWindowFullScreen : NSObject
 + (instancetype)ofWindow:(ArdiaCoreWindow *)coreWindow create:(BOOL)create;
 - (void)tab:(ArdiaCoreTab *)tab fullScreen:(BOOL)fullScreen tell:(void (^)(void))tell;
@@ -42,6 +46,13 @@ bool MoveTrafficLights(NSWindow *window, NSValue *center);
 
 void WatchFullScreenLights(NSWindow *window);
 void PlaceFullScreenLights(NSWindow *window);
+NSView *FullScreenLightsView(NSWindow *window);
+
+void SuppressFullScreenTitlebar(NSWindow *window);
+CGFloat FullScreenRevealHeight(NSWindow *window);
+void ApplyFullScreenReveal(NSWindow *window);
+void SetFullScreenRevealAmount(NSWindow *window, double amount);
+NSDictionary *FullScreenRevealState(NSWindow *window);
 
 NSMenuItem *ReservedMenuItemForEvent(NSEvent *event);
 bool IsReservedKey(NSEvent *event);
@@ -58,5 +69,7 @@ extern NSTimeInterval gActedTransition;
 NSMapTable<ArdiaCoreTab *, NSNumber *> *FullScreenChanges();
 
 extern BOOL gPageCoverOff;
+
+NSString *PopupOriginText(NSString *url);
 
 }

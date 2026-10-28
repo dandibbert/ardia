@@ -40,14 +40,14 @@ BOOL KeepOnTop() {
   return value ? [value boolValue] : YES;
 }
 
-}
-
 BOOL ShowsPage(NSView *view) {
   static Class page = NSClassFromString(@"RenderWidgetHostViewCocoa");
   if (page && [view isKindOfClass:page]) return YES;
   for (NSView *child in view.subviews)
     if (ShowsPage(child)) return YES;
   return NO;
+}
+
 }
 
 namespace ardia_pip {
@@ -69,6 +69,8 @@ BOOL IsChromeDocumentPictureInPicture(NSWindow *window) {
 
 }
 
+namespace {
+
 NSScreen *OverlappingScreen(NSRect frame) {
   NSScreen *best = nil;
   CGFloat bestArea = 0;
@@ -80,16 +82,22 @@ NSScreen *OverlappingScreen(NSRect frame) {
   return best;
 }
 
+}
+
 namespace ardia_pip {
 
 NSScreen *ScreenFor(NSRect frame) { return OverlappingScreen(frame) ?: NSScreen.mainScreen; }
 
 }
 
+namespace {
+
 BOOL ScreenAt(CGFloat x, CGFloat y) {
   for (NSScreen *screen in NSScreen.screens)
     if (NSPointInRect(NSMakePoint(x, y), screen.frame)) return YES;
   return NO;
+}
+
 }
 
 namespace ardia_pip {
@@ -135,6 +143,8 @@ std::vector<ardia_pip_throw::Screen> ThrowScreens() {
 
 }
 
+namespace {
+
 NSString *CornerName(int corner) {
   switch (corner) {
     case ardia_pip_throw::kTopLeft: return @"topLeft";
@@ -143,6 +153,8 @@ NSString *CornerName(int corner) {
     case ardia_pip_throw::kBottomRight: return @"bottomRight";
     default: return @"none";
   }
+}
+
 }
 
 @implementation ArdiaPiPController
@@ -192,11 +204,8 @@ NSString *CornerName(int corner) {
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
   [_slide invalidate];
   [_overlay removeFromSuperview];
-  _frameId = nil;
   objc_setAssociatedObject(_window, kControllerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
-
-- (void)setVideoFrame:(NSString *)frameId { _frameId = [frameId copy]; }
 
 - (void)roundCorners {
   NSView *content = _window.contentView;
@@ -246,7 +255,7 @@ NSString *CornerName(int corner) {
   if (!view) return;
   ActivateApp(@"Back to Tab (menu)");
   [view emit:@"activateRequest" payload:@{@"reason" : @"pictureInPicture"}];
-  [view exitPictureInPictureInFrame:_frameId];
+  [view exitPictureInPicture];
 }
 
 - (void)windowMoved {
