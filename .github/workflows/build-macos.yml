@@ -57,20 +57,56 @@ jobs:
             build 2>&1 | tee build.log | grep -E "error:|warning: .*Ardia|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
-      - name: Real login keychain (the installed Ardia's logins stay readable) and no Sparkle
+      - name: Import the test signing certificate
+        env:
+          TEST_SIGNING_P12: ${{ secrets.TEST_SIGNING_P12 }}
+          TEST_SIGNING_P12_PASSWORD: ${{ secrets.TEST_SIGNING_P12_PASSWORD }}
+        run: |
+          if [ -z "$TEST_SIGNING_P12" ]; then
+            echo "SIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "No TEST_SIGNING_P12 secret: ad hoc signing"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/test-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 16)
+          echo "$TEST_SIGNING_P12" | base64 --decode > "$RUNNER_TEMP/test-signing.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/test-signing.p12" -k "$keychain" -P "$TEST_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security find-certificate -c "Ardia Test Signing" -p "$keychain" > "$RUNNER_TEMP/test-signing.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/test-signing.pem"
+          rm -f "$RUNNER_TEMP/test-signing.p12"
+          identity=$(security find-identity -p codesigning "$keychain" | awk '/Ardia Test Signing/ { print $2; exit }')
+          [ -n "$identity" ] || { echo "the test signing identity didn't import"; exit 1; }
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Real login keychain (the installed Ardia's logins stay readable), no Sparkle, signed
         working-directory: apps/browser/build/Build/Products/Release
         run: |
           /usr/libexec/PlistBuddy -c "Add :ACUsesLoginKeychain bool true" Ardia.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" Ardia.app/Contents/Info.plist
-          codesign --force --sign - Ardia.app
+          if [ "$SIGN_IDENTITY" = "-" ]; then
+            codesign --force --sign - Ardia.app
+          else
+            codesign --force --timestamp=none --keychain "$SIGN_KEYCHAIN" --sign "$SIGN_IDENTITY" Ardia.app
+          fi
           codesign --verify --verbose Ardia.app
+          codesign --display --requirements - Ardia.app
 
       - name: Package
         id: package
         run: |
           short=$(git rev-parse --short HEAD)
           zip="Ardia-${short}-arm64.zip"
-          ditto -c -k --sequesterRsrc --keepParent apps/browser/build/Build/Products/Release/Ardia.app "$zip"
+          staging="$RUNNER_TEMP/package"
+          rm -rf "$staging" && mkdir -p "$staging"
+          ditto apps/browser/build/Build/Products/Release/Ardia.app "$staging/Ardia Test.app"
+          codesign --verify "$staging/Ardia Test.app"
+          ditto -c -k --sequesterRsrc --keepParent "$staging/Ardia Test.app" "$zip"
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
           echo "short=$short" >> "$GITHUB_OUTPUT"
 
@@ -86,7 +122,7 @@ jobs:
           tag="build-${{ steps.package.outputs.short }}"
           gh release create "$tag" "${{ steps.package.outputs.zip }}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease --title "Ardia test build ${{ steps.package.outputs.short }}" \
-            --notes "Ad hoc signed test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Uses the installed Ardia's profile and its Ardia Safe Storage key in the login keychain: macOS asks once per build, choose Always Allow. Unzip, run: xattr -cr Ardia.app"
+            --notes "Test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Uses the installed Ardia's profile and its Ardia Safe Storage key in the login keychain: macOS asks once per build, choose Always Allow. Unzip, run: xattr -cr \"Ardia Test.app\""
 
       - name: Upload build log on failure
         if: failure()
