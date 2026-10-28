@@ -23,6 +23,7 @@ import { refreshActionStates } from "./actionStates";
 import { openLittleArdia } from "../littleArdia/actions";
 import { littleArdiaLinkOf } from "./littleArdiaLink";
 import { startExtensionSearchEngines } from "./searchEngines";
+import { watchExtensionInstallFailures } from "./crxDrop";
 import * as state from "./actions";
 import {
   activateExtension,
@@ -78,6 +79,7 @@ export function startExtensionsBridge() {
   startSidePanels();
   startActionPopups();
   startWebStoreIntegration();
+  watchExtensionInstallFailures();
   if (__DEV__) Object.assign(globalThis, { acExtensionsApp: { ...state, bridge: { openExtensionFromMenu } } });
 }
 

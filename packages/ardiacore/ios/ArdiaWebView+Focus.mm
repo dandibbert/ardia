@@ -162,6 +162,7 @@ static ArdiaWebView *ShownPageUnder(NSEvent *event) {
     return;
   }
   if (!_visible || page.isHiddenOrHasHiddenAncestor) return;
+  [self takeFocusFromLingeringPane];
   _focusOnActivate = NO;
   RefreshPageKeyState(page, window);
   NSResponder *responder = window.firstResponder;
