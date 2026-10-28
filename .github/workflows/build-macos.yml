@@ -76,10 +76,13 @@ jobs:
           security import "$RUNNER_TEMP/test-signing.p12" -k "$keychain" -P "$TEST_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          security find-certificate -c "Ardia Test Signing" -p "$keychain" > "$RUNNER_TEMP/test-signing.pem"
+          openssl pkcs12 -in "$RUNNER_TEMP/test-signing.p12" -passin env:TEST_SIGNING_P12_PASSWORD -nokeys -clcerts -legacy 2>/dev/null \
+            | openssl x509 > "$RUNNER_TEMP/test-signing.pem" \
+            || openssl pkcs12 -in "$RUNNER_TEMP/test-signing.p12" -passin env:TEST_SIGNING_P12_PASSWORD -nokeys -clcerts \
+            | openssl x509 > "$RUNNER_TEMP/test-signing.pem"
           sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/test-signing.pem"
           rm -f "$RUNNER_TEMP/test-signing.p12"
-          identity=$(security find-identity -p codesigning "$keychain" | awk '/Ardia Test Signing/ { print $2; exit }')
+          identity=$(security find-identity -p codesigning "$keychain" | awk '$2 ~ /^[0-9A-F]{40}$/ { print $2; exit }')
           [ -n "$identity" ] || { echo "the test signing identity didn't import"; exit 1; }
           echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
           echo "SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
