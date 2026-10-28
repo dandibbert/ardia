@@ -125,6 +125,7 @@ export type AppModule = {
   addListener(name: "onNotificationResponse", listener: (e: NotificationResponse) => void): EventSubscription;
   addListener(name: "onScriptCommand", listener: (e: ScriptCommand) => void): EventSubscription;
   updaterState(): Promise<UpdaterState>;
+  focusReport(): Promise<string>;
   checkForUpdates(): Promise<void>;
   setAutomaticUpdateChecks(on: boolean): Promise<void>;
   setAutomaticUpdateDownloads(on: boolean): Promise<void>;
@@ -170,6 +171,7 @@ export type AppModule = {
 const App = nativeModule("ArdiaApp");
 
 export const updaterState = () => App.updaterState();
+export const focusReport = () => App.focusReport();
 export const checkForUpdates = () => App.checkForUpdates();
 export const setAutomaticUpdateChecks = (on: boolean) => App.setAutomaticUpdateChecks(on);
 export const setAutomaticUpdateDownloads = (on: boolean) => App.setAutomaticUpdateDownloads(on);

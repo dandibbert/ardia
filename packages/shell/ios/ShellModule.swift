@@ -42,6 +42,7 @@ public class ShellModule: Module {
           ])
         }
         WindowManager.shared.emit = { name, body in self?.sendEvent(name, body) }
+        FocusTrace.install()
         FocusHandoff.shared.install()
         if let queue = self?.appContext?.reactBridge?.uiManager.methodQueue {
           FocusHandoff.shared.afterPendingUI = { block in queue.async { DispatchQueue.main.async(execute: block) } }

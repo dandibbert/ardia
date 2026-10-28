@@ -127,6 +127,7 @@ const appEvents = nativeEvents();
 const app: Modules["ArdiaApp"] = {
   addListener: appEvents.addListener,
   updaterState: () => Promise.resolve({ available: false }),
+  focusReport: () => Promise.resolve(""),
   checkForUpdates: () => Promise.resolve(),
   setAutomaticUpdateChecks: () => Promise.resolve(),
   setAutomaticUpdateDownloads: () => Promise.resolve(),

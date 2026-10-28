@@ -7,6 +7,7 @@ export {
   setThinScrollBars,
   systemInfo,
   updaterState,
+  focusReport,
   checkForUpdates,
   setAutomaticUpdateChecks,
   setAutomaticUpdateDownloads,

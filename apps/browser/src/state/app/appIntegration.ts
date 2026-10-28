@@ -1,7 +1,7 @@
 import { beginTracing, endTracing, isTracing, openTaskManager } from "../../platform/performance";
 import { confirm } from "../../platform/dialogs";
 import { copyText } from "../../platform/clipboard";
-import { engineInfo, isDefaultBrowser, openExternalURL, setAsDefaultBrowser, systemInfo, updaterState } from "../../platform/app";
+import { engineInfo, focusReport, isDefaultBrowser, openExternalURL, setAsDefaultBrowser, systemInfo, updaterState } from "../../platform/app";
 import { onCommand, type CommandEvent } from "../../platform/commands";
 import { onNotificationResponse } from "../../platform/notifications";
 import { onScriptCommand, replyToScript, setScriptState, type ScriptCommand, type ScriptState } from "../../platform/scripting";
@@ -81,7 +81,11 @@ export async function sendFeedback(windowId?: string | null) {
 
 export async function diagnostics(): Promise<string> {
   const app = systemInfo();
-  const [engine, updates] = await Promise.all([engineInfo().catch(() => null), updaterState().catch(() => null)]);
+  const [engine, updates, focusState] = await Promise.all([
+    engineInfo().catch(() => null),
+    updaterState().catch(() => null),
+    focusReport().catch(() => null),
+  ]);
   const s = useBrowser.getState();
   const regular = s.windowOrder.filter((id) => !s.windows[id]?.incognito);
   return [
@@ -95,6 +99,7 @@ export async function diagnostics(): Promise<string> {
       : !updates.configured
         ? "Updates: not set up for this build"
         : `Updates: automatic checks ${updates.automaticChecks ? "on" : "off"}, feed ${updates.feedURL ?? "none"}`,
+    ...(focusState ? [focusState] : []),
   ].join("\n");
 }
 
