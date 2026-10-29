@@ -352,7 +352,7 @@ void StartEarlyWindow() {
   const bool loginKeychainAllowed = [[NSBundle.mainBundle objectForInfoDictionaryKey:@"ACUsesLoginKeychain"] boolValue];
   const bool mockKeychain = gScratchDataDir || (!IsTeamSigned() && !loginKeychainAllowed);
   if (mockKeychain) extra.push_back("--use-mock-keychain");
-  ardia_host::PrepareStartup(gDataDirectory, extra);
+  ardia_host::PrepareStartup(gDataDirectory);
   @autoreleasepool {
     [ArdiaEarlyWindow setDataDirectory:AppDataDirectory()];
     [ArdiaEarlyWindow prefetchForSession:SavedSession(AppDataDirectory()) ?: @{}];

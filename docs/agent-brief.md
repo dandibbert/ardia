@@ -294,8 +294,10 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `safeStorageAnswer=start-over` | Answers the Safe Storage dialog with Start Over (background mode) |
 | | `reauth=granted` | Grants macOS re-auth requests in background mode (otherwise refused) |
 | | `bluetoothChooser` · `mediaRouteProvider` · `externalProtocolNoLaunch` · `systemMediaPermission=denied\|ask\|ask-slow` | Engine fakes: Bluetooth chooser events, a test Cast sink, external protocols recorded instead of opened, camera and microphone permission |
+| | `externalProtocolApp=<app path>` | With `externalProtocolNoLaunch`, the app that answers for a link no installed app opens (an `obsidian://` link without Obsidian), so its prompt and recorded launch can be tested |
 | | `applyProfileGate` | Applies the real-profile switch gate on the mock keychain too |
 | | `contextMenu` | Context menus dump to `<data dir>/context-menu.json` and take their pick from `….pick` |
+| | `appMenu` · `appDialog` | The app's own menus (`showMenu`) dump to `<data dir>/menu.json` and take their pick from `….pick` · `confirm` and `prompt` dump to `dialog.json` and take their answer from `….pick` |
 | | `pipSelfTest=close\|backToTab\|hover\|style` · `pipHover=close\|back` | PiP self-tests on the first PiP window (background mode), results in the data dir |
 | | `fakeFullScreenMs=<ms>` | Length of the acted-out full-screen transition |
 | | `shadersKeyWindow` | Metal views act as in the key window (the New Tab intro) |
