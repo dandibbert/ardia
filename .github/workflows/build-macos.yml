@@ -90,9 +90,15 @@ jobs:
       - name: Sparkle's tools and the update key
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          TEST_SIGNING_P12: ${{ secrets.TEST_SIGNING_P12 }}
         run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ] && [ -n "$TEST_SIGNING_P12" ]; then
+            SPARKLE_PRIVATE_KEY=$(printf 'ardia-test-sparkle:%s' "$TEST_SIGNING_P12" | openssl dgst -sha256 -binary | base64)
+            echo "::add-mask::$SPARKLE_PRIVATE_KEY"
+            echo "Update key derived from the test signing certificate"
+          fi
           if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
-            echo "No SPARKLE_PRIVATE_KEY secret: the build has no update feed"
+            echo "No SPARKLE_PRIVATE_KEY or TEST_SIGNING_P12 secret: the build has no update feed"
             exit 0
           fi
           tarball="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
