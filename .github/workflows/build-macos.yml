@@ -87,11 +87,44 @@ jobs:
           echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
           echo "SIGN_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
-      - name: Real login keychain (the installed Ardia's logins stay readable), no Sparkle, signed
+      - name: Sparkle's tools and the update key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "No SPARKLE_PRIVATE_KEY secret: the build has no update feed"
+            exit 0
+          fi
+          tarball="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
+          curl -fsSL --retry 3 -o "$tarball" https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
+          [ "$(shasum -a 256 "$tarball" | awk '{ print $1 }')" = 52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192 ] \
+            || { echo "::error::Sparkle-2.9.6.tar.xz didn't match its pinned SHA-256"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$tarball" -C "$RUNNER_TEMP/sparkle" bin
+          key="$RUNNER_TEMP/sparkle-key"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$key"
+          public=$(swift .github/test-build/ed25519.swift public "$key")
+          [ -n "$public" ] || { echo "::error::couldn't read the public key from SPARKLE_PRIVATE_KEY"; exit 1; }
+          echo "Update public key: $public"
+          echo "SPARKLE_BIN=$RUNNER_TEMP/sparkle/bin" >> "$GITHUB_ENV"
+          echo "SPARKLE_KEY_FILE=$key" >> "$GITHUB_ENV"
+          echo "SPARKLE_PUBLIC_KEY=$public" >> "$GITHUB_ENV"
+          echo "FEED_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/updates/appcast.xml" >> "$GITHUB_ENV"
+
+      - name: Real login keychain (the installed Ardia's logins stay readable), this repository's update feed, signed
         working-directory: apps/browser/build/Build/Products/Release
         run: |
-          /usr/libexec/PlistBuddy -c "Add :ACUsesLoginKeychain bool true" Ardia.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" Ardia.app/Contents/Info.plist
+          plist=Ardia.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :ACUsesLoginKeychain bool true" "$plist"
+          if [ -n "${SPARKLE_PUBLIC_KEY:-}" ]; then
+            build="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist").$GITHUB_RUN_NUMBER"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :SUFeedURL $FEED_URL" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_KEY" "$plist"
+            echo "Build $build, feed $FEED_URL"
+          else
+            /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$plist"
+          fi
           if [ "$SIGN_IDENTITY" = "-" ]; then
             codesign --force --sign - Ardia.app
           else
@@ -126,6 +159,49 @@ jobs:
           gh release create "$tag" "${{ steps.package.outputs.zip }}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease --title "Ardia test build ${{ steps.package.outputs.short }}" \
             --notes "Test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Uses the installed Ardia's profile and its Ardia Safe Storage key in the login keychain: macOS asks once per build, choose Always Allow. Unzip, run: xattr -cr \"Ardia Test.app\""
+
+      - name: Update feed
+        if: env.SPARKLE_KEY_FILE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="${{ steps.package.outputs.zip }}"
+          tag="build-${{ steps.package.outputs.short }}"
+          plist=apps/browser/build/Build/Products/Release/Ardia.app/Contents/Info.plist
+          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
+          minimum=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$plist")
+          signed=$("$SPARKLE_BIN/sign_update" --ed-key-file "$SPARKLE_KEY_FILE" "$zip")
+          signature=$(printf '%s' "$signed" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          length=$(printf '%s' "$signed" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')
+          [ -n "$signature" ] && [ -n "$length" ] || { echo "::error::sign_update said: $signed"; exit 1; }
+          swift .github/test-build/ed25519.swift verify "$SPARKLE_PUBLIC_KEY" "$signature" "$zip"
+          notes=$(git log --first-parent --no-merges -15 --format='<li>%s</li>' | sed 's/&/\&amp;/g; s/<\([^l/]\)/\&lt;\1/g')
+          cat > appcast.xml <<FEED
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Ardia Test</title>
+              <link>https://github.com/$GITHUB_REPOSITORY</link>
+              <item>
+                <title>$version ($build)</title>
+                <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+                <sparkle:version>$build</sparkle:version>
+                <sparkle:shortVersionString>$version</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>$minimum</sparkle:minimumSystemVersion>
+                <description><![CDATA[<ul>$notes</ul>]]></description>
+                <enclosure url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$zip" length="$length" type="application/octet-stream" sparkle:edSignature="$signature"/>
+              </item>
+            </channel>
+          </rss>
+          FEED
+          xmllint --noout appcast.xml
+          cat appcast.xml
+          if ! gh release view updates --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create updates --repo "$GITHUB_REPOSITORY" --prerelease --title "Ardia Test update feed" \
+              --notes "The Sparkle feed Ardia Test builds check for updates. The newest build replaces appcast.xml."
+          fi
+          gh release upload updates appcast.xml --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Upload build log on failure
         if: failure()
