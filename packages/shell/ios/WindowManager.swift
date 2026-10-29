@@ -18,6 +18,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged), name: name, object: nil)
     }
+    NotificationCenter.default.addObserver(self, selector: #selector(appActivated), name: NSApplication.didBecomeActiveNotification, object: nil)
     clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
       self?.keyWindowForClick(event)
       return event
@@ -35,6 +36,23 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard key == nil else { return }
     FocusTrace.record("click made \(window.windowNumber) key (was \(NSApp.keyWindow?.windowNumber ?? 0))")
     window.makeKey()
+  }
+
+  @objc private func appActivated() {
+    guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
+    DispatchQueue.main.async { [weak self] in self?.keyWindowUnderActivatingClick() }
+  }
+
+  private func keyWindowUnderActivatingClick() {
+    guard NSApp.isActive, NSApp.modalWindow == nil, !background else { return }
+    let number = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+    guard let window = NSApp.window(withWindowNumber: number), id(of: window) != nil, Self.shownOnScreen(window), window.canBecomeKey
+    else { return }
+    var key = NSApp.keyWindow
+    while let k = key, k !== window { key = k.parent }
+    guard key == nil else { return }
+    FocusTrace.record("activating click made \(window.windowNumber) key (was \(NSApp.keyWindow?.windowNumber ?? 0))")
+    window.makeKeyAndOrderFront(nil)
   }
 
   private static func shownOnScreen(_ window: NSWindow) -> Bool {

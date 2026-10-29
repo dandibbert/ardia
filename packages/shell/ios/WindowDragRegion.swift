@@ -96,12 +96,34 @@ final class WindowDragRegion: ExpoView {
     var key = NSApp.keyWindow
     while let k = key, k !== window { key = k.parent }
     if key == nil, window.canBecomeKey, !event.modifierFlags.contains(.command) { window.makeKeyAndOrderFront(nil) }
+    if !NSApp.isActive, window.canBecomeKey, !event.modifierFlags.contains(.command) { keyOnceActive(window) }
     if clickable, place == .region { return clickOrDrag(event, in: window) }
     if event.clickCount == 2 {
       if releaseFollows { doubleClickDown = place } else { doubleClick(event, place) }
       return
     }
     window.performDrag(with: event)
+  }
+
+  private final class ActivationWatch {
+    var observer: NSObjectProtocol?
+    func stop() {
+      if let observer { NotificationCenter.default.removeObserver(observer) }
+      observer = nil
+    }
+  }
+
+  private func keyOnceActive(_ window: NSWindow) {
+    let watch = ActivationWatch()
+    watch.observer = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
+      [weak window] _ in
+      watch.stop()
+      guard let window, window.isVisible, window.canBecomeKey else { return }
+      var key = NSApp.keyWindow
+      while let k = key, k !== window { key = k.parent }
+      if key == nil { window.makeKey() }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { watch.stop() }
   }
 
   private func clickOrDrag(_ down: NSEvent, in window: NSWindow) {
