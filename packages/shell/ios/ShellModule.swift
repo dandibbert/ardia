@@ -462,7 +462,9 @@ public class ShellModule: Module {
       entry.state = item["checked"] as? Bool == true ? .on : .off
       if let symbol = item["symbol"] as? String {
         entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        #if compiler(>=6.4)
         if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
+        #endif
       } else if let hex = item["swatch"] as? String, let light = NSColor(hex: hex) {
         let dark = (item["swatchDark"] as? String).flatMap { NSColor(hex: $0) } ?? light
         entry.image = light.alphaComponent == 0

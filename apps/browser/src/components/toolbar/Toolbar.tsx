@@ -19,6 +19,7 @@ import { setToolbarExtensionsWidth } from "../../state/windows/layout";
 import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
+import { copyPageUrl } from "../../state/site/selection";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
 import { FIELD_GLASS_HOVER_OPACITY, FIELD_GLASS_OPACITY, GlassFill, liquidGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
@@ -168,6 +169,7 @@ export const UrlField = memo(function UrlField({
   const showFullUrl = useSettings((s) => s.showFullUrl);
   const bookmarkHint = useShortcutHint("bookmarkPage");
   const splitHint = useShortcutHint("openSplitPane");
+  const copyHint = useShortcutHint("copyUrl");
   const bookmarked = useIsBookmarked(tab.url);
   const insecure = usePage(tab.id, insecureLevel);
   const popups = usePage(tab.id, (p) => p.popups.length);
@@ -277,6 +279,7 @@ export const UrlField = memo(function UrlField({
             )}
           </>
         )}
+        <Button variant="icon" toolbar palette={palette} icon="link" size={13} box={row.fieldButton} radius={row.fieldButtonRadius} onPress={() => void copyPageUrl(tab.id)} tooltip={withShortcut("Copy Link", copyHint)} />
         {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} box={row.fieldButton} onPress={toggleSiteControls} />}
         <TranslateButton tabId={tab.id} palette={palette} box={row.fieldButton} radius={row.fieldButtonRadius} onFocus={onFocus} />
         <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} box={row.fieldButton} radius={row.fieldButtonRadius} onFocus={onFocus} />
