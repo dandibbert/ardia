@@ -41,15 +41,31 @@ import {
   windowExtensions,
 } from "./actions";
 
+const openedLittleArdiaLinkTabs = new Set<string>();
+const LITTLE_ARDIA_LINK_REPEAT_MS = 2000;
+let lastLittleArdiaLink: { link: string; at: number } | null = null;
+
+function opensLittleArdiaLinkAgain(link: string) {
+  const now = Date.now();
+  const repeat = lastLittleArdiaLink?.link === link && now - lastLittleArdiaLink.at < LITTLE_ARDIA_LINK_REPEAT_MS;
+  lastLittleArdiaLink = { link, at: now };
+  return repeat;
+}
+
 function openLittleArdiaLinkTabs(s: BrowserState, prev: BrowserState) {
   if (s.tabs === prev.tabs) return;
   for (const id of changedIds(s.tabs, prev.tabs)) {
     const tab = s.tabs[id];
-    const link = tab ? littleArdiaLinkOf(tab.url) : null;
-    if (!tab || !link) continue;
+    if (!tab) {
+      openedLittleArdiaLinkTabs.delete(id);
+      continue;
+    }
+    const link = littleArdiaLinkOf(tab.url);
+    if (!link || openedLittleArdiaLinkTabs.has(id)) continue;
+    openedLittleArdiaLinkTabs.add(id);
     queueMicrotask(() => {
       s.closeTab(id);
-      openLittleArdia(link, tab.profileId);
+      if (!opensLittleArdiaLinkAgain(link)) openLittleArdia(link, tab.profileId);
     });
   }
 }
