@@ -61,8 +61,8 @@ final class TypeAheadHold {
     now.forEach { NSApp.sendEvent($0) }
     held.passing = false
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak held] in
-      guard let self, let held, self.typeAhead === held else { return }
-      self.endTypeAhead(send: true)
+      guard let self, let held, self.held === held else { return }
+      self.end(send: true)
     }
   }
 

@@ -69,15 +69,23 @@ public class FocusModule: Module {
   private func setSwitcherCapture(_ active: Bool) {
     if let monitor = switcherMonitor { NSEvent.removeMonitor(monitor) }
     switcherMonitor = nil
+    SwitcherHold.capturing = active
     switcherPointer.start(active ? NSEvent.mouseLocation : nil)
     guard active else { return }
     let emit: ([String: Any]) -> Void = { ShellEvents.send(.app, $0) }
-    switcherMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseUp, .rightMouseUp, .otherMouseUp]) { event in
+    switcherMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseUp, .rightMouseUp, .otherMouseUp]) { [weak self] event in
       guard event.type == .keyDown else {
         emit(["type": "switcherMouseUp"])
         return event
       }
       if MainMenu.isSwitcherKey(event) { return event }
+      if !SwitcherHold.stillHeld(event.modifierFlags) {
+        if let monitor = self?.switcherMonitor { NSEvent.removeMonitor(monitor) }
+        self?.switcherMonitor = nil
+        SwitcherHold.capturing = false
+        emit(["type": "switcherReleased"])
+        return event
+      }
       switch event.keyCode {
       case 53: emit(["type": "switcherKey", "key": "escape"])
       case 124: emit(["type": "switcherKey", "key": "next"])
