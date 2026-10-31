@@ -7,7 +7,7 @@ import { folderMenuOpen, openFolderMenu, toggleFolderMenu, useFolderMenus } from
 import { useWindowId } from "../../state/browser/hooks";
 import { openImport } from "../../state/settings/settingsWindows";
 import { Favicon } from "../favicon/Favicon";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarWidth } from "../../state/sidebar/hooks";
 import { ContextMenuArea, MouseArea, Symbol, Text, useHover, useTheme } from "../ui";
 import { openBarMenu, openImportButtonMenu, type ClickMods } from "../../state/bookmarks/barMenus";
 import { bookmarksBar, type BarSize } from "./tokens";

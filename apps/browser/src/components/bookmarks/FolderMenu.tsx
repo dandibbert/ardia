@@ -8,11 +8,11 @@ import { folderLinks } from "../../state/bookmarks/bookmarks";
 import { registerDropZone, useBarDrag } from "../../state/bookmarks/barDrag";
 import { roomOffsets, zoneHitAt } from "../../state/bookmarks/barDrop";
 import { closeFolderMenus, closeMenusAbove, openFolderMenu, useFolderMenus, type FolderMenuPanel, type MenuRect } from "../../state/bookmarks/folderMenus";
-import { openAllItems } from "../../state/bookmarks/linkMenus";
+import { openAllItems, openAllModeOf } from "../../state/bookmarks/linkMenus";
 import { currentBookmarks } from "../../state/browser/current";
 import { openBarMenu } from "../../state/bookmarks/barMenus";
 import { modifiersOf } from "../../lib/keys";
-import { useSidebarWidth } from "../sidebar/tokens";
+import { useSidebarWidth } from "../../state/sidebar/hooks";
 import { ContextMenuArea, menuRowFill, MenuSeparator, MouseArea, opacity, PANEL, PopoverSurface, Symbol, Text, usePopoverMotion, usePopoverMotionStyle, useTheme } from "../ui";
 import { ChipIcon, useBookmarkDragResponder, type IconMetrics } from "./BarItem";
 import { measureRect, useEased, useSlide } from "./barMotion";
@@ -146,7 +146,7 @@ export function FolderMenu({ windowId, panel, layer, closing, onClosed }: { wind
                   title={item.title}
                   onPress={() => {
                     closeFolderMenus();
-                    void openFolder(parentId, windowId, item.id === "openAllWindow" ? "window" : item.id === "openAllIncognito" ? "incognito" : "tabs");
+                    void openFolder(parentId, windowId, openAllModeOf(item.id) ?? "tabs");
                   }}
                 />
               ) : null,

@@ -3,10 +3,12 @@ import { hapticTick } from "../../platform/haptics";
 import { webviews } from "../../platform/webviews";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId } from "../browser/model";
-import { peekModifierOf, splitLinkModifierOf, type PeekModifier, type SplitLinkModifier } from "../settings/settings";
-import { MAX_SPLIT_PANES, splitOf } from "../splits/splits";
-import { openSplitPane, showToast } from "../splits/actions";
+import { splitLinkModifierOf, type PeekModifier, type SplitLinkModifier } from "../settings/settings";
+import { MAX_SPLIT_PANES, splitOf, splitTabIdsOf } from "../splits/splits";
+import { openSplitPane } from "../splits/actions";
+import { showToast } from "../app/toasts";
 import { isPeekTab, otherSitePeekTabIds, shownPageId } from "./peek";
+import { closeFind } from "../find/actions";
 
 const store = () => useBrowser.getState();
 const closers = new Map<string, () => void>();
@@ -55,7 +57,7 @@ export function openPeekInSplit(windowId: string) {
   const s = store();
   const peek = s.peeks[windowId];
   if (!peek) return;
-  if ((splitOf(s, peek.sourceId)?.tabIds.length ?? 0) >= MAX_SPLIT_PANES) {
+  if ((splitTabIdsOf(splitOf(s, peek.sourceId))?.length ?? 0) >= MAX_SPLIT_PANES) {
     return showToast(windowId, "Cannot Add New Pane", `Split View can show up to ${MAX_SPLIT_PANES} tabs at once.`);
   }
   const id = s.peekToTab(windowId, { activate: false });
@@ -82,11 +84,8 @@ export function runPeekCommand(command: string, windowId: string): boolean {
     return true;
   }
   if (command !== "closeTab" || s.windowUi[windowId]?.panel.open) return false;
-  if (s.find[peek.tabId]?.open) {
-    s.setFind(peek.tabId, { open: false, count: null, active: 0 });
-    void webviews.get(peek.tabId)?.stopFinding(false);
-    void webviews.get(peek.tabId)?.focus();
-  } else dismissPeek(windowId);
+  if (s.find[peek.tabId]?.open) closeFind(peek.tabId);
+  else dismissPeek(windowId);
   return true;
 }
 
@@ -101,7 +100,7 @@ export function startPeeks() {
   let read: { tabs: BrowserState["tabs"]; groups: BrowserState["groups"]; on: boolean } | null = null;
   const sync = () => {
     const s = store();
-    const modifier = peekModifierOf(s.settings);
+    const modifier = s.settings.peekModifier;
     if (modifier !== sent) void setPeekModifier((sent = modifier));
     const split = splitLinkModifierOf(s.settings);
     if (split !== sentSplit) void setSplitLinkModifier((sentSplit = split));

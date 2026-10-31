@@ -9,21 +9,19 @@ import { useCanTidyPins, useCapturedSidebarEntries, usePinnedCollapsed, usePinne
 import { useAddressBarInSidebar } from "../../state/windows/layout";
 import { ClearDivider } from "./ClearDivider";
 import { useDragController, useDragItem } from "./DragProvider";
-import { type EntryMotion } from "./EntryMotion";
 import { Fold, useFold } from "./Fold";
-import { GroupBlock } from "./GroupBlock";
+import { SidebarEntry } from "./GroupBlock";
 import { GhostSlot, ListMotionContext, useListMotion } from "./ListMotion";
-import { LiveFolderBlock } from "./LiveFolderBlock";
 import { PinnedGrid } from "./PinnedGrid";
-import { LIVE, usePinnedSequence } from "../../state/sidebar/pinnedOrder";
+import { usePinnedSequence } from "../../state/sidebar/pinnedOrder";
 import { SCROLL_EDGE } from "./ScrollEdge";
 import { entryHeightNow, firstPaintEntriesNow, usePendingEntriesHeight } from "../../state/sidebar/geometry";
-import { SplitRowItem, TabRowItem } from "./TabRow";
 import { INCOGNITO_ICON } from "../ntp/IncognitoHeading";
 import { ROW_PITCH, ROWS_PER_FRAME, type SidebarGeometry } from "./pageLayout";
 import { NewTabRow } from "./NewTabRow";
 import { CleanUpUpsell } from "./CleanUpUpsell";
 import { SIDEBAR_TYPE, sidebarTokens } from "./tokens";
+import { tailKey } from "./dragModel";
 
 type PageRowsProps = {
   windowId: string;
@@ -33,6 +31,7 @@ type PageRowsProps = {
   lazy: boolean;
   offScreen: boolean;
   tiles: string[];
+  underDockedTiles: boolean;
   innerWidth: number;
   inlineNewTab: boolean;
   controller: ReturnType<typeof useDragController>;
@@ -40,7 +39,9 @@ type PageRowsProps = {
   onListHeight: (height: number) => void;
 };
 
-export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, tiles, innerWidth, inlineNewTab, controller, geometry, onListHeight }: PageRowsProps) {
+const DOCKED_TILES_GAP = SCROLL_EDGE.gap + SCROLL_EDGE.line + SCROLL_EDGE.inset;
+
+export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, tiles, underDockedTiles, innerWidth, inlineNewTab, controller, geometry, onListHeight }: PageRowsProps) {
   const [captured] = useState(newCapture);
   const { list: all } = useCapturedSidebarEntries(windowId, profileId, captured);
   const [mountedRows, setMountedRows] = useState(() => firstPaintEntriesNow(windowId, profileId, all, lazy));
@@ -83,25 +84,26 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
             controller?.regions.set("pinnedGroups", v);
           }}
           onLayout={geometry ? (e) => void (geometry.current.regions.pinnedGroups = e.nativeEvent.layout.y) : undefined}
-          style={{ marginTop: tiles.length ? 6 : 0, gap: pinnedGap }}
+          style={{ marginTop: tiles.length && pinnedSection ? 6 : 0, gap: pinnedGap }}
         >
           {pinnedSection ? (
             <Fold
               fold={pinnedFold}
               collapsed={collapsed}
-              entries={pinned.map((entry) => ({ key: entry, node: <PinnedEntry entry={entry} windowId={windowId} /> }))}
+              entries={pinned.map((entry) => ({ key: entry, node: <SidebarEntry entry={entry} section="pinnedGroups" rowSection="pinnedRows" /> }))}
               keep={kept}
               gap={layout.rowGap}
               estimate={(key) => entryHeightNow(windowId, profileId, key)}
             />
           ) : null}
-          <Tail id="tail:pinnedGroups" section="pinnedGroups" />
+          <Tail section="pinnedGroups" />
         </View>
         {divided ? (
           <ClearDivider
             windowId={windowId}
             profileId={profileId}
             spaced={pinnedSection}
+            lift={underDockedTiles && !pinnedSection && !isIncognitoProfile(profileId) ? DOCKED_TILES_GAP : 0}
             clear={clearable}
             tidy={tidy}
             pinned={pinnedSection ? { collapsed, open: pinnedFold.open } : null}
@@ -120,12 +122,12 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
                 "ghost" in slot ? (
                   <GhostSlot key={slot.ghost.key} snapshot={slot.ghost.snapshot} top={slot.top} opacity={slot.ghost.opacity} />
                 ) : (
-                  <ListEntry key={slot.entry} entry={slot.entry} motion={motion.motion(slot.entry)} />
+                  <SidebarEntry key={slot.entry} entry={slot.entry} section="list" motion={motion.motion(slot.entry)} />
                 ),
               )
-            : list.map((entry) => <ListEntry key={entry} entry={entry} motion={motion.motion(entry)} />)}
+            : list.map((entry) => <SidebarEntry key={entry} entry={entry} section="list" motion={motion.motion(entry)} />)}
           {pending ? <View style={{ height: pending }} /> : null}
-          <Tail id="tail:list" section="list" />
+          <Tail section="list" />
           {!newTabButtonAtTop && inlineNewTab ? <NewTabRow windowId={windowId} shift={motion.tail} clip={motion.tailClip} /> : null}
         </View>
         {current ? <CleanUpUpsell windowId={windowId} shift={motion.tail} /> : null}
@@ -134,23 +136,8 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
   );
 }
 
-const PinnedEntry = memo(function PinnedEntry({ entry, windowId }: { entry: string; windowId: string }) {
-  const id = entry.slice(entry.indexOf(":") + 1);
-  if (entry.startsWith(LIVE)) return <LiveFolderBlock folderId={id} windowId={windowId} />;
-  if (entry.startsWith("g:")) return <GroupBlock groupId={id} section="pinnedGroups" />;
-  if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="pinnedRows" />;
-  return <TabRowItem tabId={id} section="pinnedRows" />;
-});
-
-const ListEntry = memo(function ListEntry({ entry, motion }: { entry: string; motion: EntryMotion | null }) {
-  const id = entry.slice(2);
-  if (entry.startsWith("g:")) return <GroupBlock groupId={id} section="list" motion={motion} />;
-  if (entry.startsWith("s:")) return <SplitRowItem splitId={id} section="list" motion={motion} />;
-  return <TabRowItem tabId={id} section="list" motion={motion} />;
-});
-
-const Tail = memo(function Tail({ id, section }: { id: string; section: "list" | "pinnedRows" | "pinnedGroups" }) {
-  const { wrapper } = useDragItem(id, { kind: "tail", tabIds: [], section });
+const Tail = memo(function Tail({ section }: { section: "list" | "pinnedGroups" }) {
+  const { wrapper } = useDragItem(tailKey(section), { kind: "tail", tabIds: [], section });
   return <Animated.View ref={wrapper.ref} style={wrapper.style} />;
 });
 

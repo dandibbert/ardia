@@ -50,7 +50,7 @@ enum FocusTrace {
       "key=\(NSApp.keyWindow.map(describe) ?? "nil") fr=\(responder(of: NSApp.keyWindow))",
       "main=\(NSApp.mainWindow.map(describe) ?? "nil") fr=\(responder(of: NSApp.mainWindow))",
       "input=\(inputClient())",
-      "holders: switcher=\(SwitcherHold.capturing) typeAhead=\(WindowManager.shared.typeAhead != nil) gate=\(FocusHandoff.shared.gatesKeyWindow)",
+      "holders: switcher=\(SwitcherHold.capturing) typeAhead=\(WindowManager.shared.holdsTyping) gate=\(FocusHandoff.shared.gatesKeyWindow)",
       "windows:",
     ]
     out += NSApp.orderedWindows.map { "  " + describe($0) }

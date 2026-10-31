@@ -10,6 +10,7 @@ const { openTabMenu } = await import("./tabMenu.ts");
 const { openMultiMenu } = await import("./multiTabMenu.ts");
 const { openGroupMenu } = await import("./groupMenu.ts");
 const { shellNativeModules } = await import("../../test-native/shell.ts");
+const { splitTabIdsOf } = await import("../splits/splits.ts");
 
 const S = () => useBrowser.getState();
 const MODS = [
@@ -194,8 +195,7 @@ test("several tabs: counts in the titles, Move N Tabs to Profile, and Close N Ta
 test("a group header: pin, open, move, customise, copy, then the ways to end it", () => {
   const { w, ids } = windowWith("a", "b", "c");
   const g = S().groupTabs([ids[1], ids[2]], { name: "G", pinned: false });
-  const colors = [{ id: "color:", title: "None", checked: true }];
-  assert.deepEqual(top(groupMenuItems(S(), w, g, colors)), [
+  assert.deepEqual(top(groupMenuItems(S(), w, g)), [
     "Pin Group [pin]",
     "---",
     "New Tab in Group [plus.app] ⌥⌘T",
@@ -218,11 +218,41 @@ test("a group header: pin, open, move, customise, copy, then the ways to end it"
     "Delete Group [trash]",
   ]);
   S().moveGroup(g, { pinned: true });
-  const pinned = top(groupMenuItems(S(), w, g, colors));
+  const pinned = top(groupMenuItems(S(), w, g));
   assert.equal(pinned[0], "Unpin Group [pin.slash]");
   assert.ok(!pinned.some((l) => l.startsWith("Move to Window")), "a pinned group is in every window already");
   S().activate(ids[0]);
-  assert.ok(top(groupMenuItems(S(), w, g, colors)).includes("Close Group [xmark]"), "⌃⌘W closes the shown tab's group, not this one");
+  assert.ok(top(groupMenuItems(S(), w, g)).includes("Close Group [xmark]"), "⌃⌘W closes the shown tab's group, not this one");
+});
+
+test("a group's colour menu: None, Neutral, the site's colour, then the palette; picking one sets it", async () => {
+  const { w, ids } = windowWith("a", "b");
+  const g = S().groupTabs([ids[1]], { name: "G", pinned: false });
+  const items = groupMenuItems(S(), w, g);
+  assert.deepEqual(sub(items, "color").slice(0, 4), ["None", "Neutral ✓", "Match Site Color (off)", "---"]);
+  const shell = shellNativeModules.ArdiaMenus;
+  const real = shell.showMenu;
+  shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "color").children.find((it) => it.title === "Blue").id);
+  try {
+    await openGroupMenu(w, g);
+  } finally {
+    shell.showMenu = real;
+  }
+  assert.equal(S().groups[g].color, "blue");
+});
+
+test("Move to Window › New Window moves the tab to a new window", async () => {
+  const { w, ids } = windowWith("a", "b");
+  const shell = shellNativeModules.ArdiaMenus;
+  const real = shell.showMenu;
+  shell.showMenu = (shown) => Promise.resolve(shown.find((it) => it.id === "moveToWindow").children.at(-1).id);
+  try {
+    await openTabMenu(w, S().tabs[ids[1]]);
+  } finally {
+    shell.showMenu = real;
+  }
+  assert.notEqual(S().tabs[ids[1]].windowId, w);
+  assert.equal(S().windowOrder.length >= 2, true);
 });
 
 test("the sidebar background menu: new things, then the sidebar toggles, Close All Tabs last", () => {
@@ -262,7 +292,7 @@ test("a rebound key moves the hint with it, and an alternate keeps its pair only
 });
 
 async function whileMenuIsUp(open, meanwhile, choice) {
-  const shell = shellNativeModules.ArdiaShell;
+  const shell = shellNativeModules.ArdiaMenus;
   const real = shell.showMenu;
   let pick;
   shell.showMenu = () => new Promise((resolve) => (pick = resolve));
@@ -280,8 +310,8 @@ test("Open as Split splits the tab the menu was opened on, even if another tab c
   const { w, ids } = windowWith("a", "b", "c");
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[0]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.includes(ids[0]), false, "a, now in front, is left alone");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a, now in front, is left alone");
 });
 
 test("a tab menu whose tab left the window meanwhile does nothing, and Close Other Tabs spares tabs that left", async () => {
@@ -306,7 +336,7 @@ test("a group menu whose group moved to another window meanwhile does nothing", 
   const { w, ids } = windowWith("a", "b", "c");
   const other = S().createWindow({ url: "https://x.com/" });
   const g = S().groupTabs([ids[1], ids[2]], { name: "Trip", pinned: false });
-  await whileMenuIsUp(() => openGroupMenu(w, g, () => []), () => S().moveGroupToWindow(g, other), "delete");
+  await whileMenuIsUp(() => openGroupMenu(w, g), () => S().moveGroupToWindow(g, other), "delete");
   const trip = Object.values(S().groups).find((x) => x.name === "Trip");
   assert.equal(trip?.windowId, other, "the group is still there, in the other window");
   assert.deepEqual(trip.tabIds, [ids[1], ids[2]]);
@@ -330,14 +360,14 @@ test("Open as Split on a tab that came to the front while its menu was up opens 
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[2]), "split");
   const split = Object.values(S().splits)[0];
-  assert.ok(split?.tabIds.includes(ids[2]), "c is a pane");
-  assert.equal(split.tabIds.length, 2);
-  assert.equal(split.tabIds.includes(ids[0]), false, "a isn't");
+  assert.ok(splitTabIdsOf(split).includes(ids[2]), "c is a pane");
+  assert.equal(splitTabIdsOf(split).length, 2);
+  assert.equal(splitTabIdsOf(split).includes(ids[0]), false, "a isn't");
 });
 
 test("Open as Split on a background tab pairs it with the tab in front when the choice lands", async () => {
   const { w, ids } = windowWith("a", "b", "c");
   S().activate(ids[0]);
   await whileMenuIsUp(() => openTabMenu(w, S().tabs[ids[2]]), () => S().activate(ids[1]), "split");
-  assert.deepEqual(Object.values(S().splits).map((v) => [...v.tabIds].sort()), [[ids[1], ids[2]].sort()]);
+  assert.deepEqual(Object.values(S().splits).map((v) => [...splitTabIdsOf(v)].sort()), [[ids[1], ids[2]].sort()]);
 });

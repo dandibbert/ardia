@@ -1,5 +1,5 @@
-import { setAppearance, setAppIcon, type AppIcon } from "../../../state/app/appSettings";
-import { Symbol, font, PopUp, Toggle, useHover } from "../../ui";
+import type { AppIcon } from "../../../state/app/appSettings";
+import { GlassFill, liquidGlass, Symbol, font, PopUp, Toggle, useHover } from "../../ui";
 import { Image, Pressable, Text, View } from "react-native";
 import { useTheme } from "../../ui/theme";
 import { useSettings, useTabLayout } from "../../../state/browser/hooks";
@@ -7,11 +7,12 @@ import { updateSettings } from "../../../state/settings/actions";
 import type { Settings } from "../../../state/settings/settings";
 import { Group, Row, SectionHeader } from "../Form";
 import { PictureChoice } from "../PictureChoice";
+import { AmountSlider } from "../ThemeControls";
 import { BookmarksBarSection } from "./BookmarksBarSection";
-import { modePreview } from "../tokens";
+import { modePreview, stylePreview } from "../tokens";
 import { useSettingsColors } from "../useSettingsColors";
-import { APP_ICON_SIZE, appIconChoices } from "../../../state/settings/paneData";
-import { store, useResource } from "../../../state/settings/resources";
+import { APP_ICON_SIZE, appIconChoices, chooseAppIcon } from "../../../state/settings/paneData";
+import { useResource } from "../../../state/settings/resources";
 
 const MODES: { value: Settings["appearance"]; title: string; description: string }[] = [
   { value: "auto", title: "Automatic", description: "Follow the system appearance setting" },
@@ -22,13 +23,10 @@ const MODES: { value: Settings["appearance"]; title: string; description: string
 export function AppearancePane() {
   const appearance = useSettings((s) => s.appearance);
   const spacesFollow = useSettings((s) => s.spacesFollowAppearance);
-  const choose = (mode: Settings["appearance"]) => {
-    updateSettings({ appearance: mode });
-    void setAppearance(mode);
-  };
+  const choose = (mode: Settings["appearance"]) => updateSettings({ appearance: mode });
   return (
     <View>
-      <SectionHeader anchor="appearance.theme" description="Also in View › Appearance. Incognito windows are always dark." />
+      <SectionHeader anchor="appearance.theme" />
       <View style={{ flexDirection: "row", gap: 14 }}>
         {MODES.map((m) => (
           <ModeChoice key={m.value} mode={m.value} title={m.title} description={m.description} selected={appearance === m.value} onPress={() => choose(m.value)} />
@@ -39,12 +37,64 @@ export function AppearancePane() {
           <Toggle value={spacesFollow} onChange={(v) => updateSettings({ spacesFollowAppearance: v })} />
         </Row>
       </Group>
+      <InterfaceStylePicker />
       <AddressBarPicker />
       <BookmarksBarSection />
       <SelectedTabGlowPicker />
       <ScrollBarsPicker />
       <AppIconPicker />
     </View>
+  );
+}
+
+const TINT_SLIDER_WIDTH = 160;
+
+const STYLES: { value: Settings["interfaceStyle"]; title: string }[] = [
+  { value: "glass", title: "Glass" },
+  { value: "classic", title: "Classic" },
+];
+
+function InterfaceStylePicker() {
+  const style = useSettings((s) => s.interfaceStyle);
+  const tinted = useSettings((s) => s.glassTintWithTheme);
+  const tintAmount = useSettings((s) => s.glassTintAmount);
+  if (!liquidGlass) return null;
+  return (
+    <>
+      <SectionHeader anchor="appearance.interfaceStyle" />
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        {STYLES.map((s) => (
+          <StyleChoice key={s.value} value={s.value} title={s.title} selected={style === s.value} onPress={() => updateSettings({ interfaceStyle: s.value })} />
+        ))}
+      </View>
+      <Group style={{ marginTop: 14 }}>
+        <Row anchor="appearance.glassTintWithTheme">
+          <Toggle value={tinted} onChange={(v) => updateSettings({ glassTintWithTheme: v })} />
+        </Row>
+        {tinted ? (
+          <Row anchor="appearance.glassTintAmount">
+            <View style={{ width: TINT_SLIDER_WIDTH }}>
+              <AmountSlider value={tintAmount} tooltip={`${Math.round(tintAmount * 100)} %`} onChange={(v) => updateSettings({ glassTintAmount: Math.round(v * 100) / 100 })} />
+            </View>
+          </Row>
+        ) : null}
+      </Group>
+    </>
+  );
+}
+
+function StyleChoice({ value, title, selected, onPress }: { value: Settings["interfaceStyle"]; title: string; selected: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  const look = stylePreview[theme.dark ? "dark" : "light"];
+  const glass = value === "glass";
+  return (
+    <PictureChoice title={title} selected={selected} onPress={onPress} gap={7} frame={{ height: 84, borderRadius: 9, overflow: "hidden", padding: 10, flexDirection: "row", gap: 8, backgroundColor: look.backdrop }}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={{ flex: 1, alignSelf: "flex-start", height: 30, borderRadius: 8, backgroundColor: glass ? undefined : look.tile, borderWidth: glass ? 0 : 1, borderColor: look.tileStroke }}>
+          {glass ? <GlassFill radius={8} state={i === 0 ? "active" : "rest"} /> : null}
+        </View>
+      ))}
+    </PictureChoice>
   );
 }
 
@@ -162,16 +212,12 @@ function AppIconPicker() {
   const icons = choices?.icons ?? [];
   const current = choices?.current ?? null;
   if (icons.length < 2) return null;
-  const choose = (id: string) => {
-    store(appIconChoices, [], { icons, current: id });
-    void setAppIcon(id);
-  };
   return (
     <>
-      <SectionHeader anchor="appearance.appIcon" description="Shown in the Dock and the app switcher. The Dock keeps it after you quit." />
+      <SectionHeader anchor="appearance.appIcon" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 6, rowGap: 10 }}>
         {icons.map((icon) => (
-          <IconChoice key={icon.id} icon={icon} selected={icon.id === current} onPress={() => choose(icon.id)} />
+          <IconChoice key={icon.id} icon={icon} selected={icon.id === current} onPress={() => chooseAppIcon(icon.id)} />
         ))}
       </View>
     </>

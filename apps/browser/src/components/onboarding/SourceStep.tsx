@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View, type ImageSourcePropType } from "react-native";
 import { Symbol } from "../ui";
 import { font, weight } from "../ui/tokens";
-import { importModule } from "../../state/import/importApi";
 import { isWebDemo } from "../../state/onboarding/demoSteps";
 import { openImport } from "../../state/settings/settingsWindows";
 import { CONTENT_WIDTH } from "./ChoiceList";
@@ -13,7 +12,7 @@ import { SecondaryButton } from "./Buttons";
 import { CheckMark, SectionLabel, SelectTile, Tag, useOnboardingColors } from "./Parts";
 import { SetupCodeLink, SetupCodeStep } from "./SetupCodeStep";
 import { browserIcon } from "./browserIcons";
-import { GlassBacking, solidFill, useImageRing } from "./GlassBacking";
+import { GlassBacking, useSolidFill, useImageRing } from "./GlassBacking";
 
 const ICON = require("../../../assets/app-icon.png");
 
@@ -57,6 +56,7 @@ function detect(): Tile[] {
 const TILE = (CONTENT_WIDTH - 8 * 3) / 4;
 
 export function SourceStep() {
+  const solidFill = useSolidFill();
   const colors = useOnboardingColors();
   const source = useOnboarding((s) => s.source);
   const [tiles, setTiles] = useState<Tile[]>(detect);
@@ -70,7 +70,7 @@ export function SourceStep() {
   const found = tiles.filter((t) => t.app);
   const others = tiles.filter((t) => !t.app);
   const chosen = tiles.find((t) => t.id === source);
-  const canImport = !isWebDemo && !!chosen?.app && !!importModule();
+  const canImport = !isWebDemo && !!chosen?.app;
   const choose = (id: BrowserSourceId) => chooseSource(id);
 
   const startImport = () => {
@@ -122,7 +122,7 @@ export function SourceStep() {
             borderColor: colors.rowBorder,
           }}
         >
-          <GlassBacking fill={colors.row} radius={12} border={StyleSheet.hairlineWidth * 2} />
+          <GlassBacking radius={12} border={StyleSheet.hairlineWidth * 2} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ ...font.body, fontWeight: weight.medium, color: colors.title }}>
               {importing === chosen.id ? `Importing from ${chosen.name}` : `Bring your stuff from ${chosen.name}`}

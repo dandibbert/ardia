@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { useBrowser } from "../browser/store";
 import { bookmarkProfileId } from "../browser/model";
-import { setBookmarksDrop, useTabDrag } from "../drag/tabDrag";
+import type { TabDrag } from "../drag/tabDrag";
 import { addBookmark, moveBookmark } from "./actions";
 import { addFolderToSidebar } from "./bookmarkGroups";
-import { insertTarget, isInside, linkTitle, moveTarget, sameSpot, type DropSpot } from "./barDrop";
+import { insertTarget, linkTitle, moveTarget, sameSpot, type DropSpot } from "./barDrop";
 import { closeFolderMenus, closeSprungMenus, holdMenuPanel, panelKey, useFolderMenus } from "./folderMenus";
 import { onAppEvent, setDragEscapeCapture } from "../drag/dragNative";
+import { isWebPageUrl } from "../../lib/url";
+import { isWithin } from "./bookmarks";
 
 export type BarDragSource = { kind: "bookmark"; id: string; panel: string | null } | { kind: "tabs"; tabIds: string[] } | { kind: "links" };
 
@@ -36,7 +38,6 @@ export const barDragging = () => !!useBarDrag.getState().source;
 
 const SPRING_OPEN_MS = 550;
 const LINK_LEAVE_MS = 300;
-const WEB_LINK = /^(https?|file):/i;
 
 const zones = new Map<string, DropZone>();
 let spring: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -61,7 +62,7 @@ function hitAt(windowId: string, x: number, y: number, draggedId: string | null)
   if (!spot || !draggedId) return best.hit;
   const b = useBrowser.getState().bookmarks;
   const parentId = "into" in spot ? spot.into : spot.parentId;
-  return isInside(b, draggedId, parentId) ? { spot: null } : best.hit;
+  return isWithin(b, parentId, [draggedId]) ? { spot: null } : best.hit;
 }
 
 function armSpring(hit: ZoneHit | null) {
@@ -153,30 +154,27 @@ export function dropLinksAt(windowId: string, x: number, y: number, links: { url
   const hit = hitAt(windowId, x, y, null);
   finish();
   closeSprungMenus();
-  const usable = links.filter((l) => WEB_LINK.test(l.url));
+  const usable = links.filter((l) => isWebPageUrl(l.url));
   return !!hit?.spot && bookmarkLinks(windowId, hit.spot, usable.map((l) => ({ url: l.url, title: linkTitle(l.url, l.text) })));
 }
 
-function dropTabs(tabIds: string[], windowId: string, x: number, y: number): boolean {
+export function dropTabsOnBar(tabIds: string[], windowId: string, x: number, y: number): boolean {
   const hit = hitAt(windowId, x, y, null);
   finish();
   if (!hit?.spot) return false;
   const tabs = useBrowser.getState().tabs;
   const links = tabIds
     .map((id) => tabs[id])
-    .filter((t) => !!t && WEB_LINK.test(t.url))
+    .filter((t) => !!t && isWebPageUrl(t.url))
     .map((t) => ({ url: t!.url, title: t!.customTitle || t!.title || linkTitle(t!.url, null), favicon: t!.favicon }));
   const done = bookmarkLinks(windowId, hit.spot, links);
   closeSprungMenus();
   return done;
 }
 
-setBookmarksDrop(dropTabs);
-
-useTabDrag.subscribe((d) => {
+export function followTabDragOnBar(d: TabDrag) {
   const s = useBarDrag.getState();
-  const live = d.tabIds.length > 0 && !!d.windowId && d.windowId !== "external" && !d.outside && d.x >= 0;
-  if (!live) {
+  if (d.phase !== "tab" || d.outside || d.x < 0) {
     if (s.source?.kind === "tabs") {
       finish();
       closeSprungMenus();
@@ -185,8 +183,8 @@ useTabDrag.subscribe((d) => {
   }
   if (s.source && s.source.kind !== "tabs") return;
   if (!s.source || s.windowId !== d.windowId) useBarDrag.setState({ ...IDLE, windowId: d.windowId, source: { kind: "tabs", tabIds: d.tabIds } });
-  track(d.windowId!, d.x, d.y, null);
-});
+  track(d.windowId, d.x, d.y, null);
+}
 
 let escapeWatchers = 0;
 let stopEscape: (() => void) | null = null;

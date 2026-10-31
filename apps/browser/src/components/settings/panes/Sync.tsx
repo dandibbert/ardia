@@ -22,6 +22,7 @@ import { ProfileBadge } from "../../profiles/ProfileIcons";
 import { Group, Row, SectionHeader } from "../Form";
 import { addAllRemoteProfiles, folderLabel, lookingForProfiles, RemoteProfileRow, showConnectDevice, showPhraseEntry, showRecoveryKit, showStopSync } from "./SyncSheets";
 import { settingsType } from "../tokens";
+import { ago } from "../../../lib/time";
 
 export function SyncPane() {
   const theme = useTheme();
@@ -267,15 +268,4 @@ function SyncOn({ info }: { info: FolderInfo | null }) {
       </Group>
     </>
   );
-}
-
-export function ago(at: number, now = Date.now()): string {
-  const s = Math.max(0, (now - at) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return m === 1 ? "1 minute ago" : `${m} minutes ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return h === 1 ? "1 hour ago" : `${h} hours ago`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "yesterday" : `${d} days ago`;
 }
