@@ -333,6 +333,7 @@ final class FocusHandoff {
   }
 
   private func note(_ event: @autoclosure () -> String) {
+    FocusTrace.record("handoff " + event())
     #if DEBUG
     let responder = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
     trace.append(String(format: "%.1f ", CACurrentMediaTime() * 1000) + event() + " fr=" + responder)

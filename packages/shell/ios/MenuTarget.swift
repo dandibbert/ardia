@@ -8,6 +8,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
 
   @objc(commandDispatch:) func performCommand(_ sender: NSMenuItem) {
     guard let item = sender as? CommandItem else { return }
+    FocusTrace.record("command \(item.command) key=\(NSApp.keyWindow?.windowNumber ?? 0)")
     _ = FocusHandoff.shared.takeBegun()
     if Self.focusMovingCommands.contains(item.command) || FocusHandoff.shared.gatesKeyWindow, let window = NSApp.keyWindow {
       FocusHandoff.shared.begin(in: window)

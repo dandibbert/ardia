@@ -1,9 +1,18 @@
 import AppKit
 
 enum FocusTrace {
-  private static let capacity = 80
-  private static var lines: [String] = []
+  private static let capacity = 120
+  private static var lines: [(at: TimeInterval, text: String, count: Int)] = []
   private static var monitor: Any?
+  private static let responderWatches = NSMapTable<NSWindow, NSKeyValueObservation>.weakToStrongObjects()
+
+  static func watch(_ window: NSWindow) {
+    guard responderWatches.object(forKey: window) == nil else { return }
+    let watch = window.observe(\.firstResponder) { window, _ in
+      record("responder of #\(window.windowNumber) → \(responder(of: window))")
+    }
+    responderWatches.setObject(watch, forKey: window)
+  }
 
   static func install() {
     guard monitor == nil else { return }
@@ -26,7 +35,12 @@ enum FocusTrace {
   }
 
   static func record(_ line: String) {
-    lines.append(String(format: "%.3f ", ProcessInfo.processInfo.systemUptime) + line)
+    let now = ProcessInfo.processInfo.systemUptime
+    if let last = lines.last, last.text == line {
+      lines[lines.count - 1] = (now, line, last.count + 1)
+      return
+    }
+    lines.append((now, line, 1))
     if lines.count > capacity { lines.removeFirst(lines.count - capacity) }
   }
 
@@ -42,7 +56,7 @@ enum FocusTrace {
     out += NSApp.orderedWindows.map { "  " + describe($0) }
     out += NSApp.windows.filter { !NSApp.orderedWindows.contains($0) && $0.isVisible }.map { "  unordered " + describe($0) }
     out.append("timeline:")
-    out += lines.map { "  " + $0 }
+    out += lines.map { "  " + String(format: "%.3f ", $0.at) + $0.text + ($0.count > 1 ? " ×\($0.count)" : "") }
     return out.joined(separator: "\n")
   }
 

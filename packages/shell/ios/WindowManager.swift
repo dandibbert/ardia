@@ -182,6 +182,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if let smallSize, frame == nil { placeSmall(window, size: smallSize, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame) }
     relayoutRoot(window)
     windows[id] = window
+    FocusTrace.watch(window)
     if let center = lightsCenters[id] { ChromeWindows.setTrafficLightsCenter(center, in: window) }
     if smallSize == nil { lastPlaced = window }
     if window.isMiniaturized {
@@ -315,6 +316,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard let id = id(of: from) else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: from)
     windows[id] = to
+    FocusTrace.watch(to)
     if lastPlaced === from { lastPlaced = to }
     observeDelegateNotifications(to)
     observeFrame(to)
@@ -343,6 +345,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     window.delegate = self
     auxKinds[id] = kind
     windows[id] = window
+    FocusTrace.watch(window)
     if !window.setFrameUsingName(Self.auxFrameName(kind)) { window.center() }
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(auxFrameChanged(_:)), name: name, object: window)
