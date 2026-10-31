@@ -28,9 +28,14 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private var clickMonitor: Any?
 
   private func keyWindowForClick(_ event: NSEvent) {
-    guard NSApp.isActive, NSApp.modalWindow == nil, !background, !event.modifierFlags.contains(.command),
+    guard NSApp.modalWindow == nil, !background, !event.modifierFlags.contains(.command),
       let window = event.window, id(of: window) != nil, Self.shownOnScreen(window), window.canBecomeKey
     else { return }
+    if !NSApp.isActive {
+      FocusTrace.record("click in \(window.windowNumber) activates the app")
+      NSApp.activate()
+      return
+    }
     var key = NSApp.keyWindow
     while let k = key, k !== window { key = k.parent }
     guard key == nil else { return }

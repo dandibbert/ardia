@@ -95,8 +95,12 @@ final class WindowDragRegion: ExpoView {
     guard let window else { return }
     var key = NSApp.keyWindow
     while let k = key, k !== window { key = k.parent }
+    if !NSApp.isActive, window.canBecomeKey, !event.modifierFlags.contains(.command) {
+      FocusTrace.record("drag region click activates the app")
+      NSApp.activate()
+      keyOnceActive(window)
+    }
     if key == nil, window.canBecomeKey, !event.modifierFlags.contains(.command) { window.makeKeyAndOrderFront(nil) }
-    if !NSApp.isActive, window.canBecomeKey, !event.modifierFlags.contains(.command) { keyOnceActive(window) }
     if clickable, place == .region { return clickOrDrag(event, in: window) }
     if event.clickCount == 2 {
       if releaseFollows { doubleClickDown = place } else { doubleClick(event, place) }
