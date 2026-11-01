@@ -37,6 +37,16 @@ export type ListMotionScope = { enabled: boolean; slideBelow: ((entry: string, d
 export const ListMotionContext = createContext<ListMotionScope>({ enabled: false, slideBelow: null });
 let ghostIds = 0;
 
+function mergePlans(earlier: Plan, later: Plan): Plan {
+  const moved = new Set(later.moves.map((m) => m.key));
+  return {
+    moves: [...earlier.moves.filter((m) => !moved.has(m.key)), ...later.moves],
+    ghosts: [...earlier.ghosts, ...later.ghosts],
+    clipped: later.clipped,
+    below: later.below || earlier.below,
+  };
+}
+
 const tabsOf = (s: BrowserState, entry: string): string[] => {
   const { kind, id } = parseEntry(entry);
   if (kind === "group") return s.groups[id]?.tabIds ?? [];
@@ -215,7 +225,7 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
     ghosts.current = [...ghosts.current, ...plan.ghosts];
     clipped.clear();
     for (const key of plan.clipped) clipped.add(key);
-    queued.current = plan;
+    queued.current = queued.current ? mergePlans(queued.current, plan) : plan;
   };
 
   const before = from.pending;
@@ -272,10 +282,13 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
         });
       });
     }
-    for (const g of plan.ghosts) {
-      g.until = at + FADE_MS * devScale() + FRAME_SLACK_MS;
-      Animated.timing(g.opacity, { toValue: 0, duration: FADE_MS * devScale(), easing: FADE_EASING, useNativeDriver: true }).start();
+    const fadeMs = FADE_MS * devScale();
+    const fading = ghosts.current.filter((g) => !g.until);
+    for (const g of fading) {
+      g.until = at + fadeMs + FRAME_SLACK_MS;
+      Animated.timing(g.opacity, { toValue: 0, duration: fadeMs, easing: FADE_EASING, useNativeDriver: true }).start();
     }
+    if (fading.length) setTimeout(() => rerender((n) => n + 1), fadeMs + 2 * FRAME_SLACK_MS);
     announce();
     if (plan.below) below?.(plan.below);
   });
