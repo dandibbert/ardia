@@ -6,7 +6,7 @@ import { layout, useTheme } from "../ui/theme";
 import { useIsIncognito, useProfile, useSettings } from "../../state/browser/hooks";
 import { useProfileOrder, useProfileRecords } from "../../state/profiles/hooks";
 import { useNativePagerPosition, usePagerPages, type PagerPage } from "../../state/windows/profilePager";
-import { ContextMenuArea, useHover } from "../ui";
+import { ContextMenuArea, radius, useHover } from "../ui";
 import { TooltipAbove } from "../ui/TooltipAbove";
 import { SIDEBAR_FOOTER_DOWNLOADS } from "../sidebar/geometry";
 import { switcherCellWidth, switcherIcons, SwitcherMark } from "./ProfileIcons";
@@ -69,7 +69,7 @@ function Dot({ id, windowId, icon, page, pos }: { id: string; windowId: string; 
         >
           <View style={{ width: cell, height: BAND, alignItems: "center", justifyContent: "center" }}>
             {hovered ? (
-              <View style={{ position: "absolute", width: HOVER_PAD, height: HOVER_PAD, borderRadius: 6, backgroundColor: theme.rowHover }} />
+              <View style={{ position: "absolute", width: HOVER_PAD, height: HOVER_PAD, borderRadius: radius.toolbar, backgroundColor: theme.rowHover }} />
             ) : null}
             <Animated.View style={{ opacity }}>
               <SwitcherMark icon={icon} color={theme.mark} />
