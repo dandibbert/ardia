@@ -13,6 +13,7 @@ import { curve } from "../ui/motion";
 import { SIDEBAR_MOTION } from "./tokens";
 import { entryId, entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { splitTabIdsOf } from "../../state/splits/splits";
+import { mergePlans } from "./mergePlans";
 
 export const SLIDE_MS = SIDEBAR_MOTION.listSlide;
 export const FADE_MS = SIDEBAR_MOTION.listFade;
@@ -23,7 +24,7 @@ const TAIL = "~tail";
 const FRAME_SLACK_MS = 50;
 const devScale = () => (__DEV__ ? ((globalThis as { sidebarMotionScale?: number }).sidebarMotionScale ?? 1) : 1);
 
-type Slide = { value: Animated.Value; from: number; at: number; until: number; landed: boolean };
+type Slide = { value: Animated.Value; from: number; at: number; until: number; landed: boolean; run: number };
 type Ghost = { key: string; anchor: string | null; y: number; snapshot: EntrySnapshot; opacity: Animated.Value; until: number };
 type Snapshot = ListSnapshot;
 type Move = { key: string; from: number };
@@ -36,16 +37,6 @@ export type ListMotionScope = { enabled: boolean; slideBelow: ((entry: string, d
 
 export const ListMotionContext = createContext<ListMotionScope>({ enabled: false, slideBelow: null });
 let ghostIds = 0;
-
-function mergePlans(earlier: Plan, later: Plan): Plan {
-  const moved = new Set(later.moves.map((m) => m.key));
-  return {
-    moves: [...earlier.moves.filter((m) => !moved.has(m.key)), ...later.moves],
-    ghosts: [...earlier.ghosts, ...later.ghosts],
-    clipped: later.clipped,
-    below: later.below || earlier.below,
-  };
-}
 
 const tabsOf = (s: BrowserState, entry: string): string[] => {
   const { kind, id } = parseEntry(entry);
@@ -211,17 +202,26 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
   const [, rerender] = useState(0);
   if (enabled) devRegister("sidebarMotion", devKey, { slides, ghosts, clipped });
 
-  const now = Date.now();
-  for (const slide of slides.values()) {
-    if (slide.until && now >= slide.until) {
+  const settleSlides = (now: number) => {
+    for (const slide of slides.values()) {
+      if (!slide.until || now < slide.until) continue;
       slide.until = 0;
       if (!slide.landed) slide.value.setValue(0);
+      slide.landed = true;
     }
-  }
+  };
+  const endClipping = (token: object | null) => {
+    if (!token || clipping.current !== token) return;
+    clipping.current = null;
+    clipped.clear();
+    announce();
+  };
+  const now = Date.now();
+  settleSlides(now);
   if (ghosts.current.some((g) => g.until && now >= g.until)) ghosts.current = ghosts.current.filter((g) => !g.until || now < g.until);
 
   const prepare = (plan: Plan, at: number) => {
-    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, landed: false });
+    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, landed: false, run: 0 });
     ghosts.current = [...ghosts.current, ...plan.ghosts];
     clipped.clear();
     for (const key of plan.clipped) clipped.add(key);
@@ -268,18 +268,15 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
       slide.at = at;
       slide.until = at + slideMs + FRAME_SLACK_MS;
       slide.landed = false;
+      const run = ++slide.run;
       const timing = Animated.timing(slide.value, { toValue: 0, duration: slideMs, easing: SLIDE_EASING, useNativeDriver: nativeTail || m.key !== TAIL });
       const clips = i === 0 && token;
       timing.start(({ finished }) => {
-        if (!finished) return;
+        if (slide.run !== run) return;
+        if (!finished) slide.value.setValue(0);
         slide.landed = true;
         if (!clips) return;
-        queueMicrotask(() => {
-          if (clipping.current !== token) return;
-          clipping.current = null;
-          clipped.clear();
-          announce();
-        });
+        queueMicrotask(() => endClipping(token));
       });
     }
     const fadeMs = FADE_MS * devScale();
@@ -288,7 +285,9 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
       g.until = at + fadeMs + FRAME_SLACK_MS;
       Animated.timing(g.opacity, { toValue: 0, duration: fadeMs, easing: FADE_EASING, useNativeDriver: true }).start();
     }
-    if (fading.length) setTimeout(() => rerender((n) => n + 1), fadeMs + 2 * FRAME_SLACK_MS);
+    const settleMs = Math.max(plan.moves.length ? slideMs : 0, fading.length ? fadeMs : 0) + 2 * FRAME_SLACK_MS;
+    const settle = () => { settleSlides(Date.now()); endClipping(token); rerender((n) => n + 1); };
+    if (plan.moves.length || fading.length) setTimeout(settle, settleMs);
     announce();
     if (plan.below) below?.(plan.below);
   });

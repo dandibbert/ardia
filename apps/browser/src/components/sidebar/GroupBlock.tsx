@@ -14,7 +14,7 @@ import { commitRename, endRename, startRename } from "../../state/sidebar/action
 import { useDragFolded, useDragItem, useDropInto } from "./DragProvider";
 import { useShift, type EntryMotion } from "./EntryMotion";
 import { Fold, useFold } from "./Fold";
-import { GROUP_BORDER, GROUP_HEADER_RADIUS, GROUP_INDENT, GROUP_PAD, GROUP_RADIUS } from "./geometry";
+import { GROUP_BORDER, GROUP_HEADER_RADIUS, GROUP_INDENT, GROUP_RADIUS } from "./geometry";
 import { entryHeightNow, foldedGroupHeight, headGap } from "../../state/sidebar/geometry";
 import { dismissHover } from "../../state/sidebar/hover";
 import { useGroupHover, useRowHover } from "./hoverController";
@@ -31,8 +31,8 @@ import { curve } from "../ui/motion";
 import { entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { LiveFolderBlock } from "./LiveFolderBlock";
 import { tailKey, type RowSection } from "./dragModel";
+import { SharedFolderMark } from "./SharedFolderMark";
 
-const PAD = GROUP_PAD;
 const BOX_FADE = curve.fade;
 const NO_GROUPS: ReadonlySet<string> = new Set();
 
@@ -133,7 +133,6 @@ export const GroupBlock = memo(function GroupBlock({
             keep={activeEntry}
             rowHeight={(key) => entryHeightNow(windowId, profileId, key)}
             padTop={headGap(collapsed && activeEntry ? activeEntry : entries[0])}
-            padBottom={PAD}
             indent={GROUP_INDENT}
             mountClosed={selectedInside}
             footer={<Animated.View ref={tail.wrapper.ref} style={tail.wrapper.style} />}
@@ -219,6 +218,7 @@ function GroupHeader({ groupId, windowId, collapsed, open }: { groupId: string; 
                     </Text>
                     <FadeLabel text={label} fontSize={font.body.fontSize} weight="medium" color={tokens.groupTitle} style={{ position: "absolute", left: 0, right: 0, top: 0, height: TAB_ROW.titleHeight }} />
                   </View>
+                  <SharedFolderMark groupId={groupId} />
                   <Animated.View
                     style={{
                       width: 10,
