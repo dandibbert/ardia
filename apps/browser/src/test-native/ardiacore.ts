@@ -265,8 +265,10 @@ export const stagingRemovals = { ok: true };
 export const deletedProfileData: string[] = [];
 export const profileDataLeft = new Map<string, string[]>();
 export const revealedTabs: string[] = [];
+export const discardedOffers: string[] = [];
 export const installedCrx: { path: string; profile: string }[] = [];
 export const linkRoute: { next: LinkRoute } = { next: {} };
+export const resolvedPermissions: { id: string; result: string; remember: boolean }[] = [];
 export const extensionAnswers = {
   actionStates: async (_tabId: string, _ids: string[]): Promise<Record<string, ActionState>> => ({}),
   sidePanelUrl: async (_tabId: string, _extensionId: string): Promise<string | null> => null,
@@ -322,6 +324,7 @@ const fakeModules = {
       revealTab: (key: string) => void revealedTabs.push(key),
       dropTabReveals: (key: string) => void revealedTabs.push(`drop over ${key}`),
       revealOffered: (adoptId: string, key: string) => void revealedTabs.push(`${adoptId} over ${key}`),
+      discardOffered: async (adoptId: string) => (discardedOffers.push(adoptId), true),
     },
   )),
   ArdiaWindows: domain("windows", { list: () => [], dev: () => "" }),
@@ -334,7 +337,7 @@ const fakeModules = {
     setSettings: () => ({ folder: "", askWhereToSave: false, managed: false }),
   }),
   ArdiaPermissions: domain("permissions", {
-    resolve: () => null,
+    resolve: ({ id, result, remember }) => (resolvedPermissions.push({ id, result, remember }), null),
     resolveExternalApp: () => null,
     externalAppAllowances: () => [],
     removeExternalAppAllowance: () => null,
@@ -455,6 +458,7 @@ const fakeModules = {
     setPeekOtherSiteTabs: () => null,
     setSelectionPopover: () => null,
     setCommandScrollZoom: () => null,
+    setLittleArdiaOpensNewTabLinks: () => null,
     setAutoPictureInPicture: () => null,
     setVideoUpscaling: () => null,
     setVideoUpscalingTestConditions: () => null,

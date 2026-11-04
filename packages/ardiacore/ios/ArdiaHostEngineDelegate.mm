@@ -82,9 +82,7 @@ using namespace ardia_host;
     if (launchURLs.count)
       [launch after:ArdiaLaunchAppKitDidFinish
                  do:^{
-                   dispatch_async(dispatch_get_main_queue(), ^{
-                     if ([gAppDelegate respondsToSelector:@selector(application:openURLs:)]) [gAppDelegate application:NSApp openURLs:launchURLs];
-                   });
+                   dispatch_async(dispatch_get_main_queue(), ^{ ReplayLaunchURLs(launchURLs); });
                  }];
     return;
   }
@@ -92,8 +90,7 @@ using namespace ardia_host;
   if ([gAppDelegate respondsToSelector:@selector(applicationDidFinishLaunching:)])
     [gAppDelegate applicationDidFinishLaunching:note];
   NSLog(@"[ardiacore] app delegate %@ launched", NSStringFromClass([gAppDelegate class]));
-  if (launchURLs.count && [gAppDelegate respondsToSelector:@selector(application:openURLs:)])
-    [gAppDelegate application:NSApp openURLs:launchURLs];
+  if (launchURLs.count) ReplayLaunchURLs(launchURLs);
 }
 
 - (void)engineWillShutDown {
