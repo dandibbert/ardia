@@ -1,4 +1,4 @@
-import { logVisits, pageText, pageTexts, type PageText } from "./pageText.ts";
+import { hasPageText, logVisits, pageText, type PageText } from "./pageText.ts";
 import type { SuggestionSource } from "./suggestion.ts";
 
 type HistoryRow = SuggestionSource["history"][number];
@@ -110,7 +110,7 @@ export function prepareSuggestions(source: SuggestionSource, deadline: number): 
   for (const rows of [source.history, bookmarks]) {
     let n = 0;
     for (const row of rows) {
-      if (pageTexts.has(row)) continue;
+      if (hasPageText(row)) continue;
       pageText(row);
       if (++n % SLICE_CHECK === 0 && Date.now() > deadline) return false;
     }

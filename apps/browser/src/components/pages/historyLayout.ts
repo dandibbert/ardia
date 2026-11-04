@@ -11,10 +11,13 @@ export type Day = { label: string; offset: number };
 export type Row = { entry: HistoryEntry; day: number; first: boolean; last: boolean; offset: number };
 export type Layout = { days: Day[]; rows: Row[]; height: number };
 
-const searchTexts = new WeakMap<HistoryEntry, string>();
+const SEARCH_TEXT = Symbol("searchText");
+type WithSearchText = HistoryEntry & { [SEARCH_TEXT]?: string };
 function searchTextOf(entry: HistoryEntry) {
-  let text = searchTexts.get(entry);
-  if (text === undefined) searchTexts.set(entry, (text = searchText(entry.title, entry.url)));
+  const cached = (entry as WithSearchText)[SEARCH_TEXT];
+  if (cached !== undefined) return cached;
+  const text = searchText(entry.title, entry.url);
+  if (Object.isExtensible(entry)) Object.defineProperty(entry, SEARCH_TEXT, { value: text, configurable: true });
   return text;
 }
 

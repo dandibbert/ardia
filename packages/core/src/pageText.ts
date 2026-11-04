@@ -20,7 +20,18 @@ export type PageText = {
   hostLower?: string;
 };
 
-export const pageTexts = new WeakMap<object, PageText>();
+const PAGE_TEXT = Symbol("pageText");
+type WithPageText = { [PAGE_TEXT]?: PageText };
+const frozenPageTexts = new WeakMap<object, PageText>();
+
+const cachedPageText = (row: object): PageText | undefined => (row as WithPageText)[PAGE_TEXT] ?? frozenPageTexts.get(row);
+
+export const hasPageText = (row: object) => cachedPageText(row) !== undefined;
+
+function rememberPageText(row: object, text: PageText) {
+  if (Object.isExtensible(row)) Object.defineProperty(row, PAGE_TEXT, { value: text, configurable: true });
+  else frozenPageTexts.set(row, text);
+}
 
 const logVisitsOf: number[] = [];
 export const logVisits = (visits: number) => (visits >= 0 && visits < 1024 && (visits | 0) === visits ? (logVisitsOf[visits] ??= Math.log2(1 + visits) * 8) : Math.log2(1 + visits) * 8);
@@ -31,13 +42,13 @@ const wordsOf = (lower: string) => (PLAIN_WORDS.test(lower) ? ` ${lower}` : ` ${
 export const shownWordsOf = (t: PageText) => (t.shownWords ??= wordsOf(t.shownLower));
 
 export function pageText(row: { url: string; title: string }): PageText {
-  let text = pageTexts.get(row);
+  let text = cachedPageText(row);
   if (!text) {
     const shown = displayUrl(row.url);
     const shownLower = shown.toLowerCase();
     const titleLower = row.title.toLowerCase();
     text = { url: row.url, key: pageKey(row.url), shown, shownLower, titleLower, titleWords: wordsOf(titleLower) };
-    pageTexts.set(row, text);
+    rememberPageText(row, text);
   }
   return text;
 }
