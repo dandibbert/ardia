@@ -204,7 +204,6 @@ export function windowTitle(s: BrowserState, windowId: string): string {
   const w = s.windows[windowId];
   if (!w) return "";
   const tab = activeTab(s, windowId);
-  const others = viewTabIds(s, windowId).length - 1;
-  const label = tab ? tabLabel(tab) : "New Tab";
-  return `${profileFor(s, w.profileId).name} — ${label}${others > 0 ? ` & ${plural(others, "Tab")}` : ""}`;
+  const title = tab ? tabTitle(tab) : "New Tab";
+  return s.profileOrder.length > 1 ? `${title} — ${profileFor(s, w.profileId).name}` : title;
 }
