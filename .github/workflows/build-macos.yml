@@ -80,7 +80,16 @@ jobs:
             | openssl x509 > "$RUNNER_TEMP/test-signing.pem" \
             || openssl pkcs12 -in "$RUNNER_TEMP/test-signing.p12" -passin env:TEST_SIGNING_P12_PASSWORD -nokeys -clcerts \
             | openssl x509 > "$RUNNER_TEMP/test-signing.pem"
-          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/test-signing.pem"
+          if [ "$(openssl x509 -in "$RUNNER_TEMP/test-signing.pem" -noout -subject -nameopt RFC2253 | sed 's/^subject=//')" = \
+               "$(openssl x509 -in "$RUNNER_TEMP/test-signing.pem" -noout -issuer -nameopt RFC2253 | sed 's/^issuer=//')" ]; then
+            sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/test-signing.pem"
+          else
+            for ca in AppleWWDRCAG3 AppleWWDRCAG6; do
+              curl -fsSL --retry 3 -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer" \
+                && security import "$RUNNER_TEMP/$ca.cer" -k "$keychain" || true
+            done
+            openssl x509 -in "$RUNNER_TEMP/test-signing.pem" -noout -subject -issuer
+          fi
           rm -f "$RUNNER_TEMP/test-signing.p12"
           identity=$(security find-identity -p codesigning "$keychain" | awk '$2 ~ /^[0-9A-F]{40}$/ { print $2; exit }')
           [ -n "$identity" ] || { echo "the test signing identity didn't import"; exit 1; }
