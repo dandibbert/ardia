@@ -141,6 +141,8 @@ jobs:
 
       - name: Package
         id: package
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           short=$(git rev-parse --short HEAD)
           zip="Ardia-${short}-arm64.zip"
@@ -149,8 +151,11 @@ jobs:
           ditto apps/browser/build/Build/Products/Release/Ardia.app "$staging/Ardia Test.app"
           codesign --verify "$staging/Ardia Test.app"
           ditto -c -k --sequesterRsrc --keepParent "$staging/Ardia Test.app" "$zip"
+          tag="build-$short"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then tag="$tag-r$GITHUB_RUN_NUMBER"; fi
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
           echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -161,7 +166,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="build-${{ steps.package.outputs.short }}"
+          tag="${{ steps.package.outputs.tag }}"
           gh release create "$tag" "${{ steps.package.outputs.zip }}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease --title "Ardia test build ${{ steps.package.outputs.short }}" \
             --notes "Test build of ${GITHUB_REF_NAME} at ${GITHUB_SHA}. Uses the installed Ardia's profile and its Ardia Safe Storage key in the login keychain: macOS asks once per build, choose Always Allow. Unzip, run: xattr -cr \"Ardia Test.app\""
@@ -172,7 +177,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           zip="${{ steps.package.outputs.zip }}"
-          tag="build-${{ steps.package.outputs.short }}"
+          tag="${{ steps.package.outputs.tag }}"
           plist=apps/browser/build/Build/Products/Release/Ardia.app/Contents/Info.plist
           build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
           version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
