@@ -48,3 +48,9 @@ if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]; then
   mkdir -p "$extensions"
   rsync -a --delete "$repo/packages/ardiacore/extensions/little-ardia-link-menu/" "$extensions/little-ardia-link-menu/"
 fi
+
+"$here/ubol.sh"
+rules="$repo/packages/ardiacore/vendor/ubol-webkit/rules"
+if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] && [ -f "$rules/rulesets.json" ]; then
+  rsync -a --delete "$rules/" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/ContentRules/"
+fi
