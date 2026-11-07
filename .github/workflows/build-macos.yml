@@ -143,9 +143,9 @@ jobs:
           if [ "$SIGN_IDENTITY" = "-" ]; then
             codesign --force --sign - Ardia.app
           else
-            codesign --force --timestamp=none --keychain "$SIGN_KEYCHAIN" --sign "$SIGN_IDENTITY" Ardia.app
+            codesign --force --deep --preserve-metadata=entitlements,flags --timestamp=none --keychain "$SIGN_KEYCHAIN" --sign "$SIGN_IDENTITY" Ardia.app
           fi
-          codesign --verify --verbose Ardia.app
+          codesign --verify --deep --strict --verbose Ardia.app
           codesign --display --requirements - Ardia.app
 
       - name: Package
