@@ -14,6 +14,8 @@ import { type ToolbarGeometry } from "../window/geometry";
 import { popoverOf, setPopover, usePage, usePages, type PageState } from "../../state/tabs/pageState";
 import { useHistoryAvailability } from "../../state/tabs/navigation";
 import { toggleBookmarkOfTab } from "../../state/bookmarks/actions";
+import { useBookmarksShown } from "../../state/bookmarks/hooks";
+import { copyPageUrl } from "../../state/site/selection";
 import { closePane, openSplitPane, showSplitMenu } from "../../state/splits/actions";
 import { useEasedColor, type ToolbarPalette } from "../ui/toolbarColors";
 import { useSitePalette } from "./useSitePalette";
@@ -21,7 +23,6 @@ import { setToolbarExtensionsWidth } from "../../state/windows/layout";
 import { SIDEBAR_FIELD } from "../sidebar/geometry";
 import { FieldSiteButton, SidebarFieldFill } from "../sidebar/SidebarField";
 import { showUrlBarMenu } from "../../state/omnibox/paste";
-import { copyPageUrl } from "../../state/site/selection";
 import { ToolbarExtensions, useToolbarExtensionsWidth } from "../extensions/ToolbarExtensions";
 import { GlassFill, useGlass } from "../ui/Glass";
 import { TranslateButton } from "../site/TranslateControls";
@@ -203,7 +204,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
       <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={toggleSiteControls}>
         {hovered && (
           <>
-            <BookmarkButton tab={tab} palette={palette} windowId={windowId} />
+            <PageButton tab={tab} palette={palette} windowId={windowId} />
             {!inSplit && (
               <Button variant="icon" toolbar
                 palette={palette}
@@ -249,7 +250,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
       </ContextMenuArea>
       <ToolbarRowContext.Provider value={TOOLBAR_ROWS.regular}>
         <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={toggleSiteControls} accessory={accessory}>
-          {hovered && <BookmarkButton tab={tab} palette={palette} windowId={windowId} />}
+          {hovered && <PageButton tab={tab} palette={palette} windowId={windowId} />}
         </FieldButtons>
       </ToolbarRowContext.Provider>
       {progress !== null ? (
@@ -264,7 +265,13 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
 const HOST_FULL = { flexShrink: 0, maxWidth: "100%" } as const;
 const SHRINK = { flexShrink: 1 } as const;
 
-function BookmarkButton({ tab, palette, windowId }: { tab: ToolbarTab; palette: ToolbarPalette; windowId: string }) {
+type PageButtonProps = { tab: ToolbarTab; palette: ToolbarPalette; windowId: string };
+
+function PageButton(props: PageButtonProps) {
+  return useBookmarksShown() ? <BookmarkButton {...props} /> : null;
+}
+
+function BookmarkButton({ tab, palette, windowId }: PageButtonProps) {
   const bookmarkHint = useShortcutHint("bookmarkPage");
   const bookmarked = useIsBookmarked(tab.url);
   return (

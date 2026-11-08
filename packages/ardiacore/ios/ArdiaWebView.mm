@@ -172,7 +172,7 @@ void AcceptDrops(NSView *root, BOOL accept) {
                                                                usingBlock:^(NSNotification *) { [weakSelf userSightChanged]; }];
   [self userSightChanged];
   if (_tab) [self reclaimLentPage];
-  if (_tab) [self adoptIntoWindow];
+  if (_tab) [self adoptMovedPage];
   else [self ensureTab];
 }
 
