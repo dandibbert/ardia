@@ -131,6 +131,14 @@ jobs:
         run: |
           plist=Ardia.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c "Add :ACUsesLoginKeychain bool true" "$plist"
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
+          cli_sha=$(curl -fsSL --retry 3 "https://github.com/$ARDIACORE_PREBUILT_REPO/releases/download/v$version/ardia-cli-$version-macos-arm64.tar.gz.sha256" | awk '{ print $1; exit }' || true)
+          if printf '%s' "$cli_sha" | grep -Eq '^[0-9a-f]{64}$'; then
+            printf '%s\n' "$cli_sha" > Ardia.app/Contents/Resources/ardia-cli.sha256
+            echo "ardia command $version pinned to $cli_sha"
+          else
+            echo "No ardia command checksum for $version upstream: Settings can't install the command from this build"
+          fi
           if [ -n "${SPARKLE_PUBLIC_KEY:-}" ]; then
             build="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist").$GITHUB_RUN_NUMBER"
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "$plist"
