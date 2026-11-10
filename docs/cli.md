@@ -6,8 +6,10 @@ run hooks and userscripts, edit its config and read its browsing data. It's a se
 bundle. The app ships `install.sh`, and runs it when the user opts in during onboarding or in Settings ("Let the ardia
 command control Ardia").
 
-While it's connected, a pill floats over the bottom centre of the page ("Claude Code is controlling Ardia · Stop"; Stop
-turns the setting off). It overlays the page and never resizes it. It shows at the first connection and stays 3 s after
+While it drives a page, a pill floats over the bottom centre of the page ("Claude Code is controlling Ardia · Stop", or
+"The ardia command is controlling Ardia" when it can't tell who runs it; Stop turns the setting off). It shows for a
+DevTools connection (`browse`, `scripts test`) and for `ardia run`, which presses Ardia's own commands; reading and
+organizing (`tabs`, `groups`, `apply`, `windows`, `commands`, `events`, `pinned`, `history`, `config`) never shows it. It overlays the page and never resizes it. It shows at the first connection and stays 3 s after
 the last one closes, so a burst of commands shows one steady pill; turning the setting off hides it at once. One per
 window: the focused pane of a split, the full screen page, or the Peek while one is open
 (`apps/browser/src/components/window/CliControlPill.tsx`, `useCliIndicator` in `state/app/cliControl.ts`).
@@ -26,7 +28,7 @@ the client, tells the app over a short socket connection (`hello`, then `caller`
 whenever a request comes from someone else. `scripts test` does the same as it connects. The name is display only:
 it never changes what a connection may do, and both ends strip control and invisible characters and keep 40
 characters (the app keeps `app` only when it's an absolute, outermost `.app` path). When several run at once the pill
-names the most recent one; a pill that hid and shows again without a new name says "ardia".
+names the most recent one; a pill that hid and shows again without a new name says "The ardia command".
 
 Code: `apps/cli` (`ardia_cli`, `install.sh`, `scripts/build.sh`). Dependencies are pinned with hashes in
 `apps/cli/requirements.lock` (regenerate with `uv pip compile requirements.in --python-version 3.13
@@ -79,8 +81,20 @@ the pins into `pyproject.toml`).
   `pageGeneration`, bumped whenever that target changes (a slept tab reloading). The app asks each live tab through
   ArdiaCore's `devToolsCall` (`Target.getTargetInfo`, engine call `engine.cliTabTargets`); an older build leaves both
   out.
+- `ardia tabs`, `ardia groups` and `ardia apply` list and organize tabs and groups by id: open URLs into a window,
+  profile, group or spot, move tabs between groups, windows and profiles without reloading, pin, mute, sleep, wake,
+  close, rename and set icons; create, nest, reorder, pin, collapse, recolour, ungroup, close and delete groups; and
+  apply a JSON batch of those in one call (`ardia_cli/workspace_cli.py`; protocol, operations and rules in
+  `docs/automation.md` › Tabs and groups). Groups can be named by id or by name (`--group Work`, `ardia groups update
+  Work …`); output names them next to their ids (`created group 💼 Work (g-…) with 4 tabs`, `moved Inbox (tab-…)`).
+  `--json` prints the app's reply. Exit 0 done, 1 refused, a bad request
+  or a batch stopped at a failing operation, 2 Ardia can't be reached or the connection dropped after sending. Human
+  output shows control characters in page text, titles and names as `\u00NN` (`ardia_cli/printable.py`), so a page
+  title can't drive the terminal (an OSC 52 clipboard write, say): see Terminal output.
 - `ardia events [EVENT…]` streams browser events (see `docs/automation.md`).
-- `ardia on EVENT[,EVENT…] -- PROGRAM` runs a program for each event (see `docs/automation.md`).
+- `ardia on EVENT[,EVENT…] -- PROGRAM` runs a program for each event (see `docs/automation.md`). PROGRAM's output goes
+  to the terminal untouched; event data such as `ARDIA_TITLE` and `ARDIA_URL` comes from pages, so a program that
+  prints it should escape control characters, as the CLI's own output does.
 - `ardia hooks run|install|uninstall|list` runs the hooks in `hooks.json`, at login through a LaunchAgent (see
   `docs/automation.md`).
 - `ardia feedback --title TITLE [--kind bug|slow|idea|other] [--attach FILE]… [--command CMD] [--data-dir DIR] TEXT|-`
@@ -91,12 +105,27 @@ the pins into `pyproject.toml`).
   Feedback and the star nudge). Exit 0 starred or the page opened, 1 neither worked.
 - `ardia --version`, `ardia --help`, `ardia browse --help`, `ardia scripts <command> --help`,
   `ardia config <command> --help`, `ardia theme <command> --help`, `ardia hooks <command> --help` and `--help` on
-  each of `pinned`, `history`, `run`, `commands`, `windows`, `events` and `on`.
+  each of `pinned`, `history`, `run`, `commands`, `windows`, `events`, `on`, `apply`, and `tabs` and `groups` and
+  their commands.
 
 `ardia exec` is gone: `ardia browse` is the one way to drive the browser. `ardia exec …` (and any other unknown
 command) prints `ardia: unknown command '…'` with where to go instead, and exits 2. What `exec` offered maps to
 `ardia browse` for pages, `ardia pinned` and `ardia history` for `pinned()` and `history()`, and `ardia run`,
 `ardia windows` and `ardia events` for `run()`, `windows()` and `events()`.
+
+### Terminal output
+
+Page text, titles, notes, names and other text from pages or files reach the terminal only with their control
+characters (C0, C1 and DEL) shown as `\u00NN`, so a page can't write escape sequences (an OSC 52 clipboard write, a
+screen clear) through the CLI. Two places do it, so new commands get it without asking: `ardia browse` and
+`ardia notes` text output in `render` (`browse/daemon.py`), keeping line breaks and tabs, so snapshots, page text and
+notes read as before; and `cli.main` wraps stdout and stderr for every other command (`printable.inert_output`), with
+single-line fields (titles in `tabs`, `windows`, `events`, `pinned`, `history`) escaping line breaks too. Other text
+(accents, CJK, Arabic, emoji) is untouched. JSON output (`--json`, and `AGENT_BROWSER_JSON` for browse) keeps
+C0 controls as `json.dumps` writes them and escapes only U+007F–U+009F (raw there because of `ensure_ascii=False`) as
+`\u00NN` (`printable.json_safe`, in browse's JSON render and in the JSON-mode stdout writer), so it decodes to the
+same values and non-ASCII text stays readable; stderr is always guarded. The `\u00NN` form keeps text that is itself
+JSON (a script's result) valid JSON.
 
 ### Shared options
 
@@ -818,7 +847,8 @@ from a checkout), `$geoip_disable`, `$process_person_profile: false` and `$sessi
   `snapshot`, `eval_ms` for `eval` or `action_ms` for the rest (the daemon's time less connect, attach and settle),
   `settle_ms` (the wait for the change report's network to settle, `changes.observe`), `snapshot_nodes` and
   `snapshot_chars`, `network_writes_count` and `unsettled` from the change report,
-  `output_chars` and `output_truncated`, `humanize`, `batch_steps`, and `cdp_calls` with `cdp_ms_total` (the
+  `output_chars` and `output_truncated`, `humanize`, `batch_steps` (also the operations an `ardia apply`, `tabs …`
+  or `groups …` call sent), and `cdp_calls` with `cdp_ms_total` (the
   command's own DevTools calls, counted in `connection.py`). The daemon returns its share as `metrics` in its answer
   (`command_metrics.py`).
 - `$exception` for a crash the CLI didn't handle (`source` and mechanism `cli_unhandled`, level `fatal`) or one inside

@@ -181,7 +181,10 @@ the same as top"), so if a Dia capture ever differs, the owner's equal insets wi
       image at 100%). So YouTube gets a red ring, X a black one.
     - < 0.055, one colour → `template`: the tile filled with the mean colour, the icon drawn as a
       white template, the ring white with a soft-light compositing filter. A near-white icon (WCAG
-      relative luminance > 0.88) gets a black fill and an opaque white 30% ring instead.
+      relative luminance > 0.88) gets a black fill and an opaque white 30% ring instead. Ardia also gives
+      that white 30% ring to a near-black fill (luminance < 0.01, ChatGPT's black glyph): soft light can't
+      lighten black, so Dia's ring vanishes along the edges and only the anti-aliased corners show
+      (`DockSelection.ringStroke`, classic style only, drawn at render time so cached themes get it too).
     - No theme (a non-RGB image, no opaque pixels, no favicon): fill `TabBackgroundSelectedPrimary`
       (black / white), ring `TabDockItemDefaultSelectionStroke` (white .45 dark / black .48 light).
       Ardia still draws its older look there (white 25% fill, black rim, `TabOutline` bevel).
@@ -280,9 +283,15 @@ screen capture (frames 8–33 ms apart, most 17), so timings are ±1 frame. Edge
 - Peek (pointer at the window's left edge): a floating panel over the page, which doesn't move. Inset 5 pt from the
   window's left, top and bottom edges (ours is 5 from the left and 9 from the top and bottom, so its ends line up with the 9 pt card), 227.5 pt wide (= the docked sidebar's width), rounded,
   dark, a 0.5 pt light border; it holds the traffic lights, the sidebar button, back/forward/reload, the URL field and the
-  tabs. It slides in from past the window's edge with no fade, on a spring: response 0.185 s, damping 0.77 (three peeks,
-  rms 2.1 % of the travel): 93 % in 66 ms, a 1.5 % (3.5 pt) overshoot at ~0.12 s, at rest by ~0.22 s. It leaves the same
-  way, ease-in-out over ~150 ms (two, rms 3.7 %).
+  tabs. It slides in from past the window's edge with no fade, on a spring: response 0.18 s, damping 0.8 (three peeks,
+  rms 2.2 % of the travel; the best unconstrained fit, 0.185/0.77, overshoots 2.3 % where every trace peaks at 1.5 %):
+  93 % in 66 ms, a 1.5 % (3.5 pt) overshoot at ~0.12 s, at rest by ~0.22 s. It leaves the same way, ease-in-out over
+  ~150 ms (two, rms 3.7 %). The whole card overshoots, fill and contents together; inset 5 pt, that never shows a gap at
+  the window's edge (owner's recording 2026-11-08).
+- Ours with the page frame at 0 (the peek flush with the window's left, top and bottom): the fill runs 16 pt on past the
+  window's edge, clipped by it, so the overshoot shifts the contents 3.5 pt and the panel stays joined to the window's edge
+  (before: the panel moved off the edge by 5 pt, a strip of page between). Fill and contents are one layer, so they
+  can't land a frame apart.
 - Docking from the peek (its sidebar button): instant. The panel becomes the docked sidebar and the page is laid out
   narrower in one frame (a 2 pt settle over three frames after).
 - Hiding the docked sidebar (its button): the sidebar and the card's left edge slide out together, the page laid out at
@@ -303,7 +312,9 @@ Clear Tabs; Clear Today"); a toast confirms the clear and offers Undo. Measured 
 pitch, about 6.3 px/pt): the line is 1 pt at about white 0.08 and starts at the favicons' left edge; it ends 7.5 pt before
 the arrow; the arrow is 7 pt wide and 8 pt tall, 3 pt from the text; "Clear" is semibold with a cap height 0.75 of the
 tab titles' (10 pt beside our 13 pt titles) and ends where the titles do; the line's centre is 25 pt above the first
-row's centre. Ours: `components/sidebar/ClearDivider.tsx`, a 16 pt row with Dia's `divider` colour and secondary text.
+row's centre. Ours: `components/sidebar/ClearDivider.tsx`, a 14 pt row with Dia's `divider` colour and secondary text.
+Dia's divider under its Pinned section (owner's 2× capture, 2026-11-09): a 1 pt line 6.5 pt under the last pinned row and
+6.5 pt above what follows (a group's box or a row), 14 pt edge to edge; ours draws the same band with no extra margins.
 What it closes (issue #149): the unselected unpinned tabs (`clearOthers`), keeping the selected tab and, per Arc's 2022
 release notes, tabs playing media. Dia's Close All in the sidebar does the same with the selected tab (the issue's
 recording: of three unpinned tabs, the two unselected close and the selected one stays selected).

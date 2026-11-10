@@ -54,7 +54,6 @@ export function setPictureInPictureState(tabId: string, { kind, active, fullScre
 export function setNowPlaying(tabId: string, state: NowPlaying | null) {
   useMedia.setState((s) => {
     const sessions = { ...s.sessions };
-    const dismissed = { ...s.dismissed };
     if (!state) {
       if (!sessions[tabId]) return s;
       delete sessions[tabId];
@@ -64,7 +63,8 @@ export function setNowPlaying(tabId: string, state: NowPlaying | null) {
     if (before && sameNowPlaying(before, state)) return s;
     const started = isControllablyPlaying(state) && !(before && isControllablyPlaying(before));
     sessions[tabId] = { ...state, playedAt: started ? Date.now() : (before?.playedAt ?? 0) };
-    if (started) delete dismissed[tabId];
+    if (!started || !s.dismissed[tabId]) return { sessions };
+    const { [tabId]: _, ...dismissed } = s.dismissed;
     return { sessions, dismissed };
   });
 }
