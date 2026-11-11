@@ -47,6 +47,7 @@ the start unless noted. All clocks are epoch ms on the same Mac: JS's `Date.now(
 | | `j3_view` | → the page's view shown (same commit as `j3_frame` for a loaded page) |
 | | `j3_page` | → a page that was hidden: its first new frame |
 | | `j3_total` | the end that applies (**the J3 total**): cold → `j3_page`, warm → `j3_view`, load → its first contentful paint, other → `j3_frame` |
+| J5 profile switch | `j5_js` … `j5_total` | the same steps as J3, for the tab a window shows when it switches profile (not counted as J3); its marks are looked for up to 10 s after the click instead of J3's 2 s, so a page that only shows seconds later is still timed |
 | J4 navigate | `j4_request` | Enter (or a click on a suggestion) → the engine asked to load: **our side** |
 | | `j4_start` | → Chrome started the navigation |
 | | `j4_commit` | → the new document committed |
@@ -57,6 +58,7 @@ Each `perf_journeys` step goes as `<step>_p50`, `_p75`, `_p95`, `_max` and `_n` 
 summary). Counts: `j3_cold` (the page was hidden), `j3_warm` (it was still painting), `j3_load` (it had to load),
 `j3_other` (no page: New Tab), `j2_no_bar`, `j4_no_load` (not a page load: a ardia: page, a download),
 `j4_no_paint` (nothing painted within 30 s), `j4_replaced` (another navigation came first).
+`perf_slow_switch` goes at once for any J3 or J5 whose slowest step took 1.5 s or more: `journey` (`j3`, `j5`), `kind` (`load`, `cold`, `warm`, `other`), and `js_ms`, `frame_ms`, `view_ms`, `page_ms`, `total_ms` (null when the step didn't happen). It shows which step a slow switch spent its time in without a trace.
 `perf_journeys` goes hourly and at quit, like `perf_omnibox`; `perf_launch` once its steps are in (≤ 30 s after the first
 window, or at quit), not at the first window as before.
 
