@@ -24,7 +24,6 @@ type WindowBase = {
   profileId: string;
   tabIds: string[];
   activeTabIds: Record<string, string>;
-  sidebarOpen: boolean;
   tabLayout?: "sidebar" | "top";
   frame: Frame | null;
   fullScreen?: number;
@@ -104,6 +103,7 @@ export type TabGroup = {
   pinnedOpenerId?: string;
   pinKey?: string;
   parentId?: string;
+  shownTabIds?: string[];
 };
 
 export type SplitSlot = { size: number; tabId: string } | { size: number; stack: [string, string]; stackSizes: [number, number] };
@@ -158,9 +158,9 @@ export type ClosedTab = {
 export type ClosedWindow = {
   kind: "window";
   id: string;
-  window: Pick<BrowserWindow, "profileId" | "sidebarOpen" | "frame" | "tabLayout">;
+  window: Pick<BrowserWindow, "profileId" | "frame" | "tabLayout">;
   tabs: (TabSnapshot & { active: boolean; tabId?: string })[];
-  groups: (Omit<TabGroup, "tabIds" | "windowId"> & { tabIndexes: number[] })[];
+  groups: (Omit<TabGroup, "tabIds" | "windowId" | "shownTabIds"> & { tabIndexes: number[] })[];
   splits?: Pick<SplitView, "orientation" | "slots">[];
   closedAt: number;
   lastWindow?: true;

@@ -1,5 +1,6 @@
 import type { BrowserState } from "../browser/store";
 import { leaveGroups } from "../groups/groups";
+import { withShownTab } from "../groups/shownTabs";
 import { IDLE_LIVE, inPinnedContainer, makeTab, navigationTo, TILE_PIN, viewTabIds, without } from "../browser/model";
 import { forgetOpeners, insertionIndex, openerSuccessor } from "./openers";
 import { onUrlChange, pruneSelection } from "../pins/organize";
@@ -63,17 +64,18 @@ export function closingTabs(s: BrowserState, ids: string[], { lastClosesWindow =
   const asked = ids.filter((id) => next.tabs[id]);
   next = unloadPinnedTabs(next, asked);
   const gone = asked.filter((id) => !inPinnedContainer(next, id));
-  const closedWindows: string[] = [];
+  const goneIds = new Set(gone);
+  const closedWindows = new Set<string>();
   for (const w of Object.values(next.windows)) {
     const view = viewTabIds(next, w.id);
-    const shown = view.filter((id) => gone.includes(id));
-    if (!shown.length || !view.every((id) => gone.includes(id) || isAsleep(next.tabs[id]))) continue;
+    const shown = view.filter((id) => goneIds.has(id));
+    if (!shown.length || !view.every((id) => goneIds.has(id) || isAsleep(next.tabs[id]))) continue;
     const keepsWindow = !lastClosesWindow || leavesEmptyWindow(shown.length > 1 ? removeTabs(next, shown.slice(1), false) : next, shown[0]!);
     if (keepsWindow) next = withNewTab(next, w.id)[0];
-    else closedWindows.push(w.id);
+    else closedWindows.add(w.id);
   }
-  const removed = gone.filter((id) => !closedWindows.includes(next.tabs[id]!.windowId));
-  return [removeTabs(next, removed, true), closedWindows];
+  const removed = gone.filter((id) => !closedWindows.has(next.tabs[id]!.windowId));
+  return [removeTabs(next, removed, true), [...closedWindows]];
 }
 
 function pinnedInsertionIndex(s: BrowserState, w: BrowserWindow): number {
@@ -97,9 +99,11 @@ export function activated(s: BrowserState, id: string, shareLivePins = true): Pa
     activeTabIds: { ...w.activeTabIds, [tab.profileId]: id },
   };
   const ui = s.windowUi[w.id];
+  const groups = withShownTab(s.groups, id);
   return {
     tabs: { ...s.tabs, [id]: nextTab },
     windows: { ...s.windows, [w.id]: window },
+    ...(groups === s.groups ? {} : { groups }),
     ...(ui?.panel.open ? { windowUi: { ...s.windowUi, [w.id]: { ...ui, panel: { open: false, initialText: "" } } } } : {}),
   };
 }
@@ -138,7 +142,7 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
       const awake = left.filter((id) => !isAsleep(s.tabs[id]));
       const after = awake.length ? awake : left;
       const index = before.indexOf(activeId);
-      const next = openerSuccessor(s, activeId, before, left) ?? after.find((id) => before.indexOf(id) > index) ?? after.at(-1);
+      const next = otherPane(s, activeId, gone) ?? openerSuccessor(s, activeId, before, left) ?? after.find((id) => before.indexOf(id) > index) ?? after.at(-1);
       if (next) activeTabIds[profileId] = next;
       else delete activeTabIds[profileId];
     }
@@ -165,6 +169,11 @@ export function removeTabs(s: BrowserState, ids: string[], record: boolean): Bro
     if (t && needsPage(t)) next = apply(next, activated(next, t.id));
   }
   return next;
+}
+
+function otherPane(s: BrowserState, closedId: string, gone: Set<string>): string | undefined {
+  const panes = splitTabIdsOf(splitOf(s, closedId))?.filter((id) => !gone.has(id) && s.tabs[id]) ?? [];
+  return panes.reduce<string | undefined>((best, id) => (!best || s.tabs[id]!.lastActiveAt > s.tabs[best]!.lastActiveAt ? id : best), undefined);
 }
 
 function adoptOrphans(tabs: Record<string, Tab>, before: Record<string, Tab>, gone: Set<string>): Record<string, Tab> {
