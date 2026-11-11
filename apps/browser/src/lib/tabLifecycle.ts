@@ -19,6 +19,7 @@ import { webviews } from "./webviews";
 
 const POLICY = {
   protectedRecent: 10,
+  protectedPerProfile: 5,
   idleMs: 30 * 60_000,
   profileIdleMs: 10 * 60_000,
   perSweep: 6,
@@ -175,19 +176,13 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     const shown = shownTabIds(s);
     const now = activeClock();
     const pressure = currentSystem()?.memoryPressure ?? "normal";
-    const recent = new Set(
-      Object.values(s.tabs)
-        .filter((t) => t.url)
-        .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-        .slice(0, pressure === "critical" ? 0 : policy.protectedRecent)
-        .map((t) => t.id),
-    );
+    const recent = pressure === "critical" ? new Set<string>() : recentTabIds(s, policy.protectedRecent, policy.protectedPerProfile);
     const unused = unusedProfiles(s, now, policy.profileIdleMs);
     const candidates = [...webviews.keys()].filter((id) => {
       const tab = s.tabs[id];
       if (!tab || shown.has(id) || useLifecycle.getState().discarded[id]) return false;
       const idle = now - (hiddenAt.get(id) ?? now);
-      if (!unused.has(tab.profileId) && (recent.has(id) || (pressure === "normal" && idle < policy.idleMs))) return false;
+      if (unused.has(tab.profileId) ? pressure === "normal" && recent.has(id) : recent.has(id) || (pressure === "normal" && idle < policy.idleMs)) return false;
       return !keepAliveReason(s, id);
     });
     candidates.sort((a, b) => (hiddenAt.get(a) ?? now) - (hiddenAt.get(b) ?? now));
@@ -200,6 +195,21 @@ export async function sweep(overrides: Partial<typeof POLICY> = {}): Promise<str
     sweeping = false;
   }
   return slept;
+}
+
+function recentTabIds(s: BrowserState, overall: number, perProfile: number): Set<string> {
+  const byRecency = Object.values(s.tabs)
+    .filter((t) => t.url)
+    .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+  const recent = new Set(byRecency.slice(0, overall).map((t) => t.id));
+  const perProfileCount = new Map<string, number>();
+  for (const t of byRecency) {
+    const count = perProfileCount.get(t.profileId) ?? 0;
+    if (count >= perProfile) continue;
+    perProfileCount.set(t.profileId, count + 1);
+    recent.add(t.id);
+  }
+  return recent;
 }
 
 function unusedProfiles(s: BrowserState, now: number, idleMs: number): Set<string> {
