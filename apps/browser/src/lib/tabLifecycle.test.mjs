@@ -73,6 +73,26 @@ test("a tab without unsaved input sleeps", async () => {
   webviews.delete(b);
 });
 
+test("a profile switched away from keeps its most recent tabs loaded and sleeps the rest", async () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "https://a.com" });
+  const home = S().windows[w].profileId;
+  const pages = [1, 2, 3, 4, 5, 6, 7].map((i) => {
+    const id = S().newTab(w, { url: `https://${i}.com`, background: true });
+    S().updateTab(id, { lastActiveAt: i });
+    const page = fakePage();
+    webviews.set(id, page.handle);
+    return { id, page };
+  });
+  S().switchProfile(w, S().createProfile({ name: "Work" }));
+  assert.notEqual(S().windows[w].profileId, home);
+
+  const slept = await lifecycle.sweep({ profileIdleMs: 0, protectedRecent: 0, perSweep: 100 });
+  assert.deepEqual(new Set(slept), new Set(pages.slice(0, 3).map((p) => p.id)), "the window's first tab and the four newest stay");
+  assert.deepEqual(pages.map((p) => p.page.discarded), [1, 1, 1, 0, 0, 0, 0]);
+  for (const { id } of pages) webviews.delete(id);
+});
+
 const STATE = { off: 0, belowThreshold: 1, on: 3 };
 
 async function syncWith(on, reply) {
