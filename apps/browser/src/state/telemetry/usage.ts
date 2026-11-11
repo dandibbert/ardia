@@ -12,6 +12,7 @@ import { utcDay } from "./daily";
 import { appInfo, percentile } from "./transport";
 import { reportNativeCrashes } from "./errors";
 import { emitJourneys, journeysEnding, startJourneys } from "./journeys";
+import { startJsStalls } from "./jsStalls";
 import { takeOmniboxLatency } from "./track";
 import { contextProperties, contextSamples, hardwareProperties, noteAppMemory, recordContext, startContextSamples, stopContextSamples } from "./diagnostics";
 import { emitTabPresses } from "./tabPresses";
@@ -218,6 +219,7 @@ export function startUsage() {
   startLocalStore(LOCAL_STORE_LAUNCH_DELAY_MS);
   startContextSamples();
   startJourneys(isSharing() ? session : null);
+  startJsStalls();
   watchStore();
   watchSync();
   watchTranslate();

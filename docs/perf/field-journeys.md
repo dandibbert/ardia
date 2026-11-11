@@ -59,6 +59,7 @@ summary). Counts: `j3_cold` (the page was hidden), `j3_warm` (it was still paint
 `j3_other` (no page: New Tab), `j2_no_bar`, `j4_no_load` (not a page load: a ardia: page, a download),
 `j4_no_paint` (nothing painted within 30 s), `j4_replaced` (another navigation came first).
 `perf_slow_switch` goes at once for any J3 or J5 whose slowest step took 1.5 s or more: `journey` (`j3`, `j5`), `kind` (`load`, `cold`, `warm`, `other`), and `js_ms`, `frame_ms`, `view_ms`, `page_ms`, `total_ms` (null when the step didn't happen). It shows which step a slow switch spent its time in without a trace.
+`js_stall` goes when the JS thread missed its 250 ms heartbeat for 1 s or more while the user pressed a key or clicked: `ms` (the gap), `input_wait_ms` (how long that input waited), `long_tasks`, and `task_1`…`task_3` with `task_N_ms`, the longest bridge calls (≥ 200 ms) inside the gap, named `Module.method` (`RCTDeviceEventEmitter.emit:<event>` for native events), `callback` or `microtasks`. At most 50 a session.
 `perf_journeys` goes hourly and at quit, like `perf_omnibox`; `perf_launch` once its steps are in (≤ 30 s after the first
 window, or at quit), not at the first window as before.
 
