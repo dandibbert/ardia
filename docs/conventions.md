@@ -6,7 +6,7 @@ How Ardia's code is laid out and written. `apps/browser/src/conventions.test.mjs
 ## Backwards compatibility: migrations only
 
 The app and its engine ship together (a release bundles its engine; a dev build fetches the prebuilt engine matching
-its commit's `engine/` tree), so code never tolerates a mismatched engine.
+its commit's engine key, `engine/engine-key.sh`), so code never tolerates a mismatched engine.
 
 - No `respondsToSelector` guards for ArdiaCore's API, no optional `?.()` native calls, no always-true `isAvailable`
   checks, no metadata probes, no aliases for old names, no duplicate overloads. Keep `respondsToSelector` only for
@@ -146,7 +146,7 @@ export const requestClearData = (windowId: string | null) => useClearDataRequest
 `getState()`:
 
 - A hook keeps the selector as narrow as the component needs: `useSettings((s) => s.tabLayout)`,
-  `useTab(id, (t) => t?.title)`, `useWindow(id, (w) => w?.sidebarOpen)`. Pass `useShallow(…)` through when the
+  `useTab(id, (t) => t?.title)`, `useWindow(id, (w) => w?.frame)`. Pass `useShallow(…)` through when the
   selector builds an array or object. Moving a selector into a hook never widens it: a component re-renders exactly
   when it did before.
 - A selector that combines domains, or that two components share, becomes a named hook (`useWindowProfile`,
@@ -284,7 +284,7 @@ still counts:
 | `layout` | an app file outside the folders above |
 | `imports` | an import against the direction table, or into a file outside the folders (a component importing `platform/` included, except `components/dev/devHarness.ts`) |
 | `native-calls` | a native package, `expo-modules-core` or `NativeModules` used outside `platform/` and `components/ui/` |
-| `tokens` | a colour literal, `Easing.` curve or numeric duration outside `tokens.ts`/`motion.ts` |
+| `tokens` | a colour literal (`"transparent"` included: use `ink.clear`), `Easing.` curve or numeric duration outside `tokens.ts`/`motion.ts` |
 | `scale` | in `components/` and `App.tsx`, outside `tokens.ts`/`motion.ts`: a `fontSize`, `letterSpacing`, radius (`radius`, `borderRadius`, `cornerRadius`, `shadowRadius`, …), `padding*`, `margin*`, `gap`/`rowGap`/`columnGap`, or spring `damping`/`stiffness`/`friction`/`tension`/`bounciness` whose value starts with a non-zero number (`9`, `-3.5`, `10 * g.s`) or has a numeric ternary branch; use the `font`, `radius`, `space` and `springs` scales (`concentric()`, `capsule()` for derived radii). Sizes, offsets, `lineHeight`, computed values and `lib/`/`state/` geometry don't count |
 | `get-state` | `getState(` in `components/` |
 | `set-state` | `.setState(` in `components/` |
