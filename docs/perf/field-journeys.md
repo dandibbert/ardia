@@ -31,7 +31,10 @@ the start unless noted. All clocks are epoch ms on the same Mac: JS's `Date.now(
 
 | Journey | Step | From → to |
 |---|---|---|
-| J1 launch (`perf_launch`, one per launch) | `js_ms` | process start → the bundle's first module runs (`state/telemetry/jsStart.ts`) |
+| J1 launch (`perf_launch`, one per launch) | `engine_ms` | process start → Chrome's engine is up (`engineDidStart`; from 0.2.46-nightly.7) |
+| | `early_window_ms` | → the early window ordered on screen (`TryEarlyWindow`; null when the launch didn't show one; from 0.2.46-nightly.7) |
+| | `rn_ms` | → React Native starts loading the bundle (`launchApp`, after the early window and its first commit; from 0.2.46-nightly.7). `js_ms - rn_ms` is the bundle load, `rn_ms - engine_ms` the early window |
+| | `js_ms` | → the bundle's first module runs (`state/telemetry/jsStart.ts`) |
 | | `commit_ms` | → the first window's first React commit |
 | | `launch_ms` | → the first window's root effect (**unchanged** since 0.2.x, so old data stays comparable) |
 | | `content_ms` | → that first commit on screen |
@@ -58,6 +61,8 @@ Each `perf_journeys` step goes as `<step>_p50`, `_p75`, `_p95`, `_max` and `_n` 
 summary). Counts: `j3_cold` (the page was hidden), `j3_warm` (it was still painting), `j3_load` (it had to load),
 `j3_other` (no page: New Tab), `j2_no_bar`, `j4_no_load` (not a page load: a ardia: page, a download),
 `j4_no_paint` (nothing painted within 30 s), `j4_replaced` (another navigation came first).
+Context: `tabs`, how many tabs were open when the summary went out (an exact count, from the first nightly after 0.2.46-nightly.6), so J2 and J3 can
+be split by tab count: they must not grow with it (#1330). Before it, join `perf_memory`'s tab count by copy.
 `perf_slow_switch` goes at once for any J3 or J5 whose slowest step took 1.5 s or more: `journey` (`j3`, `j5`), `kind` (`load`, `cold`, `warm`, `other`), and `js_ms`, `frame_ms`, `view_ms`, `page_ms`, `total_ms` (null when the step didn't happen). It shows which step a slow switch spent its time in without a trace.
 `js_stall` goes when the JS thread missed its 250 ms heartbeat for 1 s or more while the user pressed a key or clicked: `ms` (the gap), `input_wait_ms` (how long that input waited), `long_tasks`, and `task_1`…`task_3` with `task_N_ms`, the longest calls (≥ 200 ms) inside the gap: bridge calls as `Module method` (`RCTDeviceEventEmitter emit <event>` for native events), `callback` or `microtasks`, engine events as `engine <domain> <event>`, and `memoryTrim gc` for the forced collection; names use spaces, since the property scrubber turns dotted names into `<host>`. `heap_mb` is Hermes' heap after the gap, `gcs` and `gc_ms` the collections that ran in it. At most 50 a session. A forced collection that takes 1 s or more ends memoryTrim's forced collections for the session (the engine trim still runs).
 `perf_journeys` goes hourly and at quit, like `perf_omnibox`; `perf_launch` once its steps are in (≤ 30 s after the first
@@ -166,6 +171,20 @@ FROM (
 )
 WHERE w > 0 AND ms IS NOT NULL
 GROUP BY version, step ORDER BY arrayMap(x -> toUInt32OrZero(x), splitByChar('.', version)) DESC, step
+```
+
+By tab count (J2 and J3 must stay flat across the bands, #1330):
+
+```sql
+SELECT properties['$app_version'] AS version,
+  multiIf(t <= 5, '0-5', t <= 20, '6-20', t <= 50, '21-50', '51+') AS tabs,
+  round(median(toFloat64OrNull(properties['j2_typeable_p50']))) AS j2_typeable,
+  round(median(toFloat64OrNull(properties['j3_frame_p50']))) AS j3_frame,
+  round(median(toFloat64OrNull(properties['j3_js_p50']))) AS j3_js, count() AS summaries
+FROM telemetry.events
+WHERE timestamp > now() - INTERVAL 30 DAY AND event = 'perf_journeys' AND properties['$environment'] = 'production'
+  AND (toUInt32OrNull(properties['tabs']) AS t) IS NOT NULL
+GROUP BY version, tabs ORDER BY version DESC, tabs
 ```
 
 Checked on 2026-10-14 against the same spread done with `arrayWithConstant` (`samples` and p50 equal for every
