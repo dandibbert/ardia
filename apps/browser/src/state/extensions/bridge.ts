@@ -6,6 +6,7 @@ import { changedIds } from "../browser/changes";
 import { openLittleArdia } from "../littleArdia/actions";
 import { littleArdiaLinkOf } from "./littleArdiaLink";
 import { startExtensionSearchEngines } from "./searchEngines";
+import { reportExtensionsLoaded } from "./loadHealth";
 import { watchExtensionInstallFailures } from "./crxDrop";
 import { onSyncedExtensionChange } from "../sync/extensions";
 import { openRequestedTab } from "./tabsRequests";
@@ -18,6 +19,7 @@ import {
   closeSidePanel,
   extensionProfile,
   findExtension,
+  isPrivate,
   openSidePanel,
   refreshExtensions,
   refreshExtensionsAfterChange,
@@ -66,6 +68,7 @@ export function startExtensionsBridge() {
   const loadProfiles = (s: BrowserState) => {
     for (const id of s.windowOrder) {
       const profile = extensionProfile(s, id);
+      if (!isPrivate(s, id)) reportExtensionsLoaded(profile);
       if (watchActionsOf(profile)) void refreshExtensions(profile);
     }
   };

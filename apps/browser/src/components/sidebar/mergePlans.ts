@@ -1,11 +1,20 @@
+import { noteSidebarMotionMerge } from "../../state/telemetry/usage";
+
 type MotionPlan = { moves: { key: string }[]; ghosts: unknown[]; clipped: string[]; below: number };
 
-export function mergePlans<P extends MotionPlan>(earlier: P, later: P): P {
-  const moved = new Set(later.moves.map((m) => m.key));
+export function mergePlans<P extends MotionPlan>(first: P, then: P): P {
+  const later = new Set(then.moves.map((m) => m.key));
   return {
-    ...later,
-    moves: [...earlier.moves.filter((m) => !moved.has(m.key)), ...later.moves],
-    ghosts: [...earlier.ghosts, ...later.ghosts],
-    below: later.below || earlier.below,
+    ...then,
+    moves: [...first.moves.filter((m) => !later.has(m.key)), ...then.moves],
+    ghosts: [...first.ghosts, ...then.ghosts],
+    clipped: [...new Set([...first.clipped, ...then.clipped])],
+    below: first.below + then.below,
   };
+}
+
+export function withPending<P extends MotionPlan>(pending: P | null, plan: P): P {
+  if (!pending) return plan;
+  noteSidebarMotionMerge();
+  return mergePlans(pending, plan);
 }

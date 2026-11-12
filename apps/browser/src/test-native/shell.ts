@@ -197,6 +197,13 @@ const notifications: Modules["ArdiaNotifications"] = {
   openNotificationSettings: () => Promise.resolve(),
 };
 
+const location: Modules["ArdiaLocation"] = {
+  locationPermission: () => Promise.resolve("notDetermined"),
+  requestLocationPermission: () => Promise.resolve("notDetermined"),
+  openLocationSettings: () => Promise.resolve(),
+  devLocationRequests: () => Promise.resolve(0),
+};
+
 const scriptingEvents = nativeEvents();
 const scripting: Modules["ArdiaScripting"] = {
   addListener: scriptingEvents.addListener,
@@ -382,6 +389,7 @@ export const shellNativeModules: Modules = {
   ArdiaApp: app,
   ArdiaUpdater: updater,
   ArdiaNotifications: notifications,
+  ArdiaLocation: location,
   ArdiaScripting: scripting,
   ArdiaDev: dev,
   ArdiaSystem: system,

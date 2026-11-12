@@ -13,7 +13,7 @@ import { curve } from "../ui/motion";
 import { SIDEBAR_MOTION } from "./tokens";
 import { entryId, entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { splitTabIdsOf } from "../../state/splits/splits";
-import { mergePlans } from "./mergePlans";
+import { withPending } from "./mergePlans";
 
 export const SLIDE_MS = SIDEBAR_MOTION.listSlide;
 export const FADE_MS = SIDEBAR_MOTION.listFade;
@@ -223,9 +223,10 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
   const prepare = (plan: Plan, at: number) => {
     for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, landed: false, run: 0 });
     ghosts.current = [...ghosts.current, ...plan.ghosts];
+    const next = withPending(queued.current, plan);
     clipped.clear();
-    for (const key of plan.clipped) clipped.add(key);
-    queued.current = queued.current ? mergePlans(queued.current, plan) : plan;
+    for (const key of next.clipped) clipped.add(key);
+    queued.current = next;
   };
 
   const before = from.pending;
@@ -275,8 +276,7 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
         if (slide.run !== run) return;
         if (!finished) slide.value.setValue(0);
         slide.landed = true;
-        if (!clips) return;
-        queueMicrotask(() => endClipping(token));
+        if (clips) queueMicrotask(() => endClipping(token));
       });
     }
     const fadeMs = FADE_MS * devScale();
