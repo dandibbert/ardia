@@ -192,17 +192,18 @@ const DAY = 24 * HOUR;
 export const ago = (ms: number) =>
   bucket(ms, [[MINUTE, "<1m"], [10 * MINUTE, "<10m"], [HOUR, "<1h"], [8 * HOUR, "<8h"], [DAY, "<1d"], [7 * DAY, "<7d"]], "7d+");
 
-let launch: Launch | null = null;
-let launchSent = false;
+type LaunchJourney = { phase: "awaitingFirstCommit" } | { phase: "measuring" | "sent"; launch: Launch } | { phase: "untracked" };
+let launchJourney: LaunchJourney = { phase: "awaitingFirstCommit" };
 type PreviousLaunch = { lastLaunchAt: number | null; lastQuitAt: number | null; firstOfVersion: boolean | null };
 let previousLaunch: PreviousLaunch = { lastLaunchAt: null, lastQuitAt: null, firstOfVersion: null };
 
-let firstRootCommitted = false;
+const trackedLaunch = (): Launch | null =>
+  launchJourney.phase === "measuring" || launchJourney.phase === "sent" ? launchJourney.launch : null;
 
 export function launchCommitted() {
-  if (firstRootCommitted) return;
-  firstRootCommitted = true;
-  if (launch || launchSent || !on) return;
+  if (launchJourney.phase !== "awaitingFirstCommit") return;
+  launchJourney = { phase: "untracked" };
+  if (!on) return;
   const start = appInfo().processStart;
   if (!start) return;
   const s = useBrowser.getState();
@@ -211,7 +212,8 @@ export function launchCommitted() {
     const tab = activeTabId(s, id);
     if (tab && s.tabs[tab]?.url && !isAsleep(s.tabs[tab])) keys.push(tab);
   }
-  launch = { journey: "j1", t0: start, commit: Date.now(), keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length };
+  const launch: Launch = { journey: "j1", t0: start, commit: Date.now(), keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length };
+  launchJourney = { phase: "measuring", launch };
   frame("launch", "content");
   probeUsable(launch);
   begin(launch);
@@ -223,7 +225,7 @@ function probeUsable(l: Launch) {
   const set = Date.now();
   usableTimer = setTimeout(() => {
     usableTimer = undefined;
-    if (!on || launch !== l) return;
+    if (!on || trackedLaunch() !== l) return;
     const now = Date.now();
     if (now - set < 50 || now - set > 30_000 || now - (l.commit ?? now) > 30_000) l.usable = now;
     else probeUsable(l);
@@ -231,6 +233,7 @@ function probeUsable(l: Launch) {
 }
 
 export function launchFirstWindow(at: number) {
+  const launch = trackedLaunch();
   if (launch) launch.firstWindow = at;
 }
 
@@ -244,8 +247,8 @@ function settleLaunch(l: Launch, now: number) {
 }
 
 function sendLaunch(l: Launch, content: number | null, paints: number[]) {
-  if (launchSent || !on) return;
-  launchSent = true;
+  if (launchJourney.phase !== "measuring" || !on) return;
+  launchJourney = { phase: "sent", launch: launchJourney.launch };
   const paint = paints.length ? Math.min(...paints) : null;
   const tab = paint === null ? l.keys[0] : l.keys.find((k) => mark(k, "fcp", l.t0) === paint);
   const s = useBrowser.getState();
@@ -360,8 +363,7 @@ function setOn(next: boolean, initial = false) {
   unwatchStore = undefined;
   clearTimeout(usableTimer);
   usableTimer = undefined;
-  if (launch) launchSent = true;
-  launch = null;
+  if (trackedLaunch()) launchJourney = { phase: "untracked" };
   clearTimeout(timer);
   timer = undefined;
   pending = [];
@@ -377,9 +379,10 @@ export function startJourneys(previous: PreviousLaunch | null) {
 }
 
 export function journeysEnding() {
-  if (launch && !launchSent) {
+  if (launchJourney.phase === "measuring") {
+    const { launch } = launchJourney;
     settle(false);
-    if (!launchSent) sendLaunch(launch, mark("launch", "content", launch.t0), launch.keys.map((k) => mark(k, "fcp", launch!.t0)).filter((at): at is number => at !== null));
+    sendLaunch(launch, mark("launch", "content", launch.t0), launch.keys.map((k) => mark(k, "fcp", launch.t0)).filter((at): at is number => at !== null));
   }
   emitJourneys(true);
 }

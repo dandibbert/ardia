@@ -115,3 +115,26 @@ test("a page parked behind New Tab or an Ardia page is not what the user is look
   emit({ state: "off", generation: 4 });
   await settle();
 });
+
+test("the pill forgets a caller noted before it last hid, and keeps one noted since", async () => {
+  const caller = (name) => ({ name, app: null });
+  const indicator = () => cli.useCliIndicator.getState();
+  emit({ state: "on", generation: 5, connections: 1 });
+  await settle();
+  cli.noteCliCaller(caller("first"));
+  assert.deepEqual([indicator().shown, indicator().caller?.name], [true, "first"]);
+  emit({ state: "off", generation: 5 });
+  await settle();
+  assert.deepEqual([indicator().shown, indicator().caller?.name], [false, "first"], "hiding keeps the caller for the fade");
+  emit({ state: "on", generation: 5, connections: 1 });
+  await settle();
+  assert.deepEqual([indicator().shown, indicator().caller], [true, null]);
+  emit({ state: "off", generation: 5 });
+  await settle();
+  cli.noteCliCaller(caller("second"));
+  emit({ state: "on", generation: 5, connections: 1 });
+  await settle();
+  assert.deepEqual([indicator().shown, indicator().caller?.name], [true, "second"]);
+  emit({ state: "off", generation: 5 });
+  await settle();
+});

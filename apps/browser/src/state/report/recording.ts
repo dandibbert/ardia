@@ -15,8 +15,7 @@ import { currentReport, patchReport } from "./store";
 import { useBrowser } from "../browser/store";
 
 let subscribed = false;
-let traceTimer: ReturnType<typeof setTimeout> | undefined;
-let traceStartedAt = 0;
+let traceRun: { timer: ReturnType<typeof setTimeout>; startedAt: number } | null = null;
 let lastResult: RecordingResult | null = null;
 
 export const lastRecordingStats = () => lastResult;
@@ -105,16 +104,24 @@ async function startTrace() {
   if (await isTracing().catch(() => true)) return patchReport({ trace: { phase: "failed" } });
   const ok = await beginTracing().catch(() => false);
   if (!ok) return patchReport({ trace: { phase: "failed" } });
-  traceStartedAt = Date.now();
+  const startedAt = Date.now();
   patchReport({ trace: { phase: "tracing" } });
-  clearTimeout(traceTimer);
-  traceTimer = setTimeout(() => void finishTrace(), TRACE_MAX_SECONDS * 1000);
+  endTraceRun();
+  traceRun = { timer: setTimeout(() => void finishTrace(), TRACE_MAX_SECONDS * 1000), startedAt };
+}
+
+function endTraceRun(): number | null {
+  const run = traceRun;
+  traceRun = null;
+  if (!run) return null;
+  clearTimeout(run.timer);
+  return run.startedAt;
 }
 
 async function finishTrace() {
   if (currentReport().trace.phase !== "tracing") return;
-  clearTimeout(traceTimer);
-  const seconds = Math.min(TRACE_MAX_SECONDS, (Date.now() - traceStartedAt) / 1000);
+  const startedAt = endTraceRun() ?? 0;
+  const seconds = Math.min(TRACE_MAX_SECONDS, (Date.now() - startedAt) / 1000);
   patchReport({ trace: { phase: "saving" } });
   const raw = await endTracing(true).catch(() => null);
   if (!raw) return patchReport({ trace: { phase: "failed" } });
@@ -131,7 +138,7 @@ export function discardTrace() {
   const t = currentReport().trace;
   if (t.phase === "ready") removeReportFile(t.path);
   if (t.phase === "tracing") {
-    clearTimeout(traceTimer);
+    endTraceRun();
     void endTracing(false).catch(() => null);
   }
   patchReport({ trace: { phase: "none" } });

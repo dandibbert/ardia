@@ -10,8 +10,9 @@ type Body = { result: unknown } | { error: MethodError };
 
 const CLOSE_AFTER_MS = 5000;
 
-let closing: ReturnType<typeof setTimeout> | null = null;
-let served = false;
+type OffscreenTabs = { phase: "unserved" } | { phase: "served" } | { phase: "closing"; timer: ReturnType<typeof setTimeout> };
+
+let offscreenTabs: OffscreenTabs = { phase: "unserved" };
 
 export async function offscreenMethod(params: Record<string, unknown>): Promise<Body> {
   const unknown = Object.keys(params).filter((key) => key !== "tab");
@@ -35,15 +36,16 @@ export async function offscreenMethod(params: Record<string, unknown>): Promise<
 
 export function noteCliConnections(connections: number) {
   if (connections > 0) {
-    served = true;
-    if (closing) clearTimeout(closing);
-    closing = null;
+    if (offscreenTabs.phase === "closing") clearTimeout(offscreenTabs.timer);
+    offscreenTabs = { phase: "served" };
     return;
   }
-  if (!served || closing) return;
-  closing = setTimeout(() => {
-    closing = null;
-    served = false;
-    void cliCloseOffscreenTabs().catch(() => {});
-  }, CLOSE_AFTER_MS);
+  if (offscreenTabs.phase !== "served") return;
+  offscreenTabs = {
+    phase: "closing",
+    timer: setTimeout(() => {
+      offscreenTabs = { phase: "unserved" };
+      void cliCloseOffscreenTabs().catch(() => {});
+    }, CLOSE_AFTER_MS),
+  };
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 const { useBrowser } = await import("../browser/store.ts");
 const { startAutomation } = await import("./controlSocket.ts");
 const stub = await import("../../test-native/index.ts");
@@ -67,5 +67,32 @@ test("offscreen: the shown tab, a tab the command didn't open, one that was show
   } finally {
     delete globalThis.acTestCliOwns;
     delete globalThis.acTestCliMoveOffscreen;
+  }
+});
+
+test("offscreen: tabs close 5 s after the last connection of a served session, and a new connection keeps them", async () => {
+  const { noteCliConnections } = await import("./offscreen.ts");
+  const closes = () => stub.engineCalls.filter((c) => c.verb === "cliCloseOffscreenTabs").length;
+  const before = closes();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    noteCliConnections(0);
+    mock.timers.tick(10_000);
+    assert.equal(closes(), before, "nothing was served yet");
+    noteCliConnections(2);
+    noteCliConnections(0);
+    noteCliConnections(0);
+    mock.timers.tick(4_999);
+    noteCliConnections(1);
+    mock.timers.tick(10_000);
+    assert.equal(closes(), before, "a connection within the hold keeps the tabs");
+    noteCliConnections(0);
+    mock.timers.tick(5_000);
+    assert.equal(closes(), before + 1);
+    noteCliConnections(0);
+    mock.timers.tick(10_000);
+    assert.equal(closes(), before + 1, "closed once, until the next served session");
+  } finally {
+    mock.timers.reset();
   }
 });

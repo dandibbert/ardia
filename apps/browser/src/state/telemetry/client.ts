@@ -117,8 +117,7 @@ export function saveQueueNow(timeoutMs = 1000): Promise<void> {
 function clearQueue() {
   queue = { events: [], logs: [] };
   queueLoaded = true;
-  clearTimeout(flushTimer);
-  flushTimer = undefined;
+  cancelScheduledFlush();
   persistQueue(true);
 }
 
@@ -169,19 +168,29 @@ export function queueLog(level: "warn" | "error", message: string, attributes: R
   } catch {}
 }
 
-let flushTimer: ReturnType<typeof setTimeout> | undefined;
-let flushDueAt = 0;
+type ScheduledFlush = { timer: ReturnType<typeof setTimeout>; dueAt: number } | null;
+type Backoff = { failures: number; retryAt: number } | null;
+
+let scheduledFlush: ScheduledFlush = null;
 let flushing = false;
-let failures = 0;
-let retryAt = 0;
+let backoff: Backoff = null;
+
+function cancelScheduledFlush() {
+  if (scheduledFlush) clearTimeout(scheduledFlush.timer);
+  scheduledFlush = null;
+}
 
 function scheduleFlush(delay: number) {
   if (!saved().sharing) return;
-  const due = Math.max(Date.now() + delay, retryAt);
-  if (flushTimer && flushDueAt <= due) return;
-  clearTimeout(flushTimer);
-  flushDueAt = due;
-  flushTimer = setTimeout(() => void flush(), due - Date.now());
+  const due = Math.max(Date.now() + delay, backoff?.retryAt ?? 0);
+  if (scheduledFlush && scheduledFlush.dueAt <= due) return;
+  cancelScheduledFlush();
+  scheduledFlush = { timer: setTimeout(() => void flush(), due - Date.now()), dueAt: due };
+}
+
+function noteFlushFailed() {
+  const failures = (backoff?.failures ?? 0) + 1;
+  backoff = { failures, retryAt: Date.now() + Math.min(MAX_BACKOFF_MS, 30_000 * 2 ** (failures - 1)) };
 }
 
 const inflight = new Set<AbortController>();
@@ -245,7 +254,7 @@ async function drain<T>(
 }
 
 export async function flush() {
-  flushTimer = undefined;
+  scheduledFlush = null;
   if (!saved().sharing || flushing) return;
   flushing = true;
   const gen = generation;
@@ -259,13 +268,9 @@ export async function flush() {
   if (result === "stale") return;
   persistQueue(true);
   if (result === "failed") {
-    failures++;
-    retryAt = Date.now() + Math.min(MAX_BACKOFF_MS, 30_000 * 2 ** (failures - 1));
+    noteFlushFailed();
     scheduleFlush(0);
-  } else {
-    failures = 0;
-    retryAt = 0;
-  }
+  } else backoff = null;
 }
 
 export type SharingSource = "settings" | "onboarding" | "ask" | "watch" | "watch_ended";
@@ -277,8 +282,7 @@ export function setSharing(on: boolean, source: SharingSource, placement?: AskPl
   const current = saved();
   if (on === current.sharing) return save({ decidedAt: now, askDoneAt: current.askDoneAt ?? now });
   generation++;
-  failures = 0;
-  retryAt = 0;
+  backoff = null;
   if (!on) {
     for (const abort of inflight) abort.abort();
     inflight.clear();

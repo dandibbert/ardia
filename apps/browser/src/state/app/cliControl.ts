@@ -87,19 +87,17 @@ export const useCliIndicator = create<{ shown: boolean; caller: CliCaller | null
 let indicatorHide: ReturnType<typeof setTimeout> | null = null;
 let socketRuns = 0;
 let socketServing = false;
-let indicatorStep = 0;
-let callerStep = 0;
-let hiddenStep = 0;
+let callerNoted: "sinceLastHide" | "beforeLastHide" = "sinceLastHide";
 
 function showIndicator(shown: boolean) {
-  if (!shown) hiddenStep = ++indicatorStep;
+  if (!shown) callerNoted = "beforeLastHide";
   else noteCliPillShown();
-  const caller = shown && callerStep < hiddenStep ? null : useCliIndicator.getState().caller;
+  const caller = shown && callerNoted === "beforeLastHide" ? null : useCliIndicator.getState().caller;
   useCliIndicator.setState({ shown, caller });
 }
 
 export function noteCliCaller(caller: CliCaller) {
-  callerStep = ++indicatorStep;
+  callerNoted = "sinceLastHide";
   const current = useCliIndicator.getState().caller;
   if (current?.name !== caller.name || current.app !== caller.app) useCliIndicator.setState({ caller });
 }

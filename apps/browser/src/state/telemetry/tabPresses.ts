@@ -8,12 +8,13 @@ const MAX_SAMPLES = 500;
 const PAGE_CLICK_WINDOW_MS = 60_000;
 
 const empty = () => ({ presses: 0, down_switches: 0, clicks: 0, drag_clicks: 0, drags: 0, unanswered: 0, range_selects: 0, range_from_shown: 0 });
+type Press = { phase: "released" } | { phase: "pressed"; switchedAt: number | null };
+
 let tally = empty();
-let pending = false;
+let press: Press = { phase: "released" };
 let shown: { tabId: string; at: number } | null = null;
 let toPageClick: number[] = [];
 let heldMs: number[] = [];
-let pressedAt: number | null = null;
 let lostReleasesSeen = 0;
 const REPEAT_SLACK_MS = 150;
 let lastRowPressAt = 0;
@@ -30,11 +31,10 @@ function takeLostReleases() {
 
 function forgetPresses() {
   tally = empty();
-  pending = false;
+  press = { phase: "released" };
   shown = null;
   toPageClick = [];
   heldMs = [];
-  pressedAt = null;
   takeLostReleases();
   forgetRepeats();
 }
@@ -61,18 +61,17 @@ export function noteRowPress(shownTabEmpty: boolean): Promise<void> {
 useTelemetry.subscribe((s, prev) => prev.sharing && !s.sharing && forgetPresses());
 
 export function notePressStarted(switchedOnPress = false) {
-  if (pending) tally.unanswered++;
-  pending = true;
+  if (press.phase === "pressed") tally.unanswered++;
   tally.presses++;
   if (switchedOnPress) tally.down_switches++;
-  pressedAt = switchedOnPress ? Date.now() : null;
+  press = { phase: "pressed", switchedAt: switchedOnPress ? Date.now() : null };
 }
 
 export function notePressEnded(end: TabPressEnd, tabId: string | null = null) {
-  if (!pending) return;
-  pending = false;
-  const held = pressedAt === null ? -1 : Date.now() - pressedAt;
-  pressedAt = null;
+  if (press.phase !== "pressed") return;
+  const { switchedAt } = press;
+  press = { phase: "released" };
+  const held = switchedAt === null ? -1 : Date.now() - switchedAt;
   if (end !== "drag" && held >= 0 && held < PAGE_CLICK_WINDOW_MS && heldMs.length < MAX_SAMPLES) heldMs.push(held);
   if (end === "click") tally.clicks++;
   else if (end === "dragClick") tally.drag_clicks++;
@@ -123,4 +122,4 @@ export function emitTabPresses() {
   });
 }
 
-export const devTabPresses = () => ({ ...tally, pending, toPageClick: toPageClick.length, held: heldMs.length });
+export const devTabPresses = () => ({ ...tally, pending: press.phase === "pressed", toPageClick: toPageClick.length, held: heldMs.length });

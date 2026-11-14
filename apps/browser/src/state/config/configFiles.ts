@@ -32,11 +32,10 @@ const NO_THEME: ThemeParts = { roles: null, look: null };
 let defaults: RolePalettes | null = null;
 let theme: Theme = { name: null, ...NO_THEME };
 let revision = 0;
-let windowsUp = false;
+let folderWatch: { phase: "beforeFirstWindow" } | { phase: "watching"; themeName: string | null } = { phase: "beforeFirstWindow" };
 let reported = new Set<string>();
 let pendingProblems = false;
 let unsubscribers: (() => void)[] = [];
-let watching: string | null | undefined;
 let schemas: Record<string, string> | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const lastGoodThemes = new Map<string, ThemeParts>();
@@ -64,7 +63,7 @@ function readTheme(name: string | null, problems: string[]): ThemeParts {
 }
 
 function applySidebarWidth(before: number | null, after: number | null) {
-  if (!windowsUp || after === null || after === before) return;
+  if (folderWatch.phase !== "watching" || after === null || after === before) return;
   const width = Math.round(after);
   if (useBrowser.getState().settings.sidebarWidth !== width) useBrowser.getState().updateSettings({ sidebarWidth: width });
 }
@@ -122,7 +121,7 @@ export function problemsToast(problems: readonly string[]): { title: string; mes
 }
 
 function showProblems() {
-  if (!windowsUp) return;
+  if (folderWatch.phase !== "watching") return;
   const toasts = useToasts.getState().toasts;
   const showing = Object.keys(toasts).filter((id) => toasts[id]?.key === PROBLEMS_TOAST);
   if (!reported.size) {
@@ -165,10 +164,13 @@ function report(problems: string[]) {
   if (changed) showProblems();
 }
 
+function watchFiles(themeName: string | null) {
+  folderWatch = { phase: "watching", themeName };
+  watchConfigFiles(["config.json", "hooks.json", ...(themeName ? [themeFile(themeName)] : [])]).then(changed, (error: unknown) => console.warn("[config] couldn't watch the config folder", error));
+}
+
 function watchNames() {
-  if (theme.name === watching) return;
-  watching = theme.name;
-  watchConfigFiles(["config.json", "hooks.json", ...(theme.name ? [themeFile(theme.name)] : [])]).then(changed, (error: unknown) => console.warn("[config] couldn't watch the config folder", error));
+  if (folderWatch.phase === "watching" && theme.name !== folderWatch.themeName) watchFiles(theme.name);
 }
 
 export function reconcileConfig() {
@@ -185,7 +187,7 @@ export function reconcileConfig() {
   }
   applyTheme({ name, ...readTheme(name, problems) });
   report(problems);
-  if (watching !== undefined) watchNames();
+  watchNames();
 }
 
 function writeSchemas() {
@@ -214,9 +216,9 @@ export function startConfigFiles(roles: RolePalettes) {
   defaults = roles;
   reconcileConfig();
   afterFirstWindow(() => {
-    windowsUp = true;
+    folderWatch = { phase: "watching", themeName: theme.name };
     onConfigChange(changed);
-    watchNames();
+    watchFiles(theme.name);
     writeSchemas();
     unsubscribers.push(useToasts.subscribe(toastsChanged), useBrowser.subscribe((next, previous) => next.windowOrder !== previous.windowOrder && windowsChanged()));
     showProblems();
@@ -228,12 +230,11 @@ export function resetConfigFilesForTests() {
   timer = undefined;
   defaults = null;
   theme = { name: null, ...NO_THEME };
-  windowsUp = false;
+  folderWatch = { phase: "beforeFirstWindow" };
   reported = new Set();
   pendingProblems = false;
   for (const unsubscribe of unsubscribers) unsubscribe();
   unsubscribers = [];
-  watching = undefined;
   schemas = null;
   lastGoodThemes.clear();
   setActiveLook(DEFAULT_LOOK);
