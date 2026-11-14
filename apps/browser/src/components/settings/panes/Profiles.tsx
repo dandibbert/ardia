@@ -109,6 +109,11 @@ const ROW_HEIGHT = 46;
 const settle = (value: Animated.Value, toValue: number) =>
   Animated.timing(value, { toValue, duration: settingsMotion.profileRowSettle, easing: curve.enter, useNativeDriver: true });
 
+type ProfileDrag = { phase: "idle" } | { phase: "dragging"; id: string; from: number; to: number } | { phase: "reordering" };
+
+const DRAG_IDLE: ProfileDrag = { phase: "idle" };
+const DRAG_REORDERING: ProfileDrag = { phase: "reordering" };
+
 function ProfileList() {
   const order = useProfileOrder();
   const offsets = useRef(new Map<string, Animated.Value>()).current;
@@ -118,11 +123,11 @@ function ProfileList() {
     return v;
   };
   const [dragging, setDragging] = useState<string | null>(null);
-  const drag = useRef({ id: "", from: 0, to: 0, reorderPending: false });
+  const drag = useRef<ProfileDrag>(DRAG_IDLE);
 
   useLayoutEffect(() => {
-    if (!drag.current.reorderPending) return;
-    drag.current.reorderPending = false;
+    if (drag.current.phase !== "reordering") return;
+    drag.current = DRAG_IDLE;
     offsets.forEach((v) => v.setValue(0));
   }, [order]);
 
@@ -130,17 +135,19 @@ function ProfileList() {
     start(id: string) {
       const ids = currentProfileOrder();
       const from = ids.indexOf(id);
-      drag.current = { id, from, to: from, reorderPending: false };
+      drag.current = { phase: "dragging", id, from, to: from };
       setDragging(id);
     },
     move(dy: number) {
-      const { id, from } = drag.current;
+      const current = drag.current;
+      if (current.phase !== "dragging") return;
+      const { id, from } = current;
       const ids = currentProfileOrder();
       const max = ids.length - 1;
       offsetOf(id).setValue(Math.max(-from * ROW_HEIGHT - 6, Math.min((max - from) * ROW_HEIGHT + 6, dy)));
       const to = Math.max(0, Math.min(max, Math.round(from + dy / ROW_HEIGHT)));
-      if (to === drag.current.to) return;
-      drag.current.to = to;
+      if (to === current.to) return;
+      drag.current = { ...current, to };
       hapticTick();
       ids.forEach((other, j) => {
         if (other === id) return;
@@ -148,15 +155,17 @@ function ProfileList() {
       });
     },
     end(commit: boolean) {
-      const { id, from, to } = drag.current;
+      const current = drag.current;
       setDragging(null);
-      if (!commit || from === to) {
+      if (current.phase !== "dragging" || !commit || current.from === current.to) {
+        if (current.phase === "dragging") drag.current = DRAG_IDLE;
         offsets.forEach((v) => settle(v, 0).start());
         return;
       }
+      const { id, to } = current;
       const ids = currentProfileOrder().filter((x) => x !== id);
       ids.splice(to, 0, id);
-      drag.current.reorderPending = true;
+      drag.current = DRAG_REORDERING;
       reorderProfiles(ids);
     },
   }).current;

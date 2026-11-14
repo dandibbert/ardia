@@ -30,19 +30,15 @@ const ReloadGlyph = memo(function ReloadGlyph({ loading, color, press }: { loadi
   const returnMotion = useRef(new Animated.Value(0)).current;
   const breatheMotion = useRef(new Animated.Value(0)).current;
   const previousLoading = useRef(loading);
-  const [motionReady, setMotionReady] = useState(() => reduceMotion() !== null);
-  const [motionReduced, setMotionReduced] = useState(() => reduceMotion() === true);
+  const [motionPreference, setMotionPreference] = useState<boolean | null>(() => reduceMotion());
+  const motionReady = motionPreference !== null;
+  const motionReduced = motionPreference === true;
   useEffect(() => {
     let live = true;
     void reduceMotionKnown.then((reduced) => {
-      if (!live) return;
-      setMotionReduced(reduced);
-      setMotionReady(true);
+      if (live) setMotionPreference(reduced);
     });
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", (reduced) => {
-      setMotionReduced(reduced);
-      setMotionReady(true);
-    });
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", (reduced) => setMotionPreference(reduced));
     return () => {
       live = false;
       subscription.remove();

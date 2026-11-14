@@ -18,6 +18,8 @@ const TITLE = { flexShrink: 1 } as const;
 const HOST = { flexShrink: 0, maxWidth: historyRow.hostMaxWidth } as const;
 const SEPARATOR = { position: "absolute", left: space.xl + space.l, right: space.xl + space.l, bottom: 0 } as const;
 
+type RowHover = { url: string; resting: boolean };
+
 export const DayHeader = memo(function DayHeader({ label, top }: { label: string; top: number }) {
   useTheme();
   return (
@@ -57,29 +59,28 @@ export const HistoryRow = memo(function HistoryRow({
   const theme = useTheme();
   const url = useRef(entry.url);
   url.current = entry.url;
-  const [hoveredUrl, setHoveredUrl] = useState<string | null>(null);
-  const [restingUrl, setRestingUrl] = useState<string | null>(null);
+  const [hover, setHover] = useState<RowHover | null>(null);
   const [hoverProps] = useState(() => {
     let settle: ReturnType<typeof setTimeout> | undefined;
     const rest = (hoveredEntry: string) => {
       const wait = historyScroll.lastAt + historyRow.scrollSettleMs - Date.now();
-      if (wait <= 0) setRestingUrl(hoveredEntry);
+      if (wait <= 0) setHover((current) => (current?.url === hoveredEntry && !current.resting ? { url: hoveredEntry, resting: true } : current));
       else settle = setTimeout(() => rest(hoveredEntry), wait);
     };
     return markHoverProps({
       onMouseEnter: () => {
         clearTimeout(settle);
-        setHoveredUrl(url.current);
-        rest(url.current);
+        const entered = url.current;
+        setHover((current) => (current?.url === entered ? current : { url: entered, resting: false }));
+        rest(entered);
       },
       onMouseLeave: () => {
         clearTimeout(settle);
-        setHoveredUrl(null);
-        setRestingUrl(null);
+        setHover(null);
       },
     });
   });
-  const hovered = hoveredUrl === entry.url;
+  const hovered = hover?.url === entry.url;
   const [focusedUrl, setFocusedUrl] = useState<string | null>(null);
   const [focusProps] = useState(() => {
     let blurTimer: ReturnType<typeof setTimeout> | undefined;
@@ -94,7 +95,7 @@ export const HistoryRow = memo(function HistoryRow({
       },
     };
   });
-  const showControls = restingUrl === entry.url || focusedUrl === entry.url;
+  const showControls = (hover?.resting && hover.url === entry.url) || focusedUrl === entry.url;
   const menu = () => openHistoryRowMenu(menuTargets(entry), windowId, onMoreFromSite, onRemove);
   const r = radius.panel;
   return (

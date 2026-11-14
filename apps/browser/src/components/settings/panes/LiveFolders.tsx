@@ -18,6 +18,7 @@ import { setting, type SettingId } from "../settingsIndex";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { settingsType } from "../tokens";
 import { perLook } from "../../ui/tokens";
+import { actionMessage, actionRunning, finishedAction, IDLE_ACTION, RUNNING_ACTION, type ActionState } from "./actionState";
 
 export function LiveFoldersPane() {
   const folders = useLive(useShallow((s) => s.folderOrder.map((id) => s.folders[id]!).filter(Boolean)));
@@ -110,18 +111,19 @@ function SourceRow({ id }: { id: LiveSourceId }) {
 
 function ConnectSheet({ id }: { id: LiveSourceId }) {
   const source = SOURCES[id];
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<ActionState<string>>(IDLE_ACTION);
+  const busy = actionRunning(connecting);
+  const error = actionMessage(connecting);
   const run = async (task: () => Promise<void>) => {
-    setBusy(true);
-    setError(null);
+    setConnecting(RUNNING_ACTION);
+    let failure: string | null = null;
     try {
       await task();
       closeSettingsSheet();
     } catch (e) {
-      setError(String((e as Error)?.message ?? e));
+      failure = String((e as Error)?.message ?? e);
     } finally {
-      setBusy(false);
+      setConnecting((state) => finishedAction(state, failure));
     }
   };
   let body: ReactNode;

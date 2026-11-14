@@ -18,6 +18,7 @@ import {
   useSync,
 } from "../../../state/sync/engine";
 import { DATA_TYPES, type SyncStatus } from "../../../state/sync/syncDoc";
+import { actionMessage, actionRunning, finishedAction, IDLE_ACTION, RUNNING_ACTION, type ActionState } from "./actionState";
 import { deviceSymbol } from "../../../state/sync/devices";
 import { ProfileBadge } from "../../profiles/ProfileIcons";
 import { Group, PaneIntro, Row, SectionHeader } from "../Form";
@@ -62,19 +63,19 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
   const theme = useTheme();
   const status = useSync((s) => s.status);
   const error = useSync((s) => s.error);
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [turningOn, setTurningOn] = useState<ActionState<string>>(IDLE_ACTION);
+  const busy = actionRunning(turningOn);
+  const failure = actionMessage(turningOn);
   const noICloud = !!info && info.path === info.defaultPath && !info.iCloudAvailable;
   const hasData = !!info?.hasSyncData;
 
   const turnOn = async () => {
     if (!info) return;
-    setBusy(true);
-    setFailure(null);
+    setTurningOn(RUNNING_ACTION);
     const result = await turnOnSync(info.path);
-    setBusy(false);
-    if ("error" in result) setFailure(result.error);
-    else showRecoveryKit();
+    const error = "error" in result ? result.error : null;
+    setTurningOn((state) => finishedAction(state, error));
+    if (error === null) showRecoveryKit();
   };
   const enterPhrase = () => showPhraseEntry(info, () => void chooseSyncFolder().then(() => folderInfo().then((i) => showPhraseEntry(i))));
   const otherOptions = async () => {

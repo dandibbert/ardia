@@ -51,8 +51,7 @@ export function GroupPanel({ groupId, windowId, anchor, windowHeight }: { groupI
   const field = useRef<TextInput>(null);
   const scroll = useRef<ScrollView>(null);
   const offset = useRef(0);
-  const focused = useRef(false);
-  const origin = useRef<Promise<number> | null>(null);
+  const borrowedFrom = useRef<Promise<number> | null>(null);
   const q = query.trim();
   const rows = useMemo(() => matchingRows(q, all), [q, all]);
   const current = Math.max(0, Math.min(selected, rows.length - 1));
@@ -62,22 +61,20 @@ export function GroupPanel({ groupId, windowId, anchor, windowHeight }: { groupI
   const top = Math.max(EDGE, Math.min(at.top, windowHeight - panelHeight - EDGE));
 
   const takeFocus = () => {
-    if (focused.current) return;
-    focused.current = true;
+    if (borrowedFrom.current) return;
     const from = saveKeyResponder(windowId);
-    origin.current = from;
+    borrowedFrom.current = from;
     void from.then(() => {
-      if (focused.current && origin.current === from) field.current?.focus();
+      if (borrowedFrom.current === from) field.current?.focus();
     });
   };
   const handBack = (to: "origin" | "page") => {
-    if (!focused.current) return;
-    focused.current = false;
+    const from = borrowedFrom.current;
+    if (!from) return;
+    borrowedFrom.current = null;
     holdHover(false);
-    const from = origin.current;
-    origin.current = null;
-    if (to === "page" || !from) {
-      if (from) void from.then(discardKeyResponder);
+    if (to === "page") {
+      void from.then(discardKeyResponder);
       return returnFocusToPage(windowId);
     }
     void from.then(restoreKeyResponder).then((restored) => {
@@ -135,18 +132,17 @@ export function GroupPanel({ groupId, windowId, anchor, windowHeight }: { groupI
           value={query}
           onChangeText={(text) => {
             setQuery(text);
-            holdHover(focused.current && text.trim().length > 0);
+            holdHover(borrowedFrom.current !== null && text.trim().length > 0);
             setSelected(0);
             offset.current = 0;
             scroll.current?.scrollTo({ y: 0, animated: false });
           }}
           placeholder="Search Tabs"
           onBlur={() => {
-            if (!focused.current) return;
-            focused.current = false;
-            const from = origin.current;
-            origin.current = null;
-            if (from) void from.then(discardKeyResponder);
+            const from = borrowedFrom.current;
+            if (!from) return;
+            borrowedFrom.current = null;
+            void from.then(discardKeyResponder);
             holdHover(false);
           }}
           onSubmit={() => choose(rows[current])}

@@ -292,18 +292,16 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
 
 export const SplitToast = memo(function SplitToast({ windowId }: { windowId: string }) {
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
-  const [shown, setShown] = useState(toast);
-  const [closing, setClosing] = useState(false);
-  if (toast && toast !== shown) {
-    setShown(toast);
-    setClosing(false);
-  } else if (!toast && shown && !closing) setClosing(true);
+  const [view, setView] = useState<{ toast: NonNullable<typeof toast>; closing: boolean } | null>(toast && { toast, closing: false });
+  if (toast && toast !== view?.toast) setView({ toast, closing: false });
+  else if (!toast && view && !view.closing) setView({ ...view, closing: true });
   useEffect(() => {
     if (!toast || toast.sticky) return;
-    const timer = setTimeout(() => setClosing(true), toast.action ? TOAST_ACTION_MS : TOAST_MS);
+    const timer = setTimeout(() => setView((now) => (now && !now.closing ? { ...now, closing: true } : now)), toast.action ? TOAST_ACTION_MS : TOAST_MS);
     return () => clearTimeout(timer);
   }, [toast?.id]);
-  if (!shown) return null;
+  if (!view) return null;
+  const { toast: shown, closing } = view;
   const action = shown.action;
   return (
     <Toast
@@ -314,13 +312,12 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
       action={action?.title}
       onAction={() => {
         action?.run();
-        setShown(null);
+        setView(null);
         hideToast(windowId, shown.id);
       }}
       closing={closing}
       onClosed={() => {
-        setShown(null);
-        setClosing(false);
+        setView(null);
         hideToast(windowId, shown.id);
       }}
     />

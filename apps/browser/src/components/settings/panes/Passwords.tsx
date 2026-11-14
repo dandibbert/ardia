@@ -143,12 +143,19 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   );
 }
 
+type SheetMode = { phase: "viewing" } | { phase: "editing"; error: string };
+
+const VIEWING: SheetMode = { phase: "viewing" };
+const EDITING: SheetMode = { phase: "editing", error: "" };
+const SAVE_UNCONFIRMED = "Couldn't confirm that the change was saved. It may still appear in the list in a moment.";
+
 function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: SavedPassword; onChanged: () => void }) {
   const [username, setUsername] = useState(saved.username);
   const [password, setPassword] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [error, setError] = useState("");
+  const [mode, setMode] = useState<SheetMode>(VIEWING);
+  const editing = mode.phase === "editing";
+  const error = mode.phase === "editing" ? mode.error : "";
   const [busy, setBusy] = useState(false);
   const open = useRef(true);
   const unlocked = usePasswordsUnlocked(profile);
@@ -166,7 +173,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
   }, [unlocked]);
 
   const save = async () => {
-    setError("");
+    setMode((current) => (current.phase === "editing" && current.error ? EDITING : current));
     setBusy(true);
     const changed = await updatePassword(profile, saved.origin, saved.username, {
       username: username !== saved.username ? username : undefined,
@@ -175,7 +182,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
     if (changed) onChanged();
     if (!open.current) return;
     setBusy(false);
-    if (!changed) return setError("Couldn't confirm that the change was saved. It may still appear in the list in a moment.");
+    if (!changed) return setMode((current) => (current.phase === "editing" ? { phase: "editing", error: SAVE_UNCONFIRMED } : current));
     closeSettingsSheet();
   };
   const remove = async () => {
@@ -236,16 +243,13 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
             <Button
               title="Cancel"
               disabled={busy}
-              onPress={() => {
-                setError("");
-                setEditing(false);
-              }}
+              onPress={() => setMode(VIEWING)}
             />
             <Button title="Save" kind="primary" disabled={!password || busy} onPress={() => void save()} />
           </>
         ) : (
           <>
-            <Button title="Edit" onPress={() => setEditing(true)} />
+            <Button title="Edit" onPress={() => setMode(EDITING)} />
             <Button title="Done" kind="primary" onPress={closeSettingsSheet} />
           </>
         )}

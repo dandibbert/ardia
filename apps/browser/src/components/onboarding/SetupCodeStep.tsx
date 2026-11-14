@@ -24,19 +24,22 @@ export function SetupCodeLink({ onPress }: { onPress: () => void }) {
   );
 }
 
+type CodeState = { phase: "entering"; error: string | null } | { phase: "applied"; lines: string[] };
+
+const ENTERING_CODE: CodeState = { phase: "entering", error: null };
+
 export function SetupCodeStep({ onBack }: { onBack: () => void }) {
   const colors = useOnboardingColors();
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [applied, setApplied] = useState<string[] | null>(null);
+  const [state, setState] = useState<CodeState>(ENTERING_CODE);
+  const error = state.phase === "entering" ? state.error : null;
 
   const apply = () => {
     const result = applySetupCodeInOnboarding(code);
-    if (result.ok) setApplied(result.lines);
-    else setError(result.error);
+    setState(result.ok ? { phase: "applied", lines: result.lines } : { phase: "entering", error: result.error });
   };
 
-  if (applied)
+  if (state.phase === "applied")
     return (
       <StepLayout
         pageKey="setupCodeApplied"
@@ -48,7 +51,7 @@ export function SetupCodeStep({ onBack }: { onBack: () => void }) {
             <SecondaryButton title="Review Each Step" onPress={() => goToStep("layout")} />
           </>
         }
-        preview={<SetupLines heading="From your code:" lines={applied} />}
+        preview={<SetupLines heading="From your code:" lines={state.lines} />}
       />
     );
 
@@ -70,7 +73,7 @@ export function SetupCodeStep({ onBack }: { onBack: () => void }) {
           value={code}
           onChangeText={(text) => {
             setCode(text);
-            setError(null);
+            setState((current) => (current.phase === "entering" && current.error !== null ? ENTERING_CODE : current));
           }}
           onSubmitEditing={() => code.trim() && apply()}
           placeholder={`${SETUP_CODE_PREFIX}…`}

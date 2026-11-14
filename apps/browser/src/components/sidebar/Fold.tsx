@@ -12,24 +12,22 @@ type FoldState = { open: Animated.Value; moving: boolean };
 
 export function useFold(collapsed: boolean): FoldState {
   const open = useRef(new Animated.Value(collapsed ? 0 : 1)).current;
-  const [settled, setSettled] = useState(collapsed);
-  const [running, setRunning] = useState(false);
+  const [restsAt, setRestsAt] = useState<boolean | "running">(collapsed);
   const mounted = useRef(false);
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
       return;
     }
-    setRunning(true);
+    setRestsAt("running");
     const animation = Animated.timing(open, { toValue: collapsed ? 0 : 1, duration: FOLD_MS, easing: FOLD_EASING, useNativeDriver: false });
     animation.start(({ finished }) => {
       if (!finished) return;
-      setSettled(collapsed);
-      setRunning(false);
+      setRestsAt(collapsed);
     });
     return () => animation.stop();
   }, [collapsed]);
-  return { open, moving: running || settled !== collapsed };
+  return { open, moving: restsAt !== collapsed };
 }
 
 export type FoldEntry = { key: string; node: ReactNode; ghost?: boolean };

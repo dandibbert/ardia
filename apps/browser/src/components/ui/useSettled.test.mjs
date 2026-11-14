@@ -59,3 +59,28 @@ test("cancel drops a pending value", (t) => {
   c.advance(500);
   assert.deepEqual(c.applied, [1]);
 });
+
+test("a value pushed while one waits replaces it on the same timer", (t) => {
+  t.after(() => mock.timers.reset());
+  const c = clocked();
+  c.settler.push(1);
+  c.advance(40);
+  c.settler.push(2);
+  c.advance(40);
+  c.settler.push(3);
+  c.advance(80);
+  assert.deepEqual(c.applied, [1, 3]);
+  c.advance(500);
+  assert.deepEqual(c.applied, [1, 3]);
+});
+
+test("after cancel the next quiet push applies at once", (t) => {
+  t.after(() => mock.timers.reset());
+  const c = clocked();
+  c.settler.push(1);
+  c.settler.push(2);
+  c.settler.cancel();
+  c.advance(500);
+  c.settler.push(3);
+  assert.deepEqual(c.applied, [1, 3]);
+});

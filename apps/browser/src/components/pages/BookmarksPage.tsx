@@ -19,6 +19,7 @@ import { bookmarkList, pagesColors, undoToast } from "./tokens";
 
 type Target = { kind: "folder"; id: string } | { kind: "row"; id: string; index: number; folder: boolean };
 type Drop = { into: string } | { parentId: string; index: number };
+type UndoToast = { removal: { removed: RemovedBookmarks; count: number }; closing: boolean };
 
 export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: string }) {
   const theme = useTheme();
@@ -28,8 +29,7 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   const [folderId, setFolderId] = useState<string | null>(roots?.bar ?? null);
   const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<ListSelection>(NO_SELECTION);
-  const [undo, setUndo] = useState<{ removed: RemovedBookmarks; count: number } | null>(null);
-  const [undoClosing, setUndoClosing] = useState(false);
+  const [undo, setUndo] = useState<UndoToast | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const targets = useMemo(() => new DropTargets<Target>(), []);
 
@@ -65,12 +65,11 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
     if (!doomed.length) return;
     const removed = removeBookmarks(doomed);
     setSelection(NO_SELECTION);
-    setUndo({ removed, count: removed.places.length });
-    setUndoClosing(false);
+    setUndo({ removal: { removed, count: removed.places.length }, closing: false });
   };
   const undoRemove = () => {
     if (!undo) return;
-    restoreBookmarks(undo.removed);
+    restoreBookmarks(undo.removal.removed);
     setUndo(null);
   };
 
@@ -79,11 +78,12 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
   const onListLayout = useCallback((e: LayoutChangeEvent) => setViewport(Math.max(bookmarkList.row, Math.round(e.nativeEvent.layout.height))), []);
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => setScrollY(e.nativeEvent.contentOffset.y), []);
   const shown = rowWindow(ids.length, bookmarkList.row, scrollY, viewport);
+  const removal = undo?.removal;
   useEffect(() => {
-    if (!undo) return;
-    const timer = setTimeout(() => setUndoClosing(true), undoToast.visibleMs);
+    if (!removal) return;
+    const timer = setTimeout(() => setUndo((shown) => (shown ? { ...shown, closing: true } : shown)), undoToast.visibleMs);
     return () => clearTimeout(timer);
-  }, [undo]);
+  }, [removal]);
 
   const dragging = useRef<string[]>([]);
   const onDragStart = (id: string) => {
@@ -217,10 +217,10 @@ export function BookmarksPage({ tabId, profileId }: { tabId: string; profileId: 
       </View>
       {undo && (
         <Toast
-          title={`${plural(undo.count, "item")} deleted`}
+          title={`${plural(undo.removal.count, "item")} deleted`}
           action="Undo"
           onAction={undoRemove}
-          closing={undoClosing}
+          closing={undo.closing}
           onClosed={() => setUndo(null)}
         />
       )}

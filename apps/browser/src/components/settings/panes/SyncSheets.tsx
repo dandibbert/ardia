@@ -126,27 +126,30 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
   }
 };
 
+type PhraseState = { phase: "editing"; error: string | null } | { phase: "connecting" } | { phase: "joined" };
+
+const EDITING_PHRASE: PhraseState = { phase: "editing", error: null };
+
 function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; onChooseFolder?: () => void }) {
   const theme = useTheme();
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [joined, setJoined] = useState(false);
+  const [state, setState] = useState<PhraseState>(EDITING_PHRASE);
+  const busy = state.phase === "connecting";
+  const error = state.phase === "editing" ? state.error : null;
   const syncing = useSync((s) => s.enabled);
   const count = text.toLowerCase().split(/[^a-z]+/).filter(Boolean).length;
   const submit = async () => {
     if (!folder || busy) return;
-    setBusy(true);
-    setError(null);
+    setState({ phase: "connecting" });
     const joining = !syncing;
     const result = await enterRecoveryPhrase(folder.path, text);
-    setBusy(false);
     const message = phraseError(result);
-    if (message) setError(message);
-    else if (joining) setJoined(true);
-    else closeSettingsSheet();
+    if (message) return setState({ phase: "editing", error: message });
+    if (joining) return setState({ phase: "joined" });
+    setState(EDITING_PHRASE);
+    closeSettingsSheet();
   };
-  if (joined) return <JoinedSheet />;
+  if (state.phase === "joined") return <JoinedSheet />;
   return (
     <Sheet onClose={closeSettingsSheet}>
       <DialogTitle subtitle="Enter your 24-word recovery phrase to sync with another device.">Connect with Recovery Phrase</DialogTitle>
@@ -158,7 +161,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
           value={text}
           onChangeText={(t) => {
             setText(t);
-            setError(null);
+            setState((current) => (current.phase === "editing" && current.error !== null ? EDITING_PHRASE : current));
           }}
           autoFocus
           placeholder="Enter your 24-word recovery phrase"

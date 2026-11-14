@@ -15,8 +15,7 @@ export type Settler<T> = {
 
 export function createSettler<T>(apply: (value: T) => void, interval = SETTLE_MS, now: () => number = Date.now): Settler<T> {
   let last = -Infinity;
-  let pending: { value: T } | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let waiting: { timer: ReturnType<typeof setTimeout>; value: T } | null = null;
   const settler: Settler<T> = {
     apply,
     interval,
@@ -24,23 +23,20 @@ export function createSettler<T>(apply: (value: T) => void, interval = SETTLE_MS
       const at = now();
       const quiet = at - last > settler.interval;
       last = at;
-      if (quiet && !timer) {
+      if (quiet && !waiting) {
         settler.apply(value);
         return;
       }
-      pending = { value };
-      timer ??= setTimeout(flush, settler.interval);
+      waiting = { timer: waiting?.timer ?? setTimeout(flush, settler.interval), value };
     },
     cancel() {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      pending = null;
+      if (waiting) clearTimeout(waiting.timer);
+      waiting = null;
     },
   };
   const flush = () => {
-    timer = null;
-    const due = pending;
-    pending = null;
+    const due = waiting;
+    waiting = null;
     if (due) settler.apply(due.value);
   };
   return settler;

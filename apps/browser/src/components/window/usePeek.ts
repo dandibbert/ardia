@@ -10,6 +10,15 @@ const HIDE_DELAY_MS = 120;
 const ARC_IN = spring(ARC_PEEK_SPRING);
 const appInFront = () => backgroundInstance || AppState.currentState === "active";
 
+type PeekView = "hidden" | "shown" | "leaving";
+type PeekGate =
+  | { out: false; waitingForFocus: boolean }
+  | { out: true; heldBack: boolean; hideTimer?: ReturnType<typeof setTimeout> };
+
+const IN: PeekGate = { out: false, waitingForFocus: false };
+const WAITING_FOR_FOCUS: PeekGate = { out: false, waitingForFocus: true };
+const waitsForFocus = (gate: PeekGate) => !gate.out && gate.waitingForFocus;
+
 export function usePeek(
   enabled: boolean,
   arc = false,
@@ -18,12 +27,13 @@ export function usePeek(
   onOpen: (bounce: boolean) => void = () => {},
 ) {
   const slide = useRef(new Animated.Value(0)).current;
-  const [live, setLive] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const heldBack = useRef(false);
-  const out = useRef(false);
-  const waitingForFocus = useRef(false);
+  const [view, setView] = useState<PeekView>("hidden");
+  const live = view !== "hidden";
+  const leaving = view === "leaving";
+  const gate = useRef<PeekGate>(IN);
+  const clearHideTimer = () => {
+    if (gate.current.out) clearTimeout(gate.current.hideTimer);
+  };
   const animate = (to: number, done?: () => void) =>
     (arc
       ? to > 0
@@ -32,57 +42,56 @@ export function usePeek(
       : Animated.timing(slide, { toValue: to, duration: SLIDE_MS, easing: curve.enter, useNativeDriver: true })
     ).start(({ finished }) => finished && done?.());
   const slideOut = () => {
-    out.current = false;
-    setLeaving(true);
+    gate.current = IN;
+    setView("leaving");
     onSlideOut();
-    animate(0, () => {
-      setLive(false);
-      setLeaving(false);
-    });
+    animate(0, () => setView("hidden"));
   };
   const show = () => {
-    clearTimeout(hideTimer.current);
-    heldBack.current = false;
+    clearHideTimer();
+    const wasOut = gate.current.out;
+    if (wasOut) gate.current = { out: true, heldBack: false };
     if (!enabled) return;
-    if (!out.current && !appInFront()) {
-      waitingForFocus.current = true;
+    if (!wasOut && !appInFront()) {
+      gate.current = WAITING_FOR_FOCUS;
       return;
     }
-    waitingForFocus.current = false;
-    if (!out.current) onOpen(live);
-    out.current = true;
-    setLeaving(false);
-    setLive(true);
+    if (!wasOut) onOpen(live);
+    gate.current = { out: true, heldBack: false };
+    setView("shown");
     animate(1);
   };
   const cancelPending = (pointerStillAtEdge = false) => {
-    waitingForFocus.current &&= pointerStillAtEdge;
+    if (waitsForFocus(gate.current) && !pointerStillAtEdge) gate.current = IN;
   };
   const hide = () => {
-    clearTimeout(hideTimer.current);
-    if (!out.current) return cancelPending();
-    hideTimer.current = setTimeout(() => {
-      heldBack.current = held();
-      if (!heldBack.current) slideOut();
+    const current = gate.current;
+    if (!current.out) return cancelPending();
+    clearTimeout(current.hideTimer);
+    const hideTimer = setTimeout(() => {
+      if (held()) gate.current = { out: true, heldBack: true };
+      else slideOut();
     }, HIDE_DELAY_MS);
+    gate.current = { out: true, heldBack: current.heldBack, hideTimer };
   };
   const recheck = () => {
-    if (!heldBack.current || held()) return;
-    heldBack.current = false;
+    const current = gate.current;
+    if (!current.out || !current.heldBack || held()) return;
+    gate.current = { ...current, heldBack: false };
     hide();
   };
   const latestShow = useRef(show);
   latestShow.current = show;
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => state === "active" && waitingForFocus.current && latestShow.current());
+    const sub = AppState.addEventListener("change", (state) => state === "active" && waitsForFocus(gate.current) && latestShow.current());
     return () => sub.remove();
   }, []);
   useEffect(() => {
     if (enabled) return;
-    waitingForFocus.current = false;
-    clearTimeout(hideTimer.current);
+    clearHideTimer();
+    gate.current = gate.current.out ? { out: true, heldBack: gate.current.heldBack } : IN;
     if (live) slideOut();
   }, [enabled]);
-  useEffect(() => () => clearTimeout(hideTimer.current), []);
+  useEffect(() => () => clearHideTimer(), []);
   return { slide, live, leaving, show, hide, recheck, cancelPending };
 }

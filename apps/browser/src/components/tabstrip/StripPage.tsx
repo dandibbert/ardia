@@ -21,6 +21,7 @@ import { DraggableChip } from "./TabChip";
 import { FLARE, GAP, NEW_TAB_ROOM } from "./tokens";
 
 type Hold = { chip: number; end: number };
+type Pointer = { at: "away" } | { at: "in" } | { at: "holding"; hold: Hold; closedTo: string };
 
 const stripEnd = ({ slots, lefts }: DragGeometry) => (slots.length ? lefts.at(-1)! + slots.at(-1)!.width : 0);
 
@@ -38,26 +39,27 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
   const folderChip = (groupId: string) => folderWidths[folderIds.indexOf(groupId)];
   const dockEntry = parsed.find((e) => e.kind === "dock");
   const dock = useMemo(() => layoutDock(dockEntry), [dockEntry]);
-  const pointerIn = useRef(false);
-  const held = useRef<Hold | null>(null);
+  const pointer = useRef<Pointer>({ at: "away" });
   const last = useRef<Hold & { count: number }>(null);
-  const closedTo = useRef("");
   const [releases, release] = useReducer((n: number) => n + 1, 0);
   const count = parsed.reduce((n, e) => n + (e.kind === "dock" ? 0 : e.kind === "group" ? e.members.flatMap(tabsOf).length : tabsOf(e).length), 0);
-  if (pointerIn.current && last.current && count < last.current.count) {
-    held.current ??= { chip: last.current.chip, end: last.current.end };
-    closedTo.current = activeId;
+  if (pointer.current.at !== "away" && last.current && count < last.current.count) {
+    const hold = pointer.current.at === "holding" ? pointer.current.hold : { chip: last.current.chip, end: last.current.end };
+    pointer.current = { at: "holding", hold, closedTo: activeId };
   }
-  const { chip, top, targets, memberWidth, spanOf: spanInStrip, tabsEnd, tabsShrink } = layoutStrip(parsed, activeId, pageWidth, { groupChip: chipOf, folderChip }, dock, held.current?.chip);
+  const held = pointer.current.at === "holding" ? pointer.current.hold : null;
+  const { chip, top, targets, memberWidth, spanOf: spanInStrip, tabsEnd, tabsShrink } = layoutStrip(parsed, activeId, pageWidth, { groupChip: chipOf, folderChip }, dock, held?.chip);
   last.current = { count, chip, end: stripEnd(top) };
-  const spare = held.current ? Math.max(0, held.current.end - stripEnd(top)) : 0;
+  const spare = held ? Math.max(0, held.end - stripEnd(top)) : 0;
   const pinned = newTabPinned(chip, tabsEnd + spare, pageWidth, tabsShrink);
   const newTab = <NewTabButton windowId={windowId} geometry={top} pinned={pinned} />;
+  const enter = () => {
+    if (pointer.current.at !== "holding") pointer.current = current ? { at: "in" } : { at: "away" };
+  };
   const leave = () => {
-    pointerIn.current = false;
-    if (!held.current) return;
-    held.current = null;
-    release();
+    const wasHolding = pointer.current.at === "holding";
+    pointer.current = { at: "away" };
+    if (wasHolding) release();
   };
   const slotOf = (id: string) => top.slots.findIndex((slot) => slot.tabIds[0] === id);
   const grow = useRef(new Animated.Value(0)).current;
@@ -90,7 +92,8 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
     if (current && activeId && !tabDragging()) reveal(activeId, false);
   };
   useEffect(() => {
-    if (revealed.current === activeId || (held.current && closedTo.current === activeId)) return;
+    const now = pointer.current;
+    if (revealed.current === activeId || (now.at === "holding" && now.closedTo === activeId)) return;
     revealed.current = activeId;
     if (!current || !activeId || tabDragging()) return;
     const frame = requestAnimationFrame(() => reveal(activeId, true));
@@ -105,7 +108,7 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
   return (
     <Animated.View
       pointerEvents={current ? "auto" : "none"}
-      onMouseEnter={() => void (pointerIn.current = current)}
+      onMouseEnter={enter}
       onMouseLeave={leave}
       style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pageWidth + flare * 2, display: resting ? "none" : "flex", ...pageStyle }}
     >
