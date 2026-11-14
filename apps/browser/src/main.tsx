@@ -13,6 +13,7 @@ import { startOpenWhenDone } from "./state/windows/downloadWatch";
 import { startUserScripts } from "./state/extensions/userScripts";
 import { startKillSwitches } from "./platform/killSwitchesLaunch";
 import { startMemoryTrim } from "./state/tabs/memoryTrim";
+import { startJsStalls } from "./state/telemetry/jsStalls";
 import { startNativeSync } from "./state/app/nativeSync";
 import { startPersistence } from "./state/session/persist";
 import { configRestoreSession, startConfigFiles } from "./state/config/configFiles";
@@ -63,6 +64,7 @@ afterFirstWindow(startUserScripts);
 afterFirstWindow(startAutomation);
 afterFirstWindow(startSharedFolders);
 startMemoryTrim();
+startJsStalls();
 if (__DEV__ || perfProbeEnabled) require("./components/dev/devHarness").startDevHarness();
 
 const devMountDelay = () => (__DEV__ ? ((globalThis as { acDevMountDelayMs?: number }).acDevMountDelayMs ?? 0) : 0);

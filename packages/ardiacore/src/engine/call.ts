@@ -48,8 +48,17 @@ type Listener = (data: unknown) => void;
 const listeners = new Map<string, Set<Listener>>();
 const channels = new Map<string, EventSubscription>();
 
+type DeliveryTimer = (name: string, run: () => void) => void;
+let timeDelivery: DeliveryTimer = (_name, run) => run();
+
+export function timeEngineEvents(timer: DeliveryTimer) {
+  timeDelivery = timer;
+}
+
 function deliver({ name, data }: { name: string; data: unknown }) {
-  for (const listener of [...(listeners.get(name) ?? [])]) listener(data);
+  timeDelivery(name, () => {
+    for (const listener of [...(listeners.get(name) ?? [])]) listener(data);
+  });
 }
 
 export function on<E extends EventName>(name: E, listener: (data: EngineEvents[E]) => void): EventSubscription {
