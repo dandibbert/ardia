@@ -53,6 +53,7 @@ the start unless noted. All clocks are epoch ms on the same Mac: JS's `Date.now(
 | | `j3_view` | → the page's view shown (same commit as `j3_frame` for a loaded page) |
 | | `j3_page` | → a page that was hidden: its first new frame |
 | | `j3_total` | the end that applies (**the J3 total**): cold → `j3_page`, warm → `j3_view`, load → its first contentful paint, other → `j3_frame` |
+| J5 profile switch | `j5_js` … `j5_total` | the same steps as J3, for the tab a window shows when it switches profile (not counted as J3); its marks are looked for up to 10 s after the click instead of J3's 2 s, so a page that only shows seconds later is still timed |
 | J4 navigate | `j4_request` | Enter (or a click on a suggestion) → the engine asked to load: **our side** |
 | | `j4_start` | → Chrome started the navigation |
 | | `j4_commit` | → the new document committed |
@@ -65,6 +66,8 @@ summary). Counts: `j3_cold` (the page was hidden), `j3_warm` (it was still paint
 `j4_no_paint` (nothing painted within 30 s), `j4_replaced` (another navigation came first).
 Context: `tabs`, how many tabs were open when the summary went out (an exact count, from the first nightly after 0.2.46-nightly.6), so J2 and J3 can
 be split by tab count: they must not grow with it (#1330). Before it, join `perf_memory`'s tab count by copy.
+`perf_slow_switch` goes at once for any J3 or J5 whose slowest step took 1.5 s or more: `journey` (`j3`, `j5`), `kind` (`load`, `cold`, `warm`, `other`), and `js_ms`, `frame_ms`, `view_ms`, `page_ms`, `total_ms` (null when the step didn't happen). It shows which step a slow switch spent its time in without a trace.
+`js_stall` goes when the JS thread missed its 250 ms heartbeat for 1 s or more while the user pressed a key or clicked: `ms` (the gap), `input_wait_ms` (how long that input waited), `long_tasks`, and `task_1`…`task_3` with `task_N_ms`, the longest calls (≥ 200 ms) inside the gap: bridge calls as `Module method` (`RCTDeviceEventEmitter emit <event>` for native events), `callback` or `microtasks`, engine events as `engine <domain> <event>`, and `memoryTrim gc` for the forced collection; names use spaces, since the property scrubber turns dotted names into `<host>`. `heap_mb` is Hermes' heap after the gap, `gcs` and `gc_ms` the collections that ran in it. At most 50 a session. A forced collection that takes 1 s or more ends memoryTrim's forced collections for the session (the engine trim still runs).
 `perf_journeys` goes hourly and at quit, like `perf_omnibox`; `perf_launch` once its steps are in (≤ 30 s after the first
 window, or at quit), not at the first window as before.
 

@@ -64,7 +64,11 @@ export function startActionStates() {
   useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows || focusedWindowOf(s) !== focusedWindowOf(prev)) return void refreshActionStates();
     if (s.tabs === prev.tabs) return;
-    if (s.windowOrder.some((id) => { const active = activeTabId(s, id); return !!active && s.tabs[active] !== prev.tabs[active]; })) void refreshActionStates();
+    const pageChanged = (id: string) => {
+      const active = activeTabId(s, id);
+      return !!active && (active !== activeTabId(prev, id) || s.tabs[active]?.url !== prev.tabs[active]?.url);
+    };
+    if (s.windowOrder.some(pageChanged)) void refreshActionStates();
   });
   useExtensions.subscribe((e, prev) => {
     if (e.lists !== prev.lists || e.popup !== prev.popup) void refreshActionStates();

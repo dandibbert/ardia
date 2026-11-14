@@ -107,7 +107,7 @@ test("titles: only a changed title is sent", () => {
   sync.sync(S(), prev);
   assert.deepEqual(native.of("setTitle"), []);
   prev = S();
-  S().newTab(a);
+  S().newTab(a, { url: "example.com" });
   sync.sync(S(), prev);
   assert.deepEqual(native.of("setTitle"), [["setTitle", a, windowTitle(S(), a)]]);
 });

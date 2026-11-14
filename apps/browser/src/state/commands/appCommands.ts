@@ -1,6 +1,6 @@
 import { openTaskManager } from "../../platform/performance";
 import { copyText } from "../../platform/clipboard";
-import { engineInfo, systemInfo, updaterState } from "../../platform/app";
+import { engineInfo, focusReport, systemInfo, updaterState } from "../../platform/app";
 import { redoOnboarding } from "../onboarding/onboarding";
 import { openVideoTour, startToolTour } from "../onboarding/tour";
 import { useBrowser } from "../browser/store";
@@ -28,7 +28,11 @@ export function reportProblem(windowId?: string | null, source: "menu" | "check_
 
 export async function diagnostics(): Promise<string> {
   const app = systemInfo();
-  const [engine, updates] = await Promise.all([engineInfo().catch(() => null), updaterState().catch(() => null)]);
+  const [engine, updates, focusState] = await Promise.all([
+    engineInfo().catch(() => null),
+    updaterState().catch(() => null),
+    focusReport().catch(() => null),
+  ]);
   const s = useBrowser.getState();
   const regular = s.windowOrder.filter((id) => s.windows[id]?.kind !== "private");
   return [
@@ -44,5 +48,6 @@ export async function diagnostics(): Promise<string> {
         : `Updates: automatic checks ${updates.automaticChecks ? "on" : "off"}, feed ${updates.feedURL ?? "none"}`,
     webKitMediaFaultsLine(),
     ...(engine?.focus ? [`Focus: ${engine.focus.replace(/\n/g, "\n  ")}`] : []),
+    ...(focusState ? [focusState] : []),
   ].join("\n");
 }

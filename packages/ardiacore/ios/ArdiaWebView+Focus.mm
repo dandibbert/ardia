@@ -16,6 +16,81 @@ static BOOL InTabPage(NSView *view) {
   return NO;
 }
 
+static BOOL StrayResponder(NSView *focused, NSWindow *window) {
+  if (!focused) return NO;
+  if (focused.window != window || focused.isHiddenOrHasHiddenAncestor) return YES;
+  for (NSView *v = focused; v; v = v.superview)
+    if ([v isKindOfClass:ArdiaWebView.class]) return !((ArdiaWebView *)v)->_visible;
+  return NO;
+}
+
+static void RefreshPageKeyState(NSView *root, NSWindow *window) {
+  if (!root || !window.isKeyWindow) return;
+  SEL becameKey = NSSelectorFromString(@"windowDidBecomeKey:");
+  NSNotification *note = [NSNotification notificationWithName:NSWindowDidBecomeKeyNotification object:window];
+  NSMutableArray<NSView *> *queue = [NSMutableArray arrayWithObject:root];
+  while (queue.count) {
+    NSView *view = queue.firstObject;
+    [queue removeObjectAtIndex:0];
+    if (view.window == window && [NSStringFromClass(view.class) isEqualToString:@"RenderWidgetHostViewCocoa"] &&
+        [view respondsToSelector:becameKey]) {
+      IMP imp = [view methodForSelector:becameKey];
+      ((void (*)(id, SEL, NSNotification *))imp)(view, becameKey, note);
+    }
+    [queue addObjectsFromArray:view.subviews];
+  }
+}
+
+static ArdiaWebView *ShownPageUnder(NSEvent *event) {
+  NSView *content = event.window.contentView;
+  NSView *root = content.superview ?: content;
+  NSView *hit = root ? [root hitTest:[root convertPoint:event.locationInWindow fromView:nil]] : nil;
+  for (NSView *view = hit; view; view = view.superview)
+    if ([view isKindOfClass:ArdiaWebView.class]) return (ArdiaWebView *)view;
+  return nil;
+}
+
+- (void)refreshPageKeyStateSoon {
+  __weak ArdiaWebView *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    ArdiaWebView *shown = weakSelf;
+    if (shown && shown->_visible) RefreshPageKeyState(shown->_tab.view, shown.window);
+  });
+}
+
++ (void)installPageKeyWatch {
+  static id strayFocusClicks, windowKeys;
+  if (strayFocusClicks) return;
+  strayFocusClicks = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *event) {
+    ArdiaWebView *page = ShownPageUnder(event);
+    NSWindow *window = event.window;
+    NSResponder *responder = window.firstResponder;
+    NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
+    if (page && page->_visible && !page->_standalone && focused && ![focused isDescendantOf:page] && StrayResponder(focused, window))
+      [window makeFirstResponder:nil];
+    if (page && page->_visible) RefreshPageKeyState(page->_tab.view, window);
+    return event;
+  }];
+  windowKeys = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidBecomeKeyNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+    __weak NSWindow *weakWindow = note.object;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow *window = weakWindow;
+      if (!window.isKeyWindow) return;
+      for (ArdiaWebView *view in LiveViews().allObjects)
+        if (view.window == window && view->_visible) RefreshPageKeyState(view->_tab.view, window);
+      NSResponder *responder = window.firstResponder;
+      NSView *focused = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
+      if (focused ? !StrayResponder(focused, window) : (responder && responder != window)) return;
+      for (ArdiaWebView *view in LiveViews().allObjects)
+        if (view.window == window && view->_visible && !view->_standalone && view->_tab && view->_focus.page != ArdiaPageFocus::Elsewhere) {
+          if (focused) [window makeFirstResponder:nil];
+          [view focusPage];
+          return;
+        }
+    });
+  }];
+}
+
 + (void)keepOutgoingFocusFrom:(NSResponder *)responder {
   if (ArdiaWebView *view = [ArdiaWebView holding:responder]) {
     [view storePageFocusFrom:responder];
@@ -89,10 +164,12 @@ static BOOL InTabPage(NSView *view) {
   if (!_visible || page.isHiddenOrHasHiddenAncestor) return;
   [self takeFocusFromLingeringPane];
   _focus.onActivate = NO;
+  RefreshPageKeyState(page, window);
   NSResponder *responder = window.firstResponder;
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
-  if (view && [view isDescendantOf:self]) return;
-  if (responder && responder != window && !(view && InTabPage(view))) return;
+  const BOOL stray = StrayResponder(view, window);
+  if (view && !stray && [view isDescendantOf:self]) return;
+  if (responder && responder != window && !stray && !(view && InTabPage(view))) return;
   NSView *devTools = _focus.devTools;
   if (_focus.page == ArdiaPageFocus::DevTools && devTools.window == window && _devtoolsView && [devTools isDescendantOf:_devtoolsView]) {
     [window makeFirstResponder:devTools];
@@ -107,6 +184,7 @@ static BOOL InTabPage(NSView *view) {
 
 - (void)focusPage {
   if ([ArdiaEarlyWindow veils:_tab]) return [ArdiaEarlyWindow requestFocus:_tab];
+  RefreshPageKeyState(_tab.view, self.window);
   [_tab focus];
 }
 

@@ -77,6 +77,7 @@ public class AppModule: Module {
       ]
     }
 
+    AsyncFunction("focusReport") { () -> String in FocusTrace.report() }.runOnQueue(.main)
     AsyncFunction("crashReports") { (since: Double) -> [[String: Any]] in CrashReports.since(since) }
     AsyncFunction("hardwareInfo") { () -> [String: Any] in DiagnosticsInfo.hardware() }
     AsyncFunction("diagnosticsSample") { () -> [String: Any] in DiagnosticsInfo.sample() }

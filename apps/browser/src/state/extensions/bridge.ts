@@ -2,6 +2,9 @@ import { onExtensionActionPopup, onExtensionActionShortcut, onExtensionSidePanel
 import { useBrowser, type BrowserState } from "../browser/store";
 import { shownPageId } from "../peek/peek";
 import { startActionStates, watchActionsOf } from "./actionWatch";
+import { changedIds } from "../browser/changes";
+import { openLittleArdia } from "../littleArdia/actions";
+import { littleArdiaLinkOf } from "./littleArdiaLink";
 import { startExtensionSearchEngines } from "./searchEngines";
 import { reportExtensionsLoaded } from "./loadHealth";
 import { watchExtensionInstallFailures } from "./crxDrop";
@@ -26,8 +29,38 @@ import {
   windowExtensions,
 } from "./actions";
 
+const openedLittleArdiaLinkTabs = new Set<string>();
+const LITTLE_ARDIA_LINK_REPEAT_MS = 2000;
+let lastLittleArdiaLink: { link: string; at: number } | null = null;
+
+function opensLittleArdiaLinkAgain(link: string) {
+  const now = Date.now();
+  const repeat = lastLittleArdiaLink?.link === link && now - lastLittleArdiaLink.at < LITTLE_ARDIA_LINK_REPEAT_MS;
+  lastLittleArdiaLink = { link, at: now };
+  return repeat;
+}
+
+function openLittleArdiaLinkTabs(s: BrowserState, prev: BrowserState) {
+  if (s.tabs === prev.tabs) return;
+  for (const id of changedIds(s.tabs, prev.tabs)) {
+    const tab = s.tabs[id];
+    if (!tab) {
+      openedLittleArdiaLinkTabs.delete(id);
+      continue;
+    }
+    const link = littleArdiaLinkOf(tab.url);
+    if (!link || openedLittleArdiaLinkTabs.has(id)) continue;
+    openedLittleArdiaLinkTabs.add(id);
+    queueMicrotask(() => {
+      s.closeTab(id);
+      if (!opensLittleArdiaLinkAgain(link)) openLittleArdia(link, tab.profileId);
+    });
+  }
+}
+
 export function startExtensionsBridge() {
   onExtensionTabsRequest(openRequestedTab);
+  useBrowser.subscribe(openLittleArdiaLinkTabs);
   startExtensionSearchEngines();
   onExtensionsChanged(({ profile }) => void refreshExtensions(profile));
   onSyncedExtensionChange((profile) => void refreshExtensionsAfterChange(profile));

@@ -72,7 +72,7 @@ function mark(key: string, kind: string, from: number, until = Infinity): number
 }
 
 type NewTab = { journey: "j2"; key: string; t0: number; heard: number; bar?: number; barSettled?: boolean; keyAt?: number; suggested?: number };
-type Switch = { journey: "j3"; key: string; t0: number; heard: number };
+type Switch = { journey: "j3" | "j5"; key: string; t0: number; heard: number };
 type Navigate = { journey: "j4"; key: string; t0: number; until?: number };
 type Launch = { journey: "j1"; t0: number; firstWindow?: number; commit?: number; usable?: number; keys: string[]; tabs: number; windows: number };
 type Pending = NewTab | Switch | Navigate | Launch;
@@ -107,6 +107,7 @@ function settleOne(p: Pending, now: number): boolean {
     case "j2":
       return settleNewTab(p, now);
     case "j3":
+    case "j5":
       return settleSwitch(p, now);
     case "j4":
       return settleNavigate(p, now);
@@ -137,8 +138,11 @@ function settleNewTab(p: NewTab, now: number) {
   return now - p.t0 > 60_000;
 }
 
+const SWITCH_WINDOW_MS = { j3: 2000, j5: 10_000 };
+const SLOW_SWITCH_MS = 1500;
+
 function settleSwitch(p: Switch, now: number) {
-  const end = p.t0 + 2000;
+  const end = p.t0 + SWITCH_WINDOW_MS[p.journey];
   if (now < end + 500) return false;
   const started = mark(p.key, "request", p.t0, end) ?? mark(p.key, "start", p.t0, end);
   const fcp = started === null ? null : mark(p.key, "fcp", p.t0);
@@ -147,12 +151,18 @@ function settleSwitch(p: Switch, now: number) {
   const view = mark(p.key, "view", p.t0, end);
   const shown = mark(p.key, "shown", p.t0, end);
   const kind = started !== null ? "load" : shown !== null ? "cold" : view !== null ? "warm" : "other";
-  sample("j3_js", p.heard - p.t0);
-  sample("j3_frame", since(frameAt, p.t0));
-  sample("j3_view", since(view, p.t0));
-  sample("j3_page", since(shown, p.t0));
-  sample("j3_total", since(kind === "load" ? fcp : kind === "cold" ? shown : kind === "warm" ? view : frameAt, p.t0));
-  count(`j3_${kind}`);
+  const steps = {
+    js: p.heard - p.t0,
+    frame: since(frameAt, p.t0),
+    view: since(view, p.t0),
+    page: since(shown, p.t0),
+    total: since(kind === "load" ? fcp : kind === "cold" ? shown : kind === "warm" ? view : frameAt, p.t0),
+  };
+  for (const [step, ms] of Object.entries(steps)) sample(`${p.journey}_${step}`, ms);
+  count(`${p.journey}_${kind}`);
+  if (Math.max(...Object.values(steps).map((ms) => ms ?? 0)) >= SLOW_SWITCH_MS && isSharing()) {
+    capture("perf_slow_switch", { journey: p.journey, kind, ...Object.fromEntries(Object.entries(steps).map(([step, ms]) => [`${step}_ms`, ms === null ? null : Math.round(ms)])) });
+  }
   return true;
 }
 
@@ -279,11 +289,16 @@ function watchStore(s: BrowserState, prev: BrowserState) {
   for (const id in s.windows) {
     const now = activeTabId(s, id);
     const before = activeTabId(prev, id);
-    if (!now || now === before || s.windows[id]!.profileId !== prev.windows[id]?.profileId) continue;
+    if (!now || now === before || !prev.windows[id]) continue;
     const t0 = lastInput();
     if (t0 === null) continue;
     const heard = Date.now();
-    if (!prev.tabs[now]) {
+    if (s.windows[id]!.profileId !== prev.windows[id]!.profileId) {
+      if (prev.tabs[now]) {
+        begin({ journey: "j5", key: now, t0, heard });
+        frame(now, "frame");
+      }
+    } else if (!prev.tabs[now]) {
       if (!s.tabs[now]!.url) begin({ journey: "j2", key: now, t0, heard });
     } else if (before && s.tabs[before]?.windowId === id) {
       begin({ journey: "j3", key: now, t0, heard });

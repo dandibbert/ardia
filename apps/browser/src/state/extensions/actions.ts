@@ -18,7 +18,7 @@ import { confirm } from "../../platform/dialogs";
 import { showMenu, type MenuItem } from "../../platform/menus";
 import type { ChoiceItem } from "../app/menuChoice";
 import { menuSections } from "../app/menuSections";
-import { focus, openWindow } from "../browser/actions";
+import { focus, openUrls, openWindow } from "../browser/actions";
 import { webviews } from "../../platform/webviews";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { engineProfile } from "../browser/model";
@@ -200,7 +200,7 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
   focus(regular);
 }
 
-export const openManageExtensions = (windowId?: string | null) => openSettings("extensions", extensionsProfileId(null, windowId));
+export const openManageExtensions = (windowId?: string | null) => openUrls(["chrome://extensions"], windowId);
 
 export function openExtensionDetails(profileId: string, extensionId: string) {
   if (useSettingsNav.getState().profileId !== profileId) replaceSettingsPlace(profileId);

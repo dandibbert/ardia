@@ -1,6 +1,6 @@
-import { call, inputIdleSeconds, on, type BatterySaverMode, type EngineTask, type HoverLostEpisode, type MemorySaverMode, type MemorySaverRequest, type SystemState } from "@ardia/ardiacore";
+import { call, inputIdleSeconds, on, timeEngineEvents, type BatterySaverMode, type EngineTask, type HoverLostEpisode, type MemorySaverMode, type MemorySaverRequest, type SystemState } from "@ardia/ardiacore";
 
-export { inputIdleSeconds };
+export { inputIdleSeconds, timeEngineEvents };
 export type { EngineTask, HoverLostEpisode, MemorySaverMode, SystemState };
 
 export const listTasks = () => call("engine.tasks");

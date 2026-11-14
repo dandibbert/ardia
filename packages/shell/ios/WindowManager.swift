@@ -21,6 +21,73 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private let typeAhead = TypeAheadHold()
   private(set) lazy var fullScreen = FullScreenRestore(windows: self)
 
+  override init() {
+    super.init()
+    for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+      NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged), name: name, object: nil)
+    }
+    NotificationCenter.default.addObserver(self, selector: #selector(appActivated), name: NSApplication.didBecomeActiveNotification, object: nil)
+    clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+      self?.keyWindowForClick(event)
+      return event
+    }
+  }
+
+  private var clickMonitor: Any?
+  private var background: Bool { LaunchConfig.shared.background }
+  var holdsTyping: Bool { typeAhead.isHolding }
+
+  private func keyWindowForClick(_ event: NSEvent) {
+    guard NSApp.modalWindow == nil, !background, !event.modifierFlags.contains(.command),
+      let window = event.window, id(of: window) != nil, Self.shownOnScreen(window), window.canBecomeKey
+    else { return }
+    if !NSApp.isActive {
+      FocusTrace.record("click in \(window.windowNumber) activates the app")
+      NSApp.activate()
+      return
+    }
+    var key = NSApp.keyWindow
+    while let k = key, k !== window { key = k.parent }
+    guard key == nil else { return }
+    FocusTrace.record("click made \(window.windowNumber) key (was \(NSApp.keyWindow?.windowNumber ?? 0))")
+    window.makeKey()
+  }
+
+  @objc private func appActivated() {
+    guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
+    DispatchQueue.main.async { [weak self] in self?.keyWindowUnderActivatingClick() }
+  }
+
+  private func keyWindowUnderActivatingClick() {
+    guard NSApp.isActive, NSApp.modalWindow == nil, !background else { return }
+    let number = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+    guard let window = NSApp.window(withWindowNumber: number), id(of: window) != nil, Self.shownOnScreen(window), window.canBecomeKey
+    else { return }
+    var key = NSApp.keyWindow
+    while let k = key, k !== window { key = k.parent }
+    guard key == nil else { return }
+    FocusTrace.record("activating click made \(window.windowNumber) key (was \(NSApp.keyWindow?.windowNumber ?? 0))")
+    window.makeKeyAndOrderFront(nil)
+  }
+
+  private static func shownOnScreen(_ window: NSWindow) -> Bool {
+    window.isVisible && window.alphaValue > 0.01 && !window.isMiniaturized
+      && NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+  }
+
+  @objc private func keyWindowChanged() {
+    DispatchQueue.main.async { [weak self] in self?.moveKeyOffHiddenWindow() }
+  }
+
+  private func moveKeyOffHiddenWindow() {
+    guard NSApp.isActive, NSApp.modalWindow == nil, !background else { return }
+    let key = NSApp.keyWindow
+    if let key, id(of: key) != nil || Self.shownOnScreen(key) { return }
+    guard let target = NSApp.orderedWindows.first(where: { id(of: $0) != nil && Self.shownOnScreen($0) && $0.canBecomeKey }) else { return }
+    FocusTrace.record("moved key to \(target.windowNumber) (was \(key?.windowNumber ?? 0))")
+    target.makeKey()
+  }
+
   func window(_ id: String) -> NSWindow? { managed[id]?.window }
 
   var windowIds: [String] { Array(managed.keys) }
@@ -136,6 +203,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if small, frame == nil { placeSmall(window, size: smallSize, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame) }
     relayoutRoot(window)
     managed[id] = entry
+    FocusTrace.watch(window)
     if !small { lastPlaced = window }
     if window.isMiniaturized {
       observeFrame(window)
@@ -234,6 +302,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard let id = id(of: from), let entry = managed[id] else { return }
     NotificationCenter.default.removeObserver(self, name: nil, object: from)
     entry.window = to
+    FocusTrace.watch(to)
     if lastPlaced === from { lastPlaced = to }
     observeDelegateNotifications(to)
     observeFrame(to)
@@ -262,6 +331,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     window.delegate = self
     let entry = ManagedWindow(id: id, kind: kind, window: window)
     managed[id] = entry
+    FocusTrace.watch(window)
     if !window.setFrameUsingName(Self.auxFrameName(kind)) { window.center() }
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(auxFrameChanged(_:)), name: name, object: window)

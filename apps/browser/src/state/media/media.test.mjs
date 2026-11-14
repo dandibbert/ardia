@@ -82,6 +82,22 @@ test("media that never played with sound gets no sidebar player until it does", 
   assert.equal(pick(), undefined, "another muted video took over the page");
 });
 
+test("a repeated now-playing report on the same timeline leaves the session untouched", () => {
+  S().hydrate({});
+  const w = S().createWindow({ url: "a.com" });
+  const t = S().newTab(w, { url: "b.com", background: true });
+  const start = Date.now();
+  media.setNowPlaying(t, report({ position: 10, timestamp: start }));
+  const first = M().sessions[t];
+  media.setNowPlaying(t, report({ position: 10.1, timestamp: start + 100 }));
+  assert.equal(M().sessions[t], first);
+  media.setNowPlaying(t, report({ position: 40, timestamp: start + 100 }));
+  assert.notEqual(M().sessions[t], first, "a seek is a change");
+  const seeked = M().sessions[t];
+  media.setNowPlaying(t, report({ position: 40, timestamp: start + 100, playbackState: "paused" }));
+  assert.notEqual(M().sessions[t], seeked, "a pause is a change");
+});
+
 test("play on a sleeping tab reloads it and resumes where it paused", async () => {
   const { useLifecycle } = await import("../tabs/sleepingTabs.ts");
   S().hydrate({});

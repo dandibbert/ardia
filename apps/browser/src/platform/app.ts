@@ -36,6 +36,7 @@ export const onOpenURLs = (listener: (urls: string[], pointer?: [number, number]
 
 export const systemInfo = () => App.systemInfo();
 export const crashReports = (since: number) => App.crashReports(since);
+export const focusReport = () => App.focusReport();
 export const hardwareInfo = () => App.hardwareInfo();
 export const diagnosticsSample = () => App.diagnosticsSample();
 export const openExternalURL = (url: string) => App.openExternalURL(url);

@@ -67,6 +67,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface ArdiaWebView (Focus)
++ (void)installPageKeyWatch;
 + (void)keepOutgoingFocusFrom:(NSResponder *)responder NS_SWIFT_NAME(keepOutgoingFocus(from:));
 + (void)endOutgoingFocusFrom:(NSResponder *)responder NS_SWIFT_NAME(endOutgoingFocus(from:));
 - (void)focusPage;

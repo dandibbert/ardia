@@ -7,7 +7,7 @@ import { layout, useTheme } from "../ui/theme";
 import { useIsIncognito, useProfile, useSettings } from "../../state/browser/hooks";
 import { useProfileOrder, useProfileRecords } from "../../state/profiles/hooks";
 import { useNativePagerPosition, usePagerPages, type PagerPage } from "../../state/windows/profilePager";
-import { ContextMenuArea, useHover } from "../ui";
+import { ContextMenuArea, radius, useHover } from "../ui";
 import { TooltipAbove } from "../ui/TooltipAbove";
 import { SIDEBAR_FOOTER_DOWNLOADS } from "../sidebar/geometry";
 import { switcherCellWidth, switcherIcons, SwitcherMark } from "./ProfileIcons";
@@ -18,6 +18,7 @@ import { buttonMotion, usePressScaleMotion } from "../ui/motion";
 export const PROFILE_DOTS_HEIGHT = profileSwitcher.height;
 const { band: BAND, dotTooltipLift } = profileSwitcher;
 const SIDE_ROOM = layout.sidebarInset;
+const HOVER_PAD = 20;
 const SIDE_ROOM_BESIDE_DOWNLOADS = SIDEBAR_FOOTER_DOWNLOADS.left + SIDEBAR_FOOTER_DOWNLOADS.size + 4;
 
 export function useProfileDotsShown() {
@@ -74,6 +75,9 @@ function Dot({ id, windowId, icon, page, pos }: { id: string; windowId: string; 
           }}
         >
           <View style={{ width: cell, height: BAND, alignItems: "center", justifyContent: "center" }}>
+            {hovered ? (
+              <View style={{ position: "absolute", width: HOVER_PAD, height: HOVER_PAD, borderRadius: radius.toolbar, backgroundColor: theme.rowHover }} />
+            ) : null}
             <Animated.View style={[{ opacity }, pressMotion.scale ? { transform: [{ scale: pressMotion.scale }] } : null]}>
               <SwitcherMark icon={icon} color={theme.mark} />
             </Animated.View>

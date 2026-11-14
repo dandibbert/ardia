@@ -2319,7 +2319,7 @@ function globalProviderRows(sections                            , shown         
 __define("packages/core/src/pageText.ts", function (exports, __require) {
   __export(exports, "displayUrl", () => displayUrl);
   __export(exports, "pageKey", () => pageKey);
-  __export(exports, "pageTexts", () => pageTexts);
+  __export(exports, "hasPageText", () => hasPageText);
   __export(exports, "logVisits", () => logVisits);
   __export(exports, "shownWordsOf", () => shownWordsOf);
   __export(exports, "pageText", () => pageText);
@@ -2349,7 +2349,18 @@ const pageKey = (url        ) => url.replace(/#.*$/, "").replace(/\/$/, "");
                      
   
 
-const pageTexts = new WeakMap                  ();
+const PAGE_TEXT = Symbol("pageText");
+                                               
+const frozenPageTexts = new WeakMap                  ();
+
+const cachedPageText = (row        )                       => (row                )[PAGE_TEXT] ?? frozenPageTexts.get(row);
+
+const hasPageText = (row        ) => cachedPageText(row) !== undefined;
+
+function rememberPageText(row        , text          ) {
+  if (Object.isExtensible(row)) Object.defineProperty(row, PAGE_TEXT, { value: text, configurable: true });
+  else frozenPageTexts.set(row, text);
+}
 
 const logVisitsOf           = [];
 const logVisits = (visits        ) => (visits >= 0 && visits < 1024 && (visits | 0) === visits ? (logVisitsOf[visits] ??= Math.log2(1 + visits) * 8) : Math.log2(1 + visits) * 8);
@@ -2360,13 +2371,13 @@ const wordsOf = (lower        ) => (PLAIN_WORDS.test(lower) ? ` ${lower}` : ` ${
 const shownWordsOf = (t          ) => (t.shownWords ??= wordsOf(t.shownLower));
 
 function pageText(row                                )           {
-  let text = pageTexts.get(row);
+  let text = cachedPageText(row);
   if (!text) {
     const shown = displayUrl(row.url);
     const shownLower = shown.toLowerCase();
     const titleLower = row.title.toLowerCase();
     text = { url: row.url, key: pageKey(row.url), shown, shownLower, titleLower, titleWords: wordsOf(titleLower) };
-    pageTexts.set(row, text);
+    rememberPageText(row, text);
   }
   return text;
 }
@@ -2891,7 +2902,7 @@ __define("packages/core/src/candidatePool.ts", function (exports, __require) {
   __export(exports, "poolFor", () => poolFor);
   __export(exports, "prepareSuggestions", () => prepareSuggestions);
   __export(exports, "tabsOver", () => tabsOver);
-const { logVisits, pageText, pageTexts } = __require("packages/core/src/pageText.ts");
+const { hasPageText, logVisits, pageText } = __require("packages/core/src/pageText.ts");
                                                         
 
                                                       
@@ -3003,7 +3014,7 @@ function prepareSuggestions(source                  , deadline        )         
   for (const rows of [source.history, bookmarks]) {
     let n = 0;
     for (const row of rows) {
-      if (pageTexts.has(row)) continue;
+      if (hasPageText(row)) continue;
       pageText(row);
       if (++n % SLICE_CHECK === 0 && Date.now() > deadline) return false;
     }

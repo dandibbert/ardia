@@ -60,6 +60,7 @@ export function setNowPlaying(tabId: string, state: NowPlaying | null) {
       return { sessions };
     }
     const before = sessions[tabId];
+    if (before && sameNowPlaying(before, state)) return s;
     const started = isControllablyPlaying(state) && !(before && isControllablyPlaying(before));
     sessions[tabId] = { ...state, playedAt: started ? Date.now() : (before?.playedAt ?? 0) };
     if (!started) return { sessions };
@@ -76,6 +77,18 @@ function pausedPeers(sessions: Store["sessions"], tabId: string): string[] {
   const tab = tabs[tabId];
   if (!tab) return [];
   return Object.keys(sessions).filter((id) => id !== tabId && !isPlaying(sessions[id]) && tabs[id]?.windowId === tab.windowId && tabs[id]?.profileId === tab.profileId);
+}
+
+const POSITION_DRIFT_SECONDS = 0.25;
+
+function sameNowPlaying(before: Session, next: NowPlaying): boolean {
+  for (const key of Object.keys(next) as (keyof NowPlaying)[]) {
+    if (key === "position" || key === "timestamp" || key === "actions") continue;
+    if (!Object.is(before[key], next[key])) return false;
+  }
+  if (before.actions.length !== next.actions.length || before.actions.some((a, i) => a !== next.actions[i])) return false;
+  const now = Date.now();
+  return Math.abs(positionOf(before, now) - positionOf({ ...next, playedAt: 0 }, now)) < POSITION_DRIFT_SECONDS;
 }
 
 const isControllablyPlaying = (state: NowPlaying) => state.controllable && state.playbackState === "playing";

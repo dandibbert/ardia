@@ -10,6 +10,12 @@ enum SwitcherHold {
     if held.isEmpty { DispatchQueue.main.async { ShellEvents.send(.app, ["type": "switcherReleased"]) } }
   }
 
+  static var capturing = false
+
+  static func stillHeld(_ flags: NSEvent.ModifierFlags) -> Bool {
+    !held.isEmpty && flags.isSuperset(of: held)
+  }
+
   static func released(by flags: NSEvent.ModifierFlags) -> Bool {
     guard !held.isEmpty, !flags.isSuperset(of: held) else { return false }
     held = []

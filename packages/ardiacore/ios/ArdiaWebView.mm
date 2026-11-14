@@ -123,6 +123,11 @@ void AcceptDrops(NSView *root, BOOL accept) {
                                               }];
 }
 
+- (NSView *)hitTest:(NSPoint)point {
+  if (!_visible && !_standalone) return nil;
+  return [super hitTest:point];
+}
+
 - (instancetype)initWithFrame:(NSRect)frameRect {
   if ((self = [super initWithFrame:frameRect])) {
     _profile = @"";
@@ -218,6 +223,7 @@ void AcceptDrops(NSView *root, BOOL accept) {
   if (visible) [self exposePage];
   if (visible) [self stopHolding];
   if (visible) [self settleRevealsInWindow];
+  if (visible) [self refreshPageKeyStateSoon];
   if (!visible) [_tab exitExclusiveAccess];
   if (visible && !_frameHold.awaiting && self.alphaValue < 1 && _tab.view.superview == self && !_tab.view.hidden) {
     [CATransaction begin];

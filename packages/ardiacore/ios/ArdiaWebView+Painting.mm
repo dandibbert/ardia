@@ -223,6 +223,10 @@ BOOL Above(NSView *a, NSView *b) {
   [CATransaction setDisableActions:YES];
   self.alphaValue = _frameHold.awaiting && (_standIn.page.superview != self || _standIn.leaving) ? 0 : _visible || _reveal.active || _frameHold.holding || !(_warm || _leave.active) ? 1 : 0;
   const BOOL shown = self.paints;
+  NSWindow *window = self.window;
+  NSResponder *responder = window.firstResponder;
+  if (!_visible && !_standalone && [responder isKindOfClass:NSView.class] && [(NSView *)responder isDescendantOf:self])
+    [window makeFirstResponder:nil];
   for (NSView *sub in self.subviews) {
     sub.hidden = !shown;
     AcceptDrops(sub, _visible);

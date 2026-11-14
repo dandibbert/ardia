@@ -11,6 +11,7 @@ final class TypeAheadHold {
   }
 
   private var held: Held?
+  var isHolding: Bool { held != nil }
   private var monitor: Any?
   weak var keyOnReveal: NSWindow?
 
@@ -59,6 +60,10 @@ final class TypeAheadHold {
     held.passing = true
     now.forEach { NSApp.sendEvent($0) }
     held.passing = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak held] in
+      guard let self, let held, self.held === held else { return }
+      self.end(send: true)
+    }
   }
 
   func end(send: Bool) {

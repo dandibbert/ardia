@@ -111,6 +111,7 @@ export type AppNative = {
   setIntroMusicMuted(muted: boolean): Promise<void>;
   stopIntroMusic(fade: number): Promise<void>;
   crashReports(since: number): Promise<CrashReport[]>;
+  focusReport(): Promise<string>;
   hardwareInfo(): Promise<HardwareInfo>;
   diagnosticsSample(): Promise<DiagnosticsSample>;
 };

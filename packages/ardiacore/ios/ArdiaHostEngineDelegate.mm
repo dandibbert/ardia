@@ -32,6 +32,7 @@ using namespace ardia_host;
   ardia_host::LoadContentBlocker(@"");
   [ArdiaWebView installScrollZoom];
   [ArdiaWebView installSwitchPrewarm];
+  [ArdiaWebView installPageKeyWatch];
   [ArdiaWebView removeSharedImages];
   [ArdiaServices watchDownloads:@""];
 

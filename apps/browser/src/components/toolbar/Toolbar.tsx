@@ -283,12 +283,7 @@ const SHRINK = { flexShrink: 1 } as const;
 type PageButtonProps = { tab: ToolbarTab; palette: ToolbarPalette; windowId: string };
 
 function PageButton(props: PageButtonProps) {
-  return useBookmarksShown() ? <BookmarkButton {...props} /> : <CopyUrlButton {...props} />;
-}
-
-function CopyUrlButton({ tab, palette }: PageButtonProps) {
-  const copyHint = useShortcutHint("copyUrl");
-  return <Button variant="icon" toolbar palette={palette} icon="link" look="field" onPress={() => void copyPageUrl(tab.id)} tooltip={withShortcut("Copy URL", copyHint)} />;
+  return useBookmarksShown() ? <BookmarkButton {...props} /> : null;
 }
 
 function BookmarkButton({ tab, palette, windowId }: PageButtonProps) {
@@ -318,9 +313,11 @@ function FieldButtons({
 }) {
   const popups = usePage(tab.id, (p) => p.popups.length);
   const capture = usePage(tab.id, (p) => p.mediaAccess);
+  const copyHint = useShortcutHint("copyUrl");
   return (
     <View style={{ flexDirection: "row", alignItems: "center", paddingRight: space.xs }}>
       {children}
+      <Button variant="icon" toolbar palette={palette} icon="link" look="field" onPress={() => void copyPageUrl(tab.id)} tooltip={withShortcut("Copy Link", copyHint)} />
       {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
       <TranslateButton tabId={tab.id} palette={palette} onFocus={onFocus} />
       <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} onFocus={onFocus} />

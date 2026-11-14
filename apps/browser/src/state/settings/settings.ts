@@ -182,10 +182,23 @@ export function withLinkKeysApart(settings: Settings, patch: Partial<Settings>):
 
 export const DEFAULT_SETTINGS = Object.fromEntries(SETTING_KEYS.map((key) => [key, SETTING_SPECS[key].default])) as Settings;
 
+const RECORDABLE_CONTROL_KEYS = new Set(["\u0003", "\b", "\t", "\r", "\u001b", "\u007f"]);
+
+export function isRecordableShortcut(override: unknown): boolean {
+  if (!Array.isArray(override) || typeof override[0] !== "string" || !override[0]) return false;
+  return [...override[0]].every((c) => c >= " " || RECORDABLE_CONTROL_KEYS.has(c));
+}
+
+function withoutBrokenShortcuts(shortcuts: Record<string, string[]>): Record<string, string[]> {
+  if (Object.values(shortcuts).every(isRecordableShortcut)) return shortcuts;
+  return Object.fromEntries(Object.entries(shortcuts).filter(([, o]) => isRecordableShortcut(o)));
+}
+
 export function parseSettings(raw: unknown): Settings {
   const saved = isFields(raw) ? raw : {};
   const value = (key: SettingKey) => (SETTING_SPECS[key].valid(saved[key]) ? saved[key] : SETTING_SPECS[key].default);
-  const settings = Object.fromEntries(SETTING_KEYS.map((key) => [key, value(key)])) as Settings;
+  const parsed = Object.fromEntries(SETTING_KEYS.map((key) => [key, value(key)])) as Settings;
+  const settings = { ...parsed, shortcuts: withoutBrokenShortcuts(parsed.shortcuts) };
   return { ...settings, ...withLinkKeysApart(settings, {}) };
 }
 

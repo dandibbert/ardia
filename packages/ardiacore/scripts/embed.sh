@@ -43,6 +43,11 @@ if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] && [ -f "$ubo/manifest.json" 
     | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1) > "$extensions/ublock.fingerprint"
   rsync -a --delete "$repo/packages/ardiacore/extensions/ublock-lite-settings/" "$extensions/ublock-lite-settings/"
 fi
+if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]; then
+  extensions="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Extensions"
+  mkdir -p "$extensions"
+  rsync -a --delete "$repo/packages/ardiacore/extensions/little-ardia-link-menu/" "$extensions/little-ardia-link-menu/"
+fi
 
 "$here/ubol.sh"
 rules="$repo/packages/ardiacore/vendor/ubol-webkit/rules"
