@@ -193,3 +193,41 @@ test("a newer request aborts the one in flight, which never answers", async () =
   }
 });
 
+
+test("cancel during the delay clears the timer, so nothing is fetched or answered", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { fetch, calls } = fakeFetch();
+    const results: string[] = [];
+    const fetcher = createSuggestFetcher({ fetch, delay: 10 });
+    fetcher.request(google, "early", () => results.push("early"));
+    fetcher.cancel();
+    mock.timers.tick(10);
+    await flush();
+    assert.equal(calls.length, 0);
+    assert.deepEqual(results, []);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("an answered query is served from the cache, and cancel still silences a cached answer", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const { fetch, calls } = fakeFetch();
+    const results: string[] = [];
+    const fetcher = createSuggestFetcher({ fetch, delay: 10 });
+    fetcher.request(google, "cat", (s) => results.push(`first:${s.join(",")}`));
+    mock.timers.tick(10);
+    await flush();
+    fetcher.request(google, "cat", (s) => results.push(`cached:${s.join(",")}`));
+    await flush();
+    fetcher.request(google, "cat", () => results.push("cancelled"));
+    fetcher.cancel();
+    await flush();
+    assert.equal(calls.length, 1);
+    assert.deepEqual(results, ["first:a,b", "cached:a,b"]);
+  } finally {
+    mock.timers.reset();
+  }
+});

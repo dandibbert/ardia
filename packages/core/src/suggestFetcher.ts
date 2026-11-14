@@ -8,6 +8,11 @@ export type SuggestFetcher = {
   cancel(): void;
 };
 
+type PendingRequest =
+  | { phase: "idle" }
+  | { phase: "waiting"; timer: ReturnType<typeof setTimeout> }
+  | { phase: "fetching"; controller: AbortController };
+
 export function createSuggestFetcher({
   fetch,
   delay = 120,
@@ -18,16 +23,14 @@ export function createSuggestFetcher({
   cacheSize?: number;
 }): SuggestFetcher {
   const cache = new Map<string, string[]>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let inFlight: AbortController | undefined;
+  let pending: PendingRequest = { phase: "idle" };
   let generation = 0;
 
   const cancel = () => {
     generation++;
-    clearTimeout(timer);
-    timer = undefined;
-    inFlight?.abort();
-    inFlight = undefined;
+    if (pending.phase === "waiting") clearTimeout(pending.timer);
+    if (pending.phase === "fetching") pending.controller.abort();
+    pending = { phase: "idle" };
   };
 
   const remember = (url: string, suggestions: string[]) => {
@@ -48,10 +51,9 @@ export function createSuggestFetcher({
         void Promise.resolve().then(() => current === generation && onResult(cached));
         return;
       }
-      timer = setTimeout(() => {
-        timer = undefined;
+      const timer = setTimeout(() => {
         const controller = new AbortController();
-        inFlight = controller;
+        pending = { phase: "fetching", controller };
         fetch(url, { signal: controller.signal })
           .then(async (res) => {
             if (!res.ok) return [];
@@ -66,13 +68,14 @@ export function createSuggestFetcher({
               if (controller.signal.aborted) return;
               remember(url, suggestions);
               if (current === generation) {
-                inFlight = undefined;
+                pending = { phase: "idle" };
                 onResult(suggestions);
               }
             },
             () => {},
           );
       }, delay);
+      pending = { phase: "waiting", timer };
     },
   };
 }

@@ -5,7 +5,7 @@ import { Clock } from "../hlc.ts";
 import { compact, syncScope, visible } from "../scope.ts";
 import { emptyScope, type Adapter, type Listing, type LogFile, type ScopeState, type Transport } from "../scopeState.ts";
 import { companionAcknowledge, companionAddBookmark, companionRemoveBookmark, companionRemovalsDone, companionSend, runCompanionCycle, type CycleInput } from "./cycle.ts";
-import { companionLoad, type CompanionState, type Host } from "./state.ts";
+import { companionLoad, companionStateUnsaved, companionUnload, loaded, save, type CompanionState, type Host } from "./state.ts";
 import type { LocalTab, LocalVisit } from "./adapters.ts";
 
 const DAY = 86_400_000;
@@ -941,4 +941,35 @@ test("a phone that starts over under a new id deletes its old device and tabs re
   for (const scope of [s1, s2, s3]) assert.equal(mac.store[scope]!.has(`tabs:${PHONE}`), false);
   assert.ok(mac.store.app!.has(`dev:${fresh.id}`));
   assert.ok(mac.store[s1]!.has("bm:f1"));
+});
+
+test("the companion writes its state once until it changes or is marked unsaved, and forgets it on unload", () => {
+  const writes: string[] = [];
+  const previous = (globalThis as { __host?: Host }).__host;
+  (globalThis as { __host?: Host }).__host = {
+    chainStatus: () => "ok",
+    read: () => "",
+    write: () => "",
+    remove: () => "",
+    persistJournal: () => "ok",
+    saveState: (json) => (writes.push(json), "ok"),
+  };
+  try {
+    companionLoad({ device: PHONE, fresh: true });
+    assert.equal(save(), true);
+    assert.equal(save(), true);
+    assert.equal(save(true), true);
+    assert.equal(writes.length, 1);
+    companionStateUnsaved();
+    assert.equal(save(), true);
+    assert.equal(writes.length, 2);
+    loaded().pulled.scope = true;
+    assert.equal(save(), true);
+    assert.equal(writes.length, 3);
+    companionUnload();
+    assert.throws(() => loaded(), /isn't loaded/);
+    assert.throws(() => save(), /isn't loaded/);
+  } finally {
+    (globalThis as { __host?: Host }).__host = previous;
+  }
 });

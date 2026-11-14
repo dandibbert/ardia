@@ -66,24 +66,22 @@ type TrendSheet = { show: (spec: TrendSpec) => void; isOpen: () => boolean };
 
 const OpenTrend = createContext<TrendSheet>({ show: () => undefined, isOpen: () => false });
 
+type ShownTrend = { phase: "empty" } | { phase: "open" | "closed"; spec: TrendSpec; version: number };
+
 export function TrendSheetProvider({ children }: { children: ReactElement | ReactElement[] }) {
-  const [spec, setSpec] = useState<TrendSpec | null>(null);
-  const [open, setOpen] = useState(false);
-  const [version, setVersion] = useState(0);
+  const [shown, setShown] = useState<ShownTrend>({ phase: "empty" });
   const openRef = useRef(false);
   const opener = useRef<HTMLElement | null>(null);
   const setSheetOpen = (next: boolean) => {
     openRef.current = next;
-    setOpen(next);
+    setShown((current) => (current.phase === "empty" ? current : { ...current, phase: next ? "open" : "closed" }));
   };
   const sheet = useMemo<TrendSheet>(
     () => ({
       show: (next) => {
         opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         openRef.current = true;
-        setSpec(next);
-        setVersion((v) => v + 1);
-        setOpen(true);
+        setShown((current) => ({ phase: "open", spec: next, version: (current.phase === "empty" ? 0 : current.version) + 1 }));
       },
       isOpen: () => openRef.current,
     }),
@@ -92,7 +90,7 @@ export function TrendSheetProvider({ children }: { children: ReactElement | Reac
   return (
     <OpenTrend.Provider value={sheet}>
       {children}
-      <Sheet open={open} onOpenChange={setSheetOpen}>
+      <Sheet open={shown.phase === "open"} onOpenChange={setSheetOpen}>
         <SheetContent
           side="right"
           className="w-full gap-0 overflow-y-auto sm:max-w-2xl"
@@ -102,27 +100,32 @@ export function TrendSheetProvider({ children }: { children: ReactElement | Reac
             opener.current.focus({ preventScroll: true });
           }}
         >
-          {spec ? <TrendSheetBody key={version} spec={spec} /> : null}
+          {shown.phase !== "empty" ? <TrendSheetBody key={shown.version} spec={shown.spec} /> : null}
         </SheetContent>
       </Sheet>
     </OpenTrend.Provider>
   );
 }
 
+type HoverPhase = "idle" | "hovering" | "suppressed";
+
 export function TrendTarget({ spec, name, side = "top", children }: { spec: TrendSpec; name?: string; side?: "top" | "bottom"; children: ReactElement }) {
   const sheet = useContext(OpenTrend);
   const range = useRange();
   const [wanted, setWanted] = useState(false);
-  const [hovering, setHovering] = useState(false);
-  const suppressed = useRef(false);
+  const [hover, setHoverState] = useState<HoverPhase>("idle");
+  const hoverRef = useRef<HoverPhase>("idle");
+  const setHover = (next: HoverPhase) => {
+    hoverRef.current = next;
+    setHoverState(next);
+  };
   const trend = useTrend(spec.family, range, wanted);
   const activate = () => {
-    suppressed.current = true;
-    setHovering(false);
+    setHover("suppressed");
     sheet.show(spec);
   };
   const release = () => {
-    suppressed.current = false;
+    if (hoverRef.current === "suppressed") setHover("idle");
   };
   const releaseOnMouseLeave = (e: PointerEvent) => {
     if (e.pointerType === "mouse" && !sheet.isOpen()) release();
@@ -137,13 +140,15 @@ export function TrendTarget({ spec, name, side = "top", children }: { spec: Tren
   };
   return (
     <HoverCardPrimitive.Root
-      open={hovering}
+      open={hover === "hovering"}
       openDelay={140}
       closeDelay={80}
       onOpenChange={(o) => {
-        if (o && (suppressed.current || sheet.isOpen())) return;
-        setHovering(o);
-        if (o) setWanted(true);
+        if (o && (hoverRef.current === "suppressed" || sheet.isOpen())) return;
+        if (o) {
+          setHover("hovering");
+          setWanted(true);
+        } else if (hoverRef.current === "hovering") setHover("idle");
       }}
     >
       <HoverCardPrimitive.Trigger

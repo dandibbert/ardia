@@ -29,10 +29,18 @@ export type CompanionState = {
   sent?: Record<string, number>;
 };
 
-let companion: CompanionState | null = null;
-let savedJSON = "";
-let savedPrint = "";
-let viewJSON = "";
+type Saved = { json: string; print: string };
+
+type Session =
+  | { phase: "unloaded" }
+  | { phase: "loaded"; state: CompanionState; saved: Saved | null; viewJSON: string };
+
+let session: Session = { phase: "unloaded" };
+
+function loadedSession(): Extract<Session, { phase: "loaded" }> {
+  if (session.phase !== "loaded") throw new Error("the companion isn't loaded");
+  return session;
+}
 
 export const host = (): Host => {
   const h = (globalThis as { __host?: Host }).__host;
@@ -41,8 +49,7 @@ export const host = (): Host => {
 };
 
 export function loaded(): CompanionState {
-  if (!companion) throw new Error("the companion isn't loaded");
-  return companion;
+  return loadedSession().state;
 }
 
 const freshState = (device: string): CompanionState => ({ v: 1, device, clock: null, scopes: {}, sends: [], acks: [], bookmarks: [], floors: {}, pulled: {} });
@@ -74,24 +81,17 @@ export function companionLoad(input: { device: string; state?: CompanionState | 
     restored = true;
   }
   if (restored) state.clock = clock.last;
-  companion = state;
-  savedJSON = "";
-  savedPrint = "";
-  viewJSON = "";
+  session = { phase: "loaded", state, saved: null, viewJSON: "" };
   return { device: state.device, scopes: Object.keys(state.scopes).length };
 }
 
 export function companionUnload() {
-  companion = null;
-  savedJSON = "";
-  savedPrint = "";
-  viewJSON = "";
+  session = { phase: "unloaded" };
   return true;
 }
 
 export function companionStateUnsaved() {
-  savedJSON = "";
-  savedPrint = "";
+  if (session.phase === "loaded") session.saved = null;
   return true;
 }
 
@@ -106,23 +106,24 @@ function fingerprint(c: CompanionState): string {
 }
 
 export function save(force = false): boolean {
-  const c = loaded();
+  const current = loadedSession();
+  const c = current.state;
   const print = fingerprint(c);
-  if (!force && savedJSON && print === savedPrint) return true;
+  if (!force && current.saved && print === current.saved.print) return true;
   const json = JSON.stringify(c);
-  if (json === savedJSON) {
-    savedPrint = print;
+  if (json === current.saved?.json) {
+    current.saved = { json, print };
     return true;
   }
   const seqs = Object.fromEntries(Object.entries(c.scopes).map(([scope, s]) => [scope, s.seq]));
   if (host().saveState(json, JSON.stringify(seqs)) !== "ok") return false;
-  savedJSON = json;
-  savedPrint = print;
+  current.saved = { json, print };
   return true;
 }
 
 export function viewIsNew(json: string): boolean {
-  if (json === viewJSON) return false;
-  viewJSON = json;
+  const current = loadedSession();
+  if (json === current.viewJSON) return false;
+  current.viewJSON = json;
   return true;
 }

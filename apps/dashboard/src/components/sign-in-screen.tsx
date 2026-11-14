@@ -6,27 +6,27 @@ import ScrambleText from "@/components/ruixen/scramble-text";
 import { hexclaveClientApp } from "@/lib/hexclave";
 import { safeNext } from "@/lib/safe-next";
 
+type SignInAttempt = { phase: "editing"; error: string | null } | { phase: "signingIn" };
+
 export function SignInScreen({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState<SignInAttempt>({ phase: "editing", error: null });
+  const busy = attempt.phase === "signingIn";
+  const error = attempt.phase === "editing" ? attempt.error : null;
 
   async function submit() {
     if (busy) return;
-    setBusy(true);
-    setError(null);
+    setAttempt({ phase: "signingIn" });
     try {
       const result = await hexclaveClientApp.signInWithCredential({ email: email.trim(), password, noRedirect: true });
       if (result.status === "error") {
-        setError("That email and password don't match.");
-        setBusy(false);
+        setAttempt({ phase: "editing", error: "That email and password don't match." });
         return;
       }
       window.location.replace(safeNext(next));
     } catch {
-      setError("Couldn't reach the sign-in service. Try again.");
-      setBusy(false);
+      setAttempt({ phase: "editing", error: "Couldn't reach the sign-in service. Try again." });
     }
   }
 

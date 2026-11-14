@@ -112,14 +112,16 @@ interface Pending {
   extra: Props;
 }
 
-let pending: Pending[] = [];
-let checkTimer = 0;
+type Watching = { phase: "idle" } | { phase: "watching"; pending: Pending[]; timer: number };
+
+let watching: Watching = { phase: "idle" };
 let lastMutationAt: number | null = null;
 let lastClicked: { el: Element; t: number } | null = null;
 
 function saw(kind: "scroll" | "selection" | "mutation" | "visibility") {
+  if (watching.phase !== "watching") return;
   const now = performance.now();
-  for (const p of pending) if (p[kind] === undefined) p[kind] = now - p.t0;
+  for (const p of watching.pending) if (p[kind] === undefined) p[kind] = now - p.t0;
 }
 
 const mutations = new MutationObserver(() => {
@@ -127,16 +129,20 @@ const mutations = new MutationObserver(() => {
   saw("mutation");
 });
 
-function watch() {
-  if (pending.length === 1) mutations.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
-  if (!checkTimer) checkTimer = window.setTimeout(check, 1000);
+function watch(p: Pending) {
+  if (watching.phase === "watching") {
+    watching.pending.push(p);
+    return;
+  }
+  mutations.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+  watching = { phase: "watching", pending: [p], timer: window.setTimeout(check, 1000) };
 }
 
 function check() {
-  checkTimer = 0;
+  if (watching.phase !== "watching") return;
   const now = performance.now();
   const still: Pending[] = [];
-  for (const p of pending) {
+  for (const p of watching.pending) {
     const absolute = now - p.t0;
     const alive =
       (p.scroll !== undefined && p.scroll < SCROLL_MS) ||
@@ -153,9 +159,11 @@ function check() {
     if (timeouts.scroll || timeouts.selection || timeouts.mutation || timeouts.absolute) report(p, absolute, timeouts);
     else still.push(p);
   }
-  pending = still;
-  if (pending.length) checkTimer = window.setTimeout(check, 1000);
-  else mutations.disconnect();
+  if (still.length) watching = { phase: "watching", pending: still, timer: window.setTimeout(check, 1000) };
+  else {
+    watching = { phase: "idle" };
+    mutations.disconnect();
+  }
 }
 
 function report(p: Pending, absolute: number, timeouts: Record<"scroll" | "selection" | "mutation" | "absolute", boolean>) {
@@ -185,8 +193,7 @@ function report(p: Pending, absolute: number, timeouts: Record<"scroll" | "selec
 
 function watchForNothing(kind: Pending["kind"], el: Element, extra: Props = {}, scrolledAlready = false) {
   if (el === document.documentElement) return;
-  pending.push({ kind, el, t0: performance.now(), at: Date.now(), extra, ...(scrolledAlready ? { scroll: 0 } : {}) });
-  watch();
+  watch({ kind, el, t0: performance.now(), at: Date.now(), extra, ...(scrolledAlready ? { scroll: 0 } : {}) });
 }
 
 function onClick(e: MouseEvent) {

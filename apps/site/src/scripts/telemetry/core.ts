@@ -342,7 +342,12 @@ function enqueue(scope: Scope, record: LogRecord, instantly = false) {
   else schedule();
 }
 
-let pageviewId: string | undefined;
+type Pageview =
+  | { phase: "none" }
+  | { phase: "viewing" | "left"; id: string; at: number; path: string };
+
+let pageview: Pageview = { phase: "none" };
+const pageviewId = () => (pageview.phase === "none" ? undefined : pageview.id);
 
 export function capture(event: TelemetryEvent, props: Props = {}, options: CaptureOptions = {}): string | undefined {
   if (!enabled) return;
@@ -362,7 +367,7 @@ export function capture(event: TelemetryEvent, props: Props = {}, options: Captu
       ...registered,
       $session_id: s.id,
       $window_id: windowId,
-      $pageview_id: pageviewId,
+      $pageview_id: pageviewId(),
       ...props,
     };
     enqueue(
@@ -436,20 +441,18 @@ function measure() {
 
 const ratio = (part: number, whole: number) => (whole <= 0 ? 1 : Math.min(1, Math.max(0, part / whole)));
 
-let pageviewAt = 0;
-let pageviewPath = "";
-let left = false;
 function pageleave() {
-  if (left || !pageviewId) return;
-  left = true;
+  if (pageview.phase !== "viewing") return;
+  const { id, at, path } = pageview;
+  pageview = { phase: "left", id, at, path };
   measure();
   const el = document.scrollingElement ?? document.documentElement;
   const contentHeight = el.scrollHeight;
   const scrollHeight = Math.max(0, contentHeight - el.clientHeight);
   capture("$pageleave", {
-    $prev_pageview_id: pageviewId,
-    $prev_pageview_pathname: pageviewPath,
-    $prev_pageview_duration: (Date.now() - pageviewAt) / 1000,
+    $prev_pageview_id: id,
+    $prev_pageview_pathname: path,
+    $prev_pageview_duration: (Date.now() - at) / 1000,
     $prev_pageview_last_scroll: lastScroll,
     $prev_pageview_last_scroll_percentage: ratio(lastScroll, scrollHeight),
     $prev_pageview_max_scroll: maxScroll,
@@ -473,10 +476,8 @@ function hidden(unloading: boolean) {
 
 if (enabled) {
   touchSession();
-  pageviewId = uuidv7();
-  pageviewAt = Date.now();
-  pageviewPath = location.pathname;
-  capture("$pageview", { title: document.title }, { uuid: pageviewId });
+  pageview = { phase: "viewing", id: uuidv7(), at: Date.now(), path: location.pathname };
+  capture("$pageview", { title: document.title }, { uuid: pageview.id });
   measure();
 
   addEventListener("scroll", () => (measuring ||= window.setTimeout(measure, SCROLL_SAMPLE_MS)), { passive: true });
@@ -487,6 +488,6 @@ if (enabled) {
     if (document.visibilityState === "hidden") hidden(false);
   });
   addEventListener("pageshow", (e) => {
-    if (e.persisted) left = false;
+    if (e.persisted && pageview.phase === "left") pageview = { ...pageview, phase: "viewing" };
   });
 }

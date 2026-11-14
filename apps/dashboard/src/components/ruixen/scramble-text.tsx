@@ -25,17 +25,15 @@ export default function ScrambleText({
   className?: string;
   playOnMount?: boolean;
 }) {
-  const active = useRef(false);
-  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const running = useRef<ReturnType<typeof setInterval> | null>(null);
   const [cells, setCells] = useState<Cell[]>(() => settled(text));
 
   const play = useCallback(
     (fromLeft: boolean) => {
-      if (active.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      active.current = true;
+      if (running.current !== null || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       let tick = 0;
       const len = text.length;
-      timer.current = setInterval(() => {
+      const timer = setInterval(() => {
         tick++;
         setCells(
           text.split("").map((c, i) => {
@@ -45,11 +43,12 @@ export default function ScrambleText({
           }),
         );
         if (tick >= Math.floor((len - 1) * STAGGER) + 5) {
-          clearInterval(timer.current);
+          clearInterval(timer);
+          running.current = null;
           setCells(settled(text));
-          active.current = false;
         }
       }, TICK);
+      running.current = timer;
     },
     [text],
   );
@@ -58,8 +57,8 @@ export default function ScrambleText({
     setCells(settled(text));
     if (playOnMount) play(true);
     return () => {
-      clearInterval(timer.current);
-      active.current = false;
+      if (running.current !== null) clearInterval(running.current);
+      running.current = null;
     };
   }, [text, playOnMount, play]);
 

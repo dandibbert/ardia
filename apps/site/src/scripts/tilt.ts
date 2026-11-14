@@ -33,17 +33,16 @@ for (const el of stages.keys()) io.observe(el);
 
 const clamp = (v: number) => Math.max(-1, Math.min(1, v));
 let pointer: { x: number; y: number } | null = null;
-let frame = 0;
-let last = 0;
+type Loop = { phase: "idle" } | { phase: "scheduled"; frame: number; last: number | null };
+let loop: Loop = { phase: "idle" };
 
 function paint(stage: Stage) {
   for (const { el, dx, dy } of stage.layers) el.style.translate = `${(stage.x * dx).toFixed(2)}px ${(stage.y * dy).toFixed(2)}px`;
 }
 
 function tick(now: number) {
-  frame = 0;
+  const last = loop.phase === "scheduled" ? loop.last : null;
   const dt = last ? Math.min(64, now - last) : 16;
-  last = now;
   for (const stage of shown) {
     if (!pointer) {
       stage.gx = 0;
@@ -73,12 +72,11 @@ function tick(now: number) {
     paint(stage);
     moving = true;
   }
-  if (moving) frame = requestAnimationFrame(tick);
-  else last = 0;
+  loop = moving ? { phase: "scheduled", frame: requestAnimationFrame(tick), last: now } : { phase: "idle" };
 }
 
 function wake() {
-  if (!frame && shown.size) frame = requestAnimationFrame(tick);
+  if (loop.phase === "idle" && shown.size) loop = { phase: "scheduled", frame: requestAnimationFrame(tick), last: null };
 }
 
 addEventListener(
