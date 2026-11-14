@@ -234,3 +234,34 @@ test("a Keychain unlock that fails outright reads as stalled with its error inst
     native.unlock = unlock;
   }
 });
+
+test("a sync asked for while another device's reset ends the cycle doesn't make the next sync run again at once", async () => {
+  reset();
+  shell.docs.clear();
+  const engine = await import("./engine.ts?reset-request");
+  engine.startSync();
+  assert.ok("ok" in (await engine.turnOnSync("/sync")));
+  const native = globalThis.acTestNativeModules.ArdiaSync;
+  const chainStatus = native.chainStatus;
+  let release = null;
+  native.chainStatus = () => new Promise((resolve) => (release = resolve));
+  const delays = [];
+  try {
+    const resetting = engine.syncNow();
+    for (let i = 0; i < 5 && !release; i++) await new Promise((resolve) => setImmediate(resolve));
+    void engine.syncNow();
+    release("missing");
+    await resetting;
+    assert.equal(engine.useSync.getState().status, "reset");
+    native.chainStatus = chainStatus;
+    assert.ok("ok" in (await engine.turnOnSync("/sync")));
+    globalThis.setTimeout = (_run, ms) => (delays.push(ms), 0);
+    await engine.syncNow();
+  } finally {
+    globalThis.setTimeout = () => 0;
+    native.chainStatus = chainStatus;
+  }
+  assert.equal(engine.useSync.getState().status, "updated");
+  assert.ok(delays.includes(15_000), `the next cycle is due in 15 s, not at once: ${delays}`);
+  assert.ok(!delays.includes(0), `nothing asked for a sync during this cycle: ${delays}`);
+});

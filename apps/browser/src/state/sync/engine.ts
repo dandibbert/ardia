@@ -50,9 +50,11 @@ export const useSync = create<SyncUi>()(() => ({
 export const currentSyncFolder = () => useSync.getState().folder;
 
 let doc: SyncDoc = emptyDoc();
-let cycle: Promise<void> | null = null;
-let again = false;
-let forcePasswordsNext = false;
+type Cycle =
+  | { phase: "idle"; forcePasswordsNext: boolean }
+  | { phase: "running"; done: Promise<void>; again: boolean; forcePasswordsNext: boolean };
+
+let cycle: Cycle = { phase: "idle", forcePasswordsNext: false };
 let timer: ReturnType<typeof setTimeout> | undefined;
 let snapshotWrites = { count: 0, bytes: 0 };
 const { read, loadState, persistJournal, watchScope, save, startOver, checkpoint } = syncFiles(() => doc);
@@ -109,18 +111,20 @@ type CycleOptions = { retiring?: boolean; forcePasswords?: boolean };
 
 async function runCycle({ retiring = false, forcePasswords = false }: CycleOptions = {}) {
   if (!SyncNative || !doc.enabled || !doc.folder || !doc.deviceId) return;
-  if (cycle) {
-    again = true;
-    forcePasswordsNext ||= forcePasswords;
+  if (cycle.phase === "running") {
+    cycle.again = true;
+    cycle.forcePasswordsNext ||= forcePasswords;
     return;
   }
-  const options = { retiring, forcePasswords: forcePasswords || forcePasswordsNext };
-  forcePasswordsNext = false;
-  cycle = cycleOnce(SyncNative, doc.folder, doc.deviceId, options);
+  const options = { retiring, forcePasswords: forcePasswords || cycle.forcePasswordsNext };
+  cycle = { phase: "idle", forcePasswordsNext: false };
+  const done = cycleOnce(SyncNative, doc.folder, doc.deviceId, options);
+  const running: Cycle = { phase: "running", done, again: false, forcePasswordsNext: false };
+  cycle = running;
   try {
-    await cycle;
+    await done;
   } finally {
-    cycle = null;
+    cycle = { phase: "idle", forcePasswordsNext: running.forcePasswordsNext };
   }
 }
 
@@ -199,8 +203,8 @@ async function cycleOnce(native: NonNullable<typeof SyncNative>, folder: string,
     clearTimeout(slow);
     save();
     if (doc.enabled) {
-      if (again) {
-        again = false;
+      if (cycle.phase === "running" && cycle.again) {
+        cycle.again = false;
         scheduleSync(0);
       } else {
         scheduleSync(CYCLE_MS);
@@ -292,7 +296,7 @@ export async function stopSync({ deleteData = false } = {}) {
   if (!native || !doc.enabled) return;
   clearTimeout(timer);
   const reportFailure = (error: unknown) => console.warn("[sync] the last cycle before stopping failed", error);
-  while (cycle) await cycle.catch(reportFailure);
+  while (cycle.phase === "running") await cycle.done.catch(reportFailure);
   if (useSync.getState().status !== "locked") await runCycle({ retiring: true }).catch(reportFailure);
   clearTimeout(timer);
   const folder = doc.folder;
@@ -377,7 +381,7 @@ export function startSync() {
     scheduleSync();
   });
   useBrowser.subscribe((s, prev) => {
-    if (!doc.enabled || cycle) return;
+    if (!doc.enabled || cycle.phase === "running") return;
     if (s.bookmarks !== prev.bookmarks || s.settings !== prev.settings || s.profiles !== prev.profiles || s.groups !== prev.groups) scheduleSync();
   });
   if (__DEV__) {

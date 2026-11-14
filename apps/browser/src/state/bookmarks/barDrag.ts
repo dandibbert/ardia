@@ -187,36 +187,38 @@ export function followTabDragOnBar(d: TabDrag) {
   track(d.windowId, d.x, d.y, null);
 }
 
-let escapeWatchers = 0;
-let stopEscape: (() => void) | null = null;
+let escapeWatch: { watchers: number; stop: () => void } | null = null;
+
+function startEscapeWatch() {
+  let capturing = false;
+  const sync = () => {
+    const want = useFolderMenus.getState().panels.length > 0 || useBarDrag.getState().source?.kind === "bookmark";
+    if (want === capturing) return;
+    capturing = want;
+    captureEscape("bookmarks", want);
+  };
+  const menus = useFolderMenus.subscribe(sync);
+  const drags = useBarDrag.subscribe(sync);
+  const keys = onAppEvent((e) => {
+    if (e.type !== "dragEscape") return;
+    if (useBarDrag.getState().source?.kind === "bookmark") endBookmarkDrag(false);
+    else closeFolderMenus();
+  });
+  return () => {
+    menus();
+    drags();
+    keys.remove();
+    if (capturing) captureEscape("bookmarks", false);
+  };
+}
 
 export function watchBookmarkEscape() {
-  if (escapeWatchers++ === 0) {
-    let capturing = false;
-    const sync = () => {
-      const want = useFolderMenus.getState().panels.length > 0 || useBarDrag.getState().source?.kind === "bookmark";
-      if (want === capturing) return;
-      capturing = want;
-      captureEscape("bookmarks", want);
-    };
-    const menus = useFolderMenus.subscribe(sync);
-    const drags = useBarDrag.subscribe(sync);
-    const keys = onAppEvent((e) => {
-      if (e.type !== "dragEscape") return;
-      if (useBarDrag.getState().source?.kind === "bookmark") endBookmarkDrag(false);
-      else closeFolderMenus();
-    });
-    stopEscape = () => {
-      menus();
-      drags();
-      keys.remove();
-      if (capturing) captureEscape("bookmarks", false);
-    };
-  }
+  const watch = (escapeWatch ??= { watchers: 0, stop: startEscapeWatch() });
+  watch.watchers++;
   return () => {
-    if (--escapeWatchers > 0) return;
-    stopEscape?.();
-    stopEscape = null;
+    if (escapeWatch !== watch || --watch.watchers > 0) return;
+    escapeWatch = null;
+    watch.stop();
   };
 }
 

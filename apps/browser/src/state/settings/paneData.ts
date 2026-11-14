@@ -123,22 +123,21 @@ export function setUpdaterPrefs(patch: { automaticChecks?: boolean; automaticDow
   if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(() => followUpdater((s) => noteUpdateChannelSwitch(s.available ? switchOutcome(s.switchCheck) : null)));
 }
 
-let following = 0;
-let followingNow = false;
+let followRun: object | null = null;
 
 export function followUpdater(settled?: (state: UpdaterState) => void) {
-  if (followingNow && !settled) return;
-  const run = ++following;
-  followingNow = true;
+  if (followRun && !settled) return;
+  const run = {};
+  followRun = run;
   const until = Date.now() + FOLLOW_FOR_MS;
   const tick = (): Promise<void> =>
     load(updater, [], { fresh: true }).then((state) => {
-      if (run !== following) return;
+      if (run !== followRun) return;
       if (updaterBusy(state) && Date.now() < until) return new Promise<void>((done) => setTimeout(done, FOLLOW_EVERY_MS)).then(tick);
-      followingNow = false;
+      followRun = null;
       settled?.(state);
     });
-  void tick().catch(() => run === following && (followingNow = false));
+  void tick().catch(() => run === followRun && (followRun = null));
 }
 
 export function chooseAppIcon(id: string) {

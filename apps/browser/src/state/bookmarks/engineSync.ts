@@ -19,21 +19,21 @@ const store = () => useBrowser.getState();
 
 export type { BookmarkOp, EngineBookmark };
 
+type EngineTree = { kind: "none" } | { kind: "cached"; shown: Flat } | { kind: "synced"; shadow: Flat };
 type EngineState = {
-  shadow: Flat | null;
-  shown: Flat | null;
+  tree: EngineTree;
   busy: boolean;
-  needRead: boolean;
-  needPush: boolean;
+  pending: "read" | "push" | null;
 };
 const engines = new Map<string, EngineState>();
 const isCurrent = (engine: string, state: EngineState) => engines.get(engine) === state;
 
 const stateOf = (engine: string) => {
   let state = engines.get(engine);
-  if (!state) engines.set(engine, (state = { shadow: null, shown: null, busy: false, needRead: false, needPush: false }));
+  if (!state) engines.set(engine, (state = { tree: { kind: "none" }, busy: false, pending: null }));
   return state;
 };
+const synced = (state: EngineState | undefined) => state?.tree.kind === "synced";
 let legacyMoved = false;
 let adopting = false;
 
@@ -84,25 +84,25 @@ async function readTree(engine: string, state: EngineState) {
   if (!isCurrent(engine, state)) return;
   const fetched = flatFromEngine(await bookmarkTree(engine), engine);
   if (!isCurrent(engine, state)) return;
-  const base = state.shadow ?? state.shown ?? flatFromStore({ nodes: {} }, engine);
+  const { tree } = state;
+  const base = tree.kind === "synced" ? tree.shadow : tree.kind === "cached" ? tree.shown : flatFromStore({ nodes: {} }, engine);
   const edits = bookmarkOps(base, flatFromStore(store().bookmarks, engine), engine);
   const merged = edits.length ? applyOps(fetched, edits, engine) : fetched;
-  state.shadow = fetched;
-  state.shown = null;
+  state.tree = { kind: "synced", shadow: fetched };
   adopt(engine, merged);
   if (!edits.length) return;
-  if (await sendOps(engine, edits)) state.shadow = merged;
-  else state.needRead = true;
+  if (await sendOps(engine, edits)) state.tree = { kind: "synced", shadow: merged };
+  else state.pending = "read";
 }
 
 async function pushTree(engine: string, state: EngineState) {
-  if (!state.shadow) return;
+  if (state.tree.kind !== "synced") return;
   const desired = flatFromStore(store().bookmarks, engine);
   if (!desired.nodes.size) return;
-  const ops = bookmarkOps(state.shadow, desired, engine);
+  const ops = bookmarkOps(state.tree.shadow, desired, engine);
   if (!ops.length) return;
-  if (await sendOps(engine, ops)) state.shadow = desired;
-  else state.needRead = true;
+  if (await sendOps(engine, ops)) state.tree = { kind: "synced", shadow: desired };
+  else state.pending = "read";
 }
 
 function work(engine: string) {
@@ -111,15 +111,10 @@ function work(engine: string) {
   state.busy = true;
   void (async () => {
     try {
-      while ((state.needRead || state.needPush) && isCurrent(engine, state)) {
-        if (state.needRead) {
-          state.needRead = false;
-          state.needPush = false;
-          await readTree(engine, state);
-        } else {
-          state.needPush = false;
-          await pushTree(engine, state);
-        }
+      while (state.pending && isCurrent(engine, state)) {
+        const next = state.pending;
+        state.pending = null;
+        await (next === "read" ? readTree(engine, state) : pushTree(engine, state));
       }
     } catch (error) {
       console.warn(`[bookmarks] couldn't read ${engine || "the default profile"}'s bookmarks`, error);
@@ -130,15 +125,15 @@ function work(engine: string) {
 }
 
 function read(engine: string) {
-  stateOf(engine).needRead = true;
+  stateOf(engine).pending = "read";
   work(engine);
 }
 
 function push(s: BrowserState) {
   for (const engine of engineProfiles(s)) {
     const state = stateOf(engine);
-    if (!state.shadow) continue;
-    state.needPush = true;
+    if (state.tree.kind !== "synced") continue;
+    if (state.pending !== "read") state.pending = "push";
     work(engine);
   }
 }
@@ -205,7 +200,7 @@ function saveCache() {
   const s = store();
   const trees: CacheDoc["trees"] = {};
   for (const [engine, state] of engines) {
-    if (!(state.shadow || state.shown) || !engineProfiles(s).includes(engine)) continue;
+    if (state.tree.kind === "none" || !engineProfiles(s).includes(engine)) continue;
     trees[engine] = [...flatFromStore(s.bookmarks, engine).nodes.keys()].map((id) => s.bookmarks.nodes[id]!);
   }
   try {
@@ -253,11 +248,11 @@ async function moveBookmarks(file: LegacyFile) {
 export function startBookmarks() {
   for (const [engine, flat] of Object.entries(launchTrees())) {
     if (!engineProfiles(store()).includes(engine)) continue;
-    stateOf(engine).shown = flat;
+    stateOf(engine).tree = { kind: "cached", shown: flat };
     adopt(engine, flat, { ready: false });
   }
   const changes = onBookmarksChanged((engine) => {
-    if (engines.get(engine)?.shadow) read(engine);
+    if (synced(engines.get(engine))) read(engine);
   });
   let stopped = false;
   void migrateBookmarksFile().then((result) => {
@@ -265,18 +260,18 @@ export function startBookmarks() {
     if (!stopped) for (const engine of openedEngineProfiles(store())) read(engine);
   });
   const opened = onProfilesOpened((now) => {
-    for (const engine of now) if (!stateOf(engine).shadow && !stateOf(engine).busy) read(engine);
+    for (const engine of now) if (!synced(stateOf(engine)) && !stateOf(engine).busy) read(engine);
   });
   const stop = useBrowser.subscribe((s, prev) => {
     if (s.profiles !== prev.profiles) {
       const inStore = engineProfiles(s);
       for (const engine of engines.keys()) if (!inStore.includes(engine)) engines.delete(engine);
-      for (const engine of openedEngineProfiles(s)) if (!stateOf(engine).shadow && !stateOf(engine).busy) read(engine);
+      for (const engine of openedEngineProfiles(s)) if (!synced(stateOf(engine)) && !stateOf(engine).busy) read(engine);
     }
     if (s.bookmarks !== prev.bookmarks) {
       if (!adopting) for (const engine of editedUnopened(prev.bookmarks, s)) openProfile(engine);
       push(s);
-      if ([...engines.values()].some((e) => e.shadow)) cacheTimer ??= setTimeout(saveCache, CACHE_SAVE_MS);
+      if ([...engines.values()].some(synced)) cacheTimer ??= setTimeout(saveCache, CACHE_SAVE_MS);
     }
   });
   return () => {

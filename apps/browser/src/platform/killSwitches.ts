@@ -102,28 +102,27 @@ function parseSwitches(json: string | null | undefined): Values {
   return out;
 }
 
-let cached: Values = {};
-let loaded = false;
+let cached: Values | null = null;
 
-function load() {
-  loaded = true;
+function loaded(): Values {
+  if (cached) return cached;
   try {
     cached = parseSwitches(readDocument(CACHE_DOC));
   } catch {
     cached = {};
   }
+  return cached;
 }
 
 export function switchOn(name: SwitchName): boolean {
-  if (!loaded) load();
-  return switchOverride(name) ?? cached[name] ?? true;
+  const values = loaded();
+  return switchOverride(name) ?? values[name] ?? true;
 }
 
 export const experimentOn = (name: ExperimentName): boolean => switchOverride(name) ?? false;
 
 export function reloadSwitches() {
-  loaded = false;
-  cached = {};
+  cached = null;
 }
 
 let fetchedThisLaunch = false;
@@ -133,7 +132,7 @@ type RefreshResult = "updated" | "failed" | "already";
 export async function refreshSwitches(fetchFn: typeof fetch = fetch): Promise<RefreshResult> {
   if (fetchedThisLaunch) return "already";
   fetchedThisLaunch = true;
-  if (!loaded) load();
+  loaded();
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -147,7 +146,7 @@ export async function refreshSwitches(fetchFn: typeof fetch = fetch): Promise<Re
     writeDocument(CACHE_DOC, JSON.stringify({ version: 1, switches: values }));
     const next: Values = { ...cached };
     for (const name of Object.keys(SWITCHES) as SwitchName[]) if (SWITCHES[name].live) next[name] = values[name];
-    cached = next;
+    if (cached) cached = next;
     return "updated";
   } catch {
     return "failed";

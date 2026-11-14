@@ -13,19 +13,20 @@ const REFRESH_EVERY_MS = 86_400_000;
 type RefreshState = { checkedAt: number };
 export type BangRefresh = { at: number; status: number | "skipped" | "failed"; result: "updated" | "unchanged" | "failed" | "fresh" };
 
-let table: BangTable | null = null;
-let tableSource: "bundled" | "stored" | "fetched" | null = null;
-let storedEtag: string | null = null;
+type Loaded = { phase: "empty" } | { phase: "loaded"; table: BangTable; source: "bundled" } | { phase: "loaded"; table: BangTable; source: "stored" | "fetched"; etag: string | null };
+
+let bangs: Loaded = { phase: "empty" };
 let loading: Promise<BangTable> | null = null;
 let refreshing: Promise<BangRefresh> | null = null;
 const refreshes: BangRefresh[] = [];
 const listeners = new Set<() => void>();
 
-function setTable(next: BangTable, source: NonNullable<typeof tableSource>) {
-  table = next;
-  tableSource = source;
+function setTable(next: Exclude<Loaded, { phase: "empty" }>) {
+  bangs = next;
   for (const listener of listeners) listener();
 }
+
+const loadedTable = () => (bangs.phase === "loaded" ? bangs.table : null);
 
 function readState(): RefreshState | null {
   try {
@@ -51,25 +52,23 @@ function storedList(): { etag: string | null; table: BangTable } | null {
 }
 
 export function loadBangs(): Promise<BangTable> {
-  if (table) return Promise.resolve(table);
+  const ready = loadedTable();
+  if (ready) return Promise.resolve(ready);
   return (loading ??= (async () => {
     const stored = storedList();
     if (stored) {
-      if (!table) {
-        storedEtag = stored.etag;
-        setTable(stored.table, "stored");
-      }
-      return table!;
+      if (bangs.phase === "empty") setTable({ phase: "loaded", table: stored.table, source: "stored", etag: stored.etag });
+      return loadedTable()!;
     }
     const { BANG_LIST, BANG_LIST_UNICODE } = await loadBundledBangs();
-    if (!table) setTable(joinBangTables([bangTable(BANG_LIST), bangTable(BANG_LIST_UNICODE)]), "bundled");
-    return table!;
+    if (bangs.phase === "empty") setTable({ phase: "loaded", table: joinBangTables([bangTable(BANG_LIST), bangTable(BANG_LIST_UNICODE)]), source: "bundled" });
+    return loadedTable()!;
   })());
 }
 
 export function bangsFor(text: string): BangTable | null {
-  if (!table && text.includes("!")) void loadBangs();
-  return table;
+  if (bangs.phase === "empty" && text.includes("!")) void loadBangs();
+  return loadedTable();
 }
 
 const BANG_WORD = /^![^\s!]+$/;
@@ -121,7 +120,7 @@ const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => void listeners.delete(listener);
 };
-const currentTable = () => table;
+const currentTable = loadedTable;
 
 export function useBangs(typed: boolean): BangTable | null {
   const current = useSyncExternalStore(subscribe, currentTable);
@@ -149,7 +148,7 @@ export async function refreshBangs(): Promise<BangRefresh> {
   if (stored && now >= stored.checkedAt && now - stored.checkedAt < REFRESH_EVERY_MS) return note("skipped", "fresh");
   try {
     await loadBangs();
-    const etag = tableSource === "bundled" ? (await loadBundledBangs()).BANG_LIST_ETAG : storedEtag;
+    const etag = bangs.phase !== "loaded" ? null : bangs.source === "bundled" ? (await loadBundledBangs()).BANG_LIST_ETAG : bangs.etag;
     const request = fetchBangList(etag);
     writeState({ checkedAt: now });
     const reply = await request;
@@ -160,20 +159,24 @@ export async function refreshBangs(): Promise<BangRefresh> {
     const next = slim && checkedBangTable(slim);
     if (!slim || !next) return note(reply.status, "failed");
     await saveDocument(LIST_DOC, bangDocument(reply.etag, slim));
-    storedEtag = reply.etag;
-    setTable(next, "fetched");
+    setTable({ phase: "loaded", table: next, source: "fetched", etag: reply.etag });
     return note(reply.status, "updated");
   } catch {
     return note("failed", "failed");
   }
 }
 
-export const bangStatus = () => ({ loaded: !!table, source: tableSource, size: table?.size ?? 0, etag: storedEtag, refreshes: refreshes.slice(), state: readState() });
+export const bangStatus = () => ({
+  loaded: bangs.phase === "loaded",
+  source: bangs.phase === "loaded" ? bangs.source : null,
+  size: loadedTable()?.size ?? 0,
+  etag: bangs.phase === "loaded" && bangs.source !== "bundled" ? bangs.etag : null,
+  refreshes: refreshes.slice(),
+  state: readState(),
+});
 
 export function resetBangsForTests() {
-  table = null;
-  tableSource = null;
-  storedEtag = null;
+  bangs = { phase: "empty" };
   loading = null;
   refreshing = null;
   refreshes.length = 0;

@@ -4,19 +4,17 @@ import { activeTabId } from "../browser/model";
 import { extensionProfile, readyTabOf, useExtensions, windowExtensions } from "./store";
 import { singleFlight } from "../../lib/singleFlight";
 
-let pendingAll = false;
-const pendingProfiles = new Set<string>();
+let pending: "all" | Set<string> = new Set();
 
 export function refreshActionStates(profiles?: Iterable<string>): Promise<void> {
-  if (profiles) for (const profile of profiles) pendingProfiles.add(profile);
-  else pendingAll = true;
+  if (!profiles) pending = "all";
+  else if (pending !== "all") for (const profile of profiles) pending.add(profile);
   return refresh();
 }
 
 const refresh = singleFlight(async () => {
-  const only = pendingAll ? null : new Set(pendingProfiles);
-  pendingAll = false;
-  pendingProfiles.clear();
+  const only = pending === "all" ? null : pending;
+  pending = new Set();
   await pass(only);
 });
 

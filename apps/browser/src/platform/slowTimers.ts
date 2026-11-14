@@ -12,8 +12,7 @@ type Entry = SlowJob & { next: number; armed: boolean };
 const GRID_SLACK_MS = 50;
 
 const jobs = new Set<Entry>();
-let timer: ReturnType<typeof setTimeout> | null = null;
-let timerAt = Infinity;
+let armed: { at: number; timer: ReturnType<typeof setTimeout> } | null = null;
 let clock = () => Date.now();
 let firing = false;
 
@@ -52,16 +51,13 @@ export function reschedule() {
     job.armed = true;
     next = Math.min(next, job.next);
   }
-  if (next === timerAt) return;
-  if (timer) clearTimeout(timer);
-  timer = null;
-  timerAt = next;
-  if (next !== Infinity) timer = setTimeout(fire, Math.max(0, next - now));
+  if (next === (armed?.at ?? Infinity)) return;
+  if (armed) clearTimeout(armed.timer);
+  armed = next === Infinity ? null : { at: next, timer: setTimeout(fire, Math.max(0, next - now)) };
 }
 
 function fire() {
-  timer = null;
-  timerAt = Infinity;
+  armed = null;
   const now = clock();
   const due = [...jobs].filter((job) => job.armed && job.next <= now + GRID_SLACK_MS);
   for (const job of due) job.next = slotAfter(Math.max(now, job.next), job.every);
@@ -85,16 +81,15 @@ export function slowTimersForTests(now: () => number) {
   for (const job of jobs) job.next = slotAfter(now(), job.every);
   clock = now;
   return {
-    pending: () => (timer ? timerAt : null),
+    pending: () => armed?.at ?? null,
     fire: () => {
-      if (timer) clearTimeout(timer);
+      if (armed) clearTimeout(armed.timer);
       fire();
     },
     clear: () => {
       jobs.clear();
-      if (timer) clearTimeout(timer);
-      timer = null;
-      timerAt = Infinity;
+      if (armed) clearTimeout(armed.timer);
+      armed = null;
     },
   };
 }

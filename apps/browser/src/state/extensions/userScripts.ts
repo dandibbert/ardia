@@ -155,14 +155,12 @@ export function startUserScripts() {
   if (started) return;
   started = true;
   onUserScriptsChange(schedule);
-  let watching = false;
-  let key = "";
+  let watchedTargets: string | null = null;
   const sync = (s: BrowserState) => {
     const on = s.settings.cliControl;
-    const nextKey = on ? targetsKey(openedTargets(scriptsTargets(s))) : "";
-    if (on === watching && nextKey === key) return;
-    watching = on;
-    key = nextKey;
+    const targets = on ? targetsKey(openedTargets(scriptsTargets(s))) : null;
+    if (targets === watchedTargets) return;
+    watchedTargets = targets;
     watchUserScripts(on);
     if (on) void schedule();
   };
