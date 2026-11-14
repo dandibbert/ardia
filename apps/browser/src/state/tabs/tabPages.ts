@@ -13,24 +13,20 @@ import { focusedWindowOf } from "../windows/ui";
 
 export const wantsPage = (t: Tab | undefined): t is Tab => !!t && hasPage(t) && !isInternalTab(t);
 
-const handedOff = new Map<string, string>();
-
 type Handoff = { seq: number | undefined; engine: PageEngine };
-const handoffs = new Map<string, Handoff>();
+const handoffs = new Map<string, Handoff & { profile: string }>();
 
 export function takeHandOff(tabId: string, engine: PageEngine): Handoff | null {
   const handoff = handoffs.get(tabId);
-  if (!handoff || !handedOff.has(tabId)) return null;
+  if (!handoff) return null;
   handoffs.delete(tabId);
-  handedOff.delete(tabId);
   if (handoff.engine === engine) return handoff;
   releaseTabTransfer(tabId);
   return null;
 }
 
 export function handOff(tabId: string, profile: string, engine: PageEngine) {
-  handedOff.set(tabId, profile);
-  handoffs.set(tabId, { seq: issuedSeq(tabId), engine });
+  handoffs.set(tabId, { seq: issuedSeq(tabId), engine, profile });
   prepareTabTransfer(tabId);
 }
 
@@ -43,9 +39,8 @@ export function startTabPages() {
       const before = prev.tabs[id];
       const profile = tab && engineProfile(s, tab.profileId);
       if (tab && before && tab.windowId !== before.windowId && webviews.has(id) && profile === engineProfile(s, before.profileId)) handOff(id, profile!, tabEngine(s, id));
-      const kept = handedOff.get(id);
+      const kept = handoffs.get(id)?.profile;
       if (kept !== undefined && !(wantsPage(tab) && profile === kept)) {
-        handedOff.delete(id);
         handoffs.delete(id);
         releaseTabTransfer(id);
       }
@@ -59,8 +54,7 @@ function claimLaunch() {
   const tab = launch ? s.tabs[launch.id] : undefined;
   const kept = launch && wantsPage(tab) && navigationOf(tab)?.url === launch.url && tabEngine(s, launch.id) === "chromium" ? launch : null;
   if (kept) {
-    handedOff.set(kept.id, kept.profile);
-    handoffs.set(kept.id, { seq: navigationOf(tab)?.seq, engine: "chromium" });
+    handoffs.set(kept.id, { seq: navigationOf(tab)?.seq, engine: "chromium", profile: kept.profile });
   }
   claimLaunchTab(kept?.id ?? "", kept?.url ?? "", kept?.profile ?? "");
 }

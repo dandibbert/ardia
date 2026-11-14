@@ -135,13 +135,12 @@ function wakeToPlay(tabId: string) {
   if (!handle || waking.has(tabId)) return;
   const before = useMedia.getState().sessions[tabId];
   waking.add(tabId);
-  let sawLoading = false;
-  let loaded: ReturnType<typeof setTimeout> | undefined;
+  let load: { phase: "waiting" } | { phase: "loading" } | { phase: "loaded"; timer: ReturnType<typeof setTimeout> } = { phase: "waiting" };
   const unsubscribe: (() => void)[] = [];
   const finish = () => {
     for (const stop of unsubscribe) stop();
     clearTimeout(deadline);
-    clearTimeout(loaded);
+    if (load.phase === "loaded") clearTimeout(load.timer);
     waking.delete(tabId);
   };
   const resume = (after: NowPlaying | null) => {
@@ -155,9 +154,9 @@ function wakeToPlay(tabId: string) {
       if (after && after !== before && after.playbackState !== "none") resume(after);
     }),
     useBrowser.subscribe((s) => {
-      if (loaded || isSleeping(tabId)) return;
-      if (s.live[tabId]?.isLoading) sawLoading = true;
-      else if (sawLoading) loaded = setTimeout(() => resume(null), LOADED_WITHOUT_SESSION_MS);
+      if (load.phase === "loaded" || isSleeping(tabId)) return;
+      if (s.live[tabId]?.isLoading) load = { phase: "loading" };
+      else if (load.phase === "loading") load = { phase: "loaded", timer: setTimeout(() => resume(null), LOADED_WITHOUT_SESSION_MS) };
     }),
   );
   void handle.reload().catch(finish);

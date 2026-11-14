@@ -6,8 +6,8 @@ import { nextCleanUpAt, noteDeselectedTabs } from "./tabCleanup";
 const RECHECK_MS = 30 * 60 * 1000;
 const RETRY_FLOOR_MS = 1000;
 
-let timer: ReturnType<typeof setTimeout> | null = null;
-let unsubscribe: (() => void) | null = null;
+type AutoCleanUp = { phase: "stopped" } | { phase: "running"; unsubscribe: () => void; timer: ReturnType<typeof setTimeout> | null };
+let cleanUp: AutoCleanUp = { phase: "stopped" };
 
 const inactiveForMs = (s: BrowserState) => {
   const minutes = s.settings.cleanUpInactiveTabsAfterMinutes;
@@ -23,15 +23,17 @@ export function nextAutoCleanUpAt(s: BrowserState, now = Date.now()): number | n
 }
 
 function schedule(floor = 0) {
-  if (timer) clearTimeout(timer);
-  timer = null;
+  const running = cleanUp;
+  if (running.phase !== "running") return;
+  if (running.timer) clearTimeout(running.timer);
+  running.timer = null;
   const now = Date.now();
   const at = nextAutoCleanUpAt(useBrowser.getState(), now);
-  if (at !== null) timer = setTimeout(cleanUpDue, Math.max(floor, at - now));
+  if (at !== null) running.timer = setTimeout(cleanUpDue, Math.max(floor, at - now));
 }
 
 function cleanUpDue() {
-  timer = null;
+  if (cleanUp.phase === "running") cleanUp.timer = null;
   const s = useBrowser.getState();
   const after = inactiveForMs(s);
   if (after !== null) for (const id of s.windowOrder) useBrowser.getState().cleanUpTabs(id, { inactiveForMs: after });
@@ -48,20 +50,22 @@ function deselectedTabs(s: BrowserState, prev: BrowserState): string[] {
 }
 
 export function startAutoCleanUp() {
-  if (unsubscribe) return;
-  unsubscribe = useBrowser.subscribe((s, prev) => {
+  if (cleanUp.phase === "running") return;
+  const unsubscribe = useBrowser.subscribe((s, prev) => {
     if (s.windows !== prev.windows) {
       const left = deselectedTabs(s, prev);
       if (left.length) noteDeselectedTabs(s, left);
     }
     if (inactiveForMs(s) !== inactiveForMs(prev)) schedule();
   });
+  cleanUp = { phase: "running", unsubscribe, timer: null };
   schedule();
 }
 
 export function stopAutoCleanUp() {
-  unsubscribe?.();
-  unsubscribe = null;
-  if (timer) clearTimeout(timer);
-  timer = null;
+  const running = cleanUp;
+  if (running.phase !== "running") return;
+  cleanUp = { phase: "stopped" };
+  running.unsubscribe();
+  if (running.timer) clearTimeout(running.timer);
 }

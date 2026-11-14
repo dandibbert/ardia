@@ -165,19 +165,18 @@ function refocusAfterClose(s: BrowserState, prev: BrowserState) {
   }
 }
 
-const loading = new Set<string>();
-const loaded = new Set<string>();
+const firstLoads = new Map<string, "loading" | "loaded">();
 
 function bumpOnFirstLoad(s: BrowserState, prev: BrowserState) {
   if (s.peeks === prev.peeks && s.live === prev.live) return;
   const shown = new Set(Object.values(s.peeks).map((p) => p.tabId));
-  for (const id of [...loading, ...loaded]) if (!shown.has(id)) (loading.delete(id), loaded.delete(id));
+  for (const id of [...firstLoads.keys()]) if (!shown.has(id)) firstLoads.delete(id);
   for (const id of shown) {
-    if (loaded.has(id)) continue;
-    if (s.live[id]?.isLoading) loading.add(id);
-    else if (loading.has(id)) {
-      loading.delete(id);
-      loaded.add(id);
+    const load = firstLoads.get(id);
+    if (load === "loaded") continue;
+    if (s.live[id]?.isLoading) firstLoads.set(id, "loading");
+    else if (load === "loading") {
+      firstLoads.set(id, "loaded");
       hapticTick();
     }
   }

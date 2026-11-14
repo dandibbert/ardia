@@ -27,8 +27,7 @@ class ProfilePager {
   private unsubscribe: () => void;
   private lastEvent: object | null = null;
   private wheelState = { sum: 0, last: 0, trigger: 0 };
-  private external = 0;
-  private externalGeneration = 0;
+  private externalSelect: object | null = null;
 
   readonly windowId: string;
 
@@ -57,18 +56,18 @@ class ProfilePager {
   }
 
   readonly onNativeState = (event: PagerStateEvent) => {
-    if (this.external) return;
+    if (this.externalSelect) return;
     this.commitNative(pagerState(this.windowId) ?? event, event);
   };
 
   private selectExternal(profileId: string, order: string[]) {
     const index = order.indexOf(profileId);
     if (index >= 0) this.pos.setValue(index);
-    const generation = ++this.externalGeneration;
-    this.external = generation;
+    const select = {};
+    this.externalSelect = select;
     const done = (ok: boolean) => {
-      if (this.external !== generation) return;
-      this.external = 0;
+      if (this.externalSelect !== select) return;
+      this.externalSelect = null;
       if (ok) this.commitNative(pagerState(this.windowId));
     };
     selectPager(this.windowId, profileId, order).then(done, () => done(false));
@@ -152,8 +151,7 @@ class ProfilePager {
   }
 
   private dispose() {
-    this.external = 0;
-    this.externalGeneration++;
+    this.externalSelect = null;
     this.unsubscribe();
     pagers.delete(this.windowId);
   }

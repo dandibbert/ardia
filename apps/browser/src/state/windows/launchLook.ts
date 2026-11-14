@@ -19,8 +19,8 @@ const RESTORED_THEME_GRACE_MS = 1500;
 type RestoredTheme = { tab: string; page: string; color: string };
 type LaunchLook = { themes: RestoredTheme[]; favicons: LaunchFavicons };
 
-const restored = new Map<string, { page: string; color: string }>();
-const settling = new Map<string, ReturnType<typeof setTimeout>>();
+type HeldTheme = { page: string; color: string; settling: ReturnType<typeof setTimeout> | null };
+const restored = new Map<string, HeldTheme>();
 
 function savedTabs(s: BrowserState): Tab[] {
   const windowIds = [...new Set([...s.ui.focusOrder, ...s.windowOrder])];
@@ -75,7 +75,7 @@ export function restoreLaunchLook() {
     const tab = s.tabs[theme.tab];
     const now = s.live[theme.tab];
     if (!tab || !now || now.themeColor || withoutFragment(tab.url) !== theme.page) continue;
-    restored.set(theme.tab, { page: theme.page, color: theme.color });
+    restored.set(theme.tab, { page: theme.page, color: theme.color, settling: restored.get(theme.tab)?.settling ?? null });
     live[theme.tab] = { ...now, themeColor: theme.color };
   }
   if (Object.keys(live).length) useBrowser.setState((now) => ({ live: { ...now.live, ...live } }));
@@ -84,21 +84,17 @@ export function restoreLaunchLook() {
 const onBlank = (url: string) => !url || url === "about:blank";
 
 function releaseRestoredTheme(tabId: string) {
+  const held = restored.get(tabId);
   restored.delete(tabId);
-  clearTimeout(settling.get(tabId));
-  settling.delete(tabId);
+  if (held?.settling) clearTimeout(held.settling);
 }
 
-function settleRestoredTheme(tabId: string) {
-  if (settling.has(tabId)) return;
-  settling.set(
-    tabId,
-    setTimeout(() => {
-      settling.delete(tabId);
-      if (!restored.delete(tabId)) return;
-      useBrowser.getState().updateLive(tabId, { themeColor: null });
-    }, RESTORED_THEME_GRACE_MS),
-  );
+function settleRestoredTheme(tabId: string, held: HeldTheme) {
+  if (held.settling) return;
+  held.settling = setTimeout(() => {
+    if (!restored.delete(tabId)) return;
+    useBrowser.getState().updateLive(tabId, { themeColor: null });
+  }, RESTORED_THEME_GRACE_MS);
 }
 
 export function restoredThemeColor(tabId: string, url: string, reported: string | null | undefined, isLoading: boolean): string | null {
@@ -108,6 +104,6 @@ export function restoredThemeColor(tabId: string, url: string, reported: string 
     releaseRestoredTheme(tabId);
     return reported ?? null;
   }
-  if (!isLoading && !onBlank(url)) settleRestoredTheme(tabId);
+  if (!isLoading && !onBlank(url)) settleRestoredTheme(tabId, held);
   return held.color;
 }

@@ -17,8 +17,7 @@ const last = new Map<string, Place>();
 const shown = new Set<string>();
 const moves: Move[] = [];
 let commits = 0;
-let started = 0;
-let finished = false;
+let watch: { phase: "waiting" } | { phase: "watching"; since: number } | { phase: "finished" } = { phase: "waiting" };
 
 function onScreen(p: Place, frame: readonly number[] | null | undefined): boolean {
   if (!p.width || !p.height) return false;
@@ -65,15 +64,16 @@ function edit() {
 }
 
 function finish() {
-  if (finished) return;
-  finished = true;
-  writeDocument("layout-watch.json", JSON.stringify({ commits, rows: last.size, shown: shown.size, ms: Date.now() - started, moves, missing: missingRows(), edits }));
+  if (watch.phase !== "watching") return;
+  const { since } = watch;
+  watch = { phase: "finished" };
+  writeDocument("layout-watch.json", JSON.stringify({ commits, rows: last.size, shown: shown.size, ms: Date.now() - since, moves, missing: missingRows(), edits }));
 }
 
 export function layoutCommitted(editAt = 0) {
-  if (finished) return;
-  if (!started) {
-    started = Date.now();
+  if (watch.phase === "finished") return;
+  if (watch.phase === "waiting") {
+    watch = { phase: "watching", since: Date.now() };
     setTimeout(finish, WATCH_MS);
   }
   const commit = ++commits;

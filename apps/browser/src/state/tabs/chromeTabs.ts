@@ -12,10 +12,9 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { changedIds } from "../browser/changes";
 import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } from "./liveTabs";
 
-let started = false;
+type Sync = { phase: "idle" } | { phase: "snapshotting"; early: TabStripTransaction[] } | { phase: "synced"; rev: number };
+let sync: Sync = { phase: "idle" };
 const mirror = new Map<number, StripState>();
-let lastRev = -1;
-let early: TabStripTransaction[] = [];
 const seen = new Set<string>();
 type Kind = "arrange" | "activate" | "group";
 const inflight = new Map<number, { kind: Kind; cmd: number; keys?: string[]; makes?: string; successor?: boolean; moves?: boolean }>();
@@ -30,23 +29,22 @@ if (__DEV__) {
     engineInfo,
     devWindowAction,
     strips: () => [...mirror.values()],
-    state: () => ({ lastRev, inflight: Object.fromEntries(inflight), tried: Object.fromEntries(tried), groups: Object.fromEntries(groups) }),
+    state: () => ({ lastRev: sync.phase === "synced" ? sync.rev : -1, inflight: Object.fromEntries(inflight), tried: Object.fromEntries(tried), groups: Object.fromEntries(groups) }),
   };
 }
 
 export function startChromeTabs() {
-  if (started) return;
-  started = true;
-  onTabStripTransaction((tx) => (lastRev < 0 ? early.push(tx) : receive(tx)));
+  if (sync.phase !== "idle") return;
+  const snapshotting = { phase: "snapshotting" as const, early: [] as TabStripTransaction[] };
+  sync = snapshotting;
+  onTabStripTransaction((tx) => (sync.phase === "snapshotting" ? sync.early.push(tx) : receive(tx)));
   void tabStrips().then((snapshot) => {
     for (const strip of snapshot.strips) {
       mirror.set(strip.strip, strip);
       for (const t of strip.tabs) if (t.key) seen.add(t.key);
     }
-    lastRev = snapshot.rev;
-    const queued = early;
-    early = [];
-    for (const tx of queued) receive(tx);
+    sync = { phase: "synced", rev: snapshot.rev };
+    for (const tx of snapshotting.early) receive(tx);
     scheduleProject();
   });
   useBrowser.subscribe((s, prev) => {
@@ -63,8 +61,8 @@ function placed(s: BrowserState, prev: BrowserState) {
 }
 
 function receive(tx: TabStripTransaction) {
-  if (tx.rev <= lastRev) return;
-  lastRev = tx.rev;
+  if (sync.phase !== "synced" || tx.rev <= sync.rev) return;
+  sync = { phase: "synced", rev: tx.rev };
   for (const [strip, f] of inflight) {
     if (f.cmd !== tx.cmd) continue;
     inflight.delete(strip);
@@ -107,7 +105,7 @@ function receive(tx: TabStripTransaction) {
 let projectQueued = false;
 
 function scheduleProject() {
-  if (projectQueued || lastRev < 0) return;
+  if (projectQueued || sync.phase !== "synced") return;
   projectQueued = true;
   queueMicrotask(() => {
     projectQueued = false;

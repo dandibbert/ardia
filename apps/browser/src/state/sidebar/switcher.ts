@@ -15,10 +15,15 @@ const SHOW_AFTER_MS = 140;
 const SESSION_START = Date.now();
 const POINTER_POLL_MS = 50;
 let showTimer: ReturnType<typeof setTimeout> | undefined;
-let pointerTimer: ReturnType<typeof setInterval> | undefined;
+type PointerWatch = { phase: "idle" } | { phase: "stale" } | { phase: "watching"; timer: ReturnType<typeof setInterval> };
+const POINTER_IDLE: PointerWatch = { phase: "idle" };
+let pointer: PointerWatch = POINTER_IDLE;
 let hoveredRow: number | null = null;
-let keyboardMoves = 0;
-let pointerStale = false;
+
+function setPointer(next: PointerWatch) {
+  if (pointer.phase === "watching") clearInterval(pointer.timer);
+  pointer = next;
+}
 
 export function switcherStep(windowId: string, backward: boolean) {
   const current = sidebarUi().switcher;
@@ -51,10 +56,8 @@ function syncSwitcherTabs(windowId: string, state = useBrowser.getState()) {
   if (ids.length < 2) return endSwitcher();
   const selected = s.ids[s.index];
   const selectedIndex = selected ? ids.indexOf(selected) : -1;
-  stopPointerWatch();
+  setPointer(POINTER_IDLE);
   hoveredRow = null;
-  pointerStale = false;
-  keyboardMoves++;
   setSidebarUi({ switcher: { ...s, ids, index: selectedIndex >= 0 ? selectedIndex : Math.min(s.index, ids.length - 1) } });
 }
 
@@ -76,12 +79,11 @@ export function moveSwitcher(step: 1 | -1) {
   const s = sidebarUi().switcher;
   if (!s) return;
   focusSwitcherRow(s.index + step);
-  stopPointerWatch();
-  pointerStale = true;
-  const move = ++keyboardMoves;
+  const stale: PointerWatch = { phase: "stale" };
+  setPointer(stale);
   void setSwitcherCapture(true).then(() => {
-    if (move !== keyboardMoves || !sidebarUi().switcher) return;
-    pointerStale = false;
+    if (pointer !== stale || !sidebarUi().switcher) return;
+    setPointer(POINTER_IDLE);
     if (hoveredRow !== null) watchPointer();
   });
 }
@@ -95,37 +97,34 @@ export function focusSwitcherRow(index: number) {
 
 export function hoverSwitcherRow(index: number) {
   hoveredRow = index;
-  if (pointerStale) return;
+  if (pointer.phase === "stale") return;
   if (switcherPointerMoved()) {
-    stopPointerWatch();
+    setPointer(POINTER_IDLE);
     return focusSwitcherRow(index);
   }
   watchPointer();
 }
 
 function watchPointer() {
-  pointerTimer ??= setInterval(() => {
-    if (!sidebarUi().switcher || hoveredRow === null) return stopPointerWatch();
+  if (pointer.phase === "watching") return;
+  const timer = setInterval(() => {
+    if (!sidebarUi().switcher || hoveredRow === null) return setPointer(POINTER_IDLE);
     if (!switcherPointerMoved()) return;
     const row = hoveredRow;
-    stopPointerWatch();
+    setPointer(POINTER_IDLE);
     focusSwitcherRow(row);
   }, POINTER_POLL_MS);
+  setPointer({ phase: "watching", timer });
 }
 
 export function leaveSwitcherRow(index: number) {
   if (hoveredRow === index) hoveredRow = null;
 }
 
-function stopPointerWatch() {
-  clearInterval(pointerTimer);
-  pointerTimer = undefined;
-}
-
 export function commitSwitcher(index?: number) {
   const s = sidebarUi().switcher;
   if (!s) return;
-  const pointed = s.visible && !pointerStale && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
+  const pointed = s.visible && pointer.phase !== "stale" && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
   endSwitcher();
   const id = s.ids[index ?? pointed ?? s.index];
   const state = useBrowser.getState();
@@ -140,10 +139,8 @@ export function cancelSwitcher() {
 
 function endSwitcher() {
   clearTimeout(showTimer);
-  stopPointerWatch();
+  setPointer(POINTER_IDLE);
   hoveredRow = null;
-  pointerStale = false;
-  keyboardMoves++;
   void setSwitcherCapture(false);
   setSidebarUi({ switcher: null });
 }
