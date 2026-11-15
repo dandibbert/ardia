@@ -18,6 +18,7 @@ import {
   useSync,
 } from "../../../state/sync/engine";
 import { DATA_TYPES, type SyncStatus } from "../../../state/sync/syncDoc";
+import { errorText } from "../../../lib/errors";
 import { actionMessage, actionRunning, finishedAction, IDLE_ACTION, RUNNING_ACTION, type ActionState } from "./actionState";
 import { deviceSymbol } from "../../../state/sync/devices";
 import { ProfileBadge } from "../../profiles/ProfileIcons";
@@ -70,9 +71,9 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
   const hasData = !!info?.hasSyncData;
 
   const turnOn = async () => {
-    if (!info) return;
+    if (!info || busy) return;
     setTurningOn(RUNNING_ACTION);
-    const result = await turnOnSync(info.path);
+    const result = await turnOnSync(info.path).catch((thrown: unknown) => ({ error: errorText(thrown) }));
     const error = "error" in result ? result.error : null;
     setTurningOn((state) => finishedAction(state, error));
     if (error === null) showRecoveryKit();
@@ -80,7 +81,7 @@ function SyncOff({ info }: { info: FolderInfo | null }) {
   const enterPhrase = () => showPhraseEntry(info, () => void chooseSyncFolder().then(() => folderInfo().then((i) => showPhraseEntry(i))));
   const otherOptions = async () => {
     const choice = await showMenu([
-      { id: "new", title: "Set Up Without Another Device", enabled: !noICloud },
+      { id: "new", title: "Set Up Without Another Device", enabled: !noICloud && !busy },
       { id: "phrase", title: "Enter Recovery Phrase" },
     ]);
     if (choice === "new") void turnOn();

@@ -61,6 +61,9 @@ export const StripPage = memo(function StripPage({ profileId, slot, pageWidth, c
     pointer.current = { at: "away" };
     if (wasHolding) release();
   };
+  useEffect(() => {
+    if (!current) leave();
+  }, [current]);
   const slotOf = (id: string) => top.slots.findIndex((slot) => slot.tabIds[0] === id);
   const grow = useRef(new Animated.Value(0)).current;
   const strip: Strip = { top, targets, chip, grow, dock };

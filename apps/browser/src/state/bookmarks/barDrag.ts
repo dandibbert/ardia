@@ -215,7 +215,10 @@ function startEscapeWatch() {
 export function watchBookmarkEscape() {
   const watch = (escapeWatch ??= { watchers: 0, stop: startEscapeWatch() });
   watch.watchers++;
+  let watching = true;
   return () => {
+    if (!watching) return;
+    watching = false;
     if (escapeWatch !== watch || --watch.watchers > 0) return;
     escapeWatch = null;
     watch.stop();

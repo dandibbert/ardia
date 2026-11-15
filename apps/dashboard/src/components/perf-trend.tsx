@@ -158,7 +158,10 @@ export function TrendTarget({ spec, name, side = "top", children }: { spec: Tren
         tabIndex={0}
         aria-label={`${name ?? labelOf(spec)}: show its trend`}
         aria-haspopup="dialog"
-        onPointerEnter={() => setWanted(true)}
+        onPointerEnter={(e) => {
+          setWanted(true);
+          releaseOnMouseLeave(e);
+        }}
         onPointerLeave={releaseOnMouseLeave}
         onFocus={() => setWanted(true)}
         onBlur={releaseOnBlur}

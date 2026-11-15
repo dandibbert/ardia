@@ -185,7 +185,11 @@ function scheduleFlush(delay: number) {
   const due = Math.max(Date.now() + delay, backoff?.retryAt ?? 0);
   if (scheduledFlush && scheduledFlush.dueAt <= due) return;
   cancelScheduledFlush();
-  scheduledFlush = { timer: setTimeout(() => void flush(), due - Date.now()), dueAt: due };
+  const timer = setTimeout(() => {
+    if (scheduledFlush?.timer === timer) scheduledFlush = null;
+    void flush();
+  }, due - Date.now());
+  scheduledFlush = { timer, dueAt: due };
 }
 
 function noteFlushFailed() {
@@ -254,8 +258,8 @@ async function drain<T>(
 }
 
 export async function flush() {
-  scheduledFlush = null;
   if (!saved().sharing || flushing) return;
+  cancelScheduledFlush();
   flushing = true;
   const gen = generation;
   let result: DrainResult;

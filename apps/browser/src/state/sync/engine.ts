@@ -125,6 +125,7 @@ async function runCycle({ retiring = false, forcePasswords = false }: CycleOptio
     await done;
   } finally {
     cycle = { phase: "idle", forcePasswordsNext: running.forcePasswordsNext };
+    if (doc.enabled) scheduleSync(running.again ? 0 : CYCLE_MS);
   }
 }
 
@@ -202,14 +203,6 @@ async function cycleOnce(native: NonNullable<typeof SyncNative>, folder: string,
   } finally {
     clearTimeout(slow);
     save();
-    if (doc.enabled) {
-      if (cycle.phase === "running" && cycle.again) {
-        cycle.again = false;
-        scheduleSync(0);
-      } else {
-        scheduleSync(CYCLE_MS);
-      }
-    }
   }
 }
 

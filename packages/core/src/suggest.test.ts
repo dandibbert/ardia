@@ -231,3 +231,26 @@ test("an answered query is served from the cache, and cancel still silences a ca
     mock.timers.reset();
   }
 });
+
+test("a failed reply answers with nothing and isn't cached, so the same query is fetched again", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let calls = 0;
+    const fetch = (async () => {
+      calls++;
+      return { ok: false, text: async () => "" };
+    }) as unknown as typeof globalThis.fetch;
+    const results: string[] = [];
+    const fetcher = createSuggestFetcher({ fetch, delay: 10 });
+    fetcher.request(google, "cat", (s) => results.push(`first:${s.length}`));
+    mock.timers.tick(10);
+    await flush();
+    fetcher.request(google, "cat", (s) => results.push(`second:${s.length}`));
+    mock.timers.tick(10);
+    await flush();
+    assert.equal(calls, 2);
+    assert.deepEqual(results, ["first:0", "second:0"]);
+  } finally {
+    mock.timers.reset();
+  }
+});

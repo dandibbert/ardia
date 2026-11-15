@@ -1,4 +1,5 @@
 import { showMenu } from "../../../state/app/system";
+import { errorText } from "../../../lib/errors";
 import { Box, Button, Checkbox, DialogActions, DialogTitle, ink, lineHeight, proseLineHeight, radius, Sheet, space, Symbol, tabularNums, Text, TextField } from "../../ui";
 import {
   copyRecoveryKit,
@@ -142,8 +143,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
     if (!folder || busy) return;
     setState({ phase: "connecting" });
     const joining = !syncing;
-    const result = await enterRecoveryPhrase(folder.path, text);
-    const message = phraseError(result);
+    const message = await enterRecoveryPhrase(folder.path, text).then(phraseError, errorText);
     if (message) return setState({ phase: "editing", error: message });
     if (joining) return setState({ phase: "joined" });
     setState(EDITING_PHRASE);

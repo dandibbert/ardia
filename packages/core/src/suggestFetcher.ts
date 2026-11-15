@@ -55,24 +55,26 @@ export function createSuggestFetcher({
         const controller = new AbortController();
         pending = { phase: "fetching", controller };
         fetch(url, { signal: controller.signal })
-          .then(async (res) => {
-            if (!res.ok) return [];
+          .then(async (res): Promise<string[] | null> => {
+            if (!res.ok) return null;
             try {
               return parseSuggestions(suggestReplyJson(await res.text()));
             } catch {
-              return [];
+              return null;
             }
           })
           .then(
             (suggestions) => {
               if (controller.signal.aborted) return;
-              remember(url, suggestions);
+              if (suggestions) remember(url, suggestions);
               if (current === generation) {
                 pending = { phase: "idle" };
-                onResult(suggestions);
+                onResult(suggestions ?? []);
               }
             },
-            () => {},
+            () => {
+              if (current === generation) pending = { phase: "idle" };
+            },
           );
       }, delay);
       pending = { phase: "waiting", timer };
