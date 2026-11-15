@@ -105,7 +105,12 @@ bookmark searches) and their fixed page title.
   subscription accepted and runs a decide request only when its `revision` matches one of them, so a request for an
   approved revision never runs an edited program.
 - `answer` `{"decide", "answer"}`: see Protocol.
-- `workspace` `{"window"?, "profile"?}` and `apply` `{"ops": [...]}`: see Tabs and groups.
+- `workspace` `{"window"?, "profile"?, "usage"?}` and `apply` `{"ops": [...]}`: see Tabs and groups.
+- `offscreen` `{"tab"}` → `{"ok": true}`: takes a tab the ardia command opened, and that was never shown, out of
+  its window and the sidebar into Ardia's automation window for that profile, where `ardia browse set viewport` may
+  size its page (`docs/cli.md` › Gated by the token policy). `refused` for the shown tab, one the command didn't
+  open, one that has been shown, or a page Ardia couldn't move; `no_window` for an unknown or private tab. The tab
+  never comes back: the command opens a new one to show the page.
 
 ### Tabs and groups
 
@@ -127,6 +132,15 @@ or null for the default), "color" (`neutral`, `none` or one of Chrome's nine), "
 "customTitle", "icon", "pin" (`tile`, `row` or null), "pinned" (also true in a pinned group), "folder", "group" (the
 innermost), "split", "active", "muted", "asleep", "index"}`; URLs and titles as in `windows` (internal pages
 redacted). Peek tabs, private windows and incognito profiles never appear. It doesn't show the pill.
+
+`workspace` `{"usage": true}` adds each tab's renderer process to its node: `"pid"` (the process id, as `top` and
+Activity Monitor show it), `"cpu"` (percent of one core, one decimal) and `"memory"` (bytes), each null for a tab with
+no process (asleep, or a page that isn't loaded). The numbers are Chrome's Task Manager's (`engine.tasks`,
+`ac_tasks_list`), per process, so tabs sharing a renderer show the same ones, and a frame in another process isn't
+counted. The task manager measures CPU between two of its 2 s refreshes and stops 15 s after the last read, so the
+first read in a while waits 2.2 s and reads again (`state/automation/workspaceUsage.ts`); later ones answer at once.
+`pid` is null on an engine whose `ac_tasks_list` has no `pid` field. Without `usage` the nodes have none of the three,
+and nothing is sampled.
 
 `apply` runs a batch of operations in order and shows the pill like `run`. Every operation is checked before the
 first runs: an unknown `op` or field (typos included), a wrong type, more than 500 operations or 100 URLs in one
@@ -339,12 +353,12 @@ Hooks that answer before something happens, with a deadline after which Ardia do
   `"fullUrls": true`; a program that rewrites query parameters needs it. The runner trims again on its side.
 - **link.opening** decides before any tab exists. At every launch native holds incoming links (no early Little Ardia
   tab, no parked link tabs) until JS reports its link policy with `setHoldIncomingLinks(hold, hooksStamp)`: the app reports it
-  once its hooks are loaded and again on every change, `true` while an active `tab.opening` or `link.opening` hook
-  exists. `hooksStamp` is the stamp (device, inode, size, mtime, ctime) native returned with the hooks.json read the
+  once its hooks are loaded and again on every change, `true` while an active `tab.opening` or `link.opening` hook,
+  an enabled Air Traffic Control rule or an Everything Else choice exists. `hooksStamp` is the stamp (device, inode, size, mtime, ctime) native returned with the hooks.json read the
   rules came from, so a decision is never filed under a newer file; native keeps the fast-path fingerprint only when
-  that stamp is the file's current one. The fingerprint also covers config.json and `automation-approvals.json`, so
-  native takes its fast path before JS loads only when the last report said no hold and none of the three changed
-  since. A routed or rewritten link never adopts contents loaded for it
+  that stamp is the file's current one. The fingerprint also covers config.json, `automation-approvals.json` and
+  `air-traffic.json`, so native takes its fast path before JS loads only when the last report said no hold and none of
+  the four changed since. A routed or rewritten link never adopts contents loaded for it
   under another profile.
 - **Permissions.** A hook can deny or leave the normal prompt; `allow` means "show the prompt", never an unattended
   grant. A deny is answered on the engine's own request id and never remembered. A request dismissed or replaced
@@ -380,6 +394,37 @@ Hooks that answer before something happens, with a deadline after which Ardia do
 - **Floods.** At most 64 pending decisions (16 per runner connection), 200 hooks and 50 rewrite rules per hook; the
   runner runs at most 16 decide programs at once (4 per hook) and gives up at the deadline. Command hooks run at
   most 10 commands per 10 s each, so a hook that triggers itself stops.
+
+## Air Traffic Control
+
+Settings › Air Traffic Control is the same `link.opening` route engine with rules the user makes in Settings, kept in
+the data dir (`air-traffic.json`, version 1: an ordered `rules` list and a `fallback`), not in the config folder.
+
+- **Order.** For a link from another app (after `tab.opening` has had its say): the Settings rules from the top, the
+  first enabled one that fits answering; then the hooks.json `link.opening` hooks as above; then the Everything Else
+  choice when nothing answered (no hook fit, a route hook's profile is gone, or a program hook gave no answer in
+  time). With no Everything Else choice the link takes Ardia's usual routing.
+- **A rule** is `from` (an app by bundle id, or by name when it has none; `null` is any app), a link condition (`any`,
+  a `site` host that also takes its subdomains, matched as `*://*.<host>/*`, or a userscript match `pattern`), a profile
+  id (`null` is the profile used last) and `open` (`tab`, `window`, `littleArdia`). Profiles are stored by id, so a
+  rename keeps the rule; a rule or fallback whose profile was deleted, or is private, doesn't apply and the link
+  goes on down the list.
+- **No approval.** The user makes these rules in Settings, so they count as approved. hooks.json route hooks still need
+  approval in Advanced › Automation; the pane lists them read-only with their state.
+- **The hold.** An enabled rule or an Everything Else choice turns the incoming-link hold on, reported again on every
+  change, so the native fast path never opens a link before the rules have seen it. `air-traffic.json` is in native's
+  fast-path fingerprint, so a file changed while Ardia was closed holds the first link of the next launch too. A
+  change is saved before the store takes it, so a save that fails changes neither the rules nor the hold.
+- **Source apps.** The app (bundle id, name) of the last 20 distinct apps that sent a link is kept in
+  `link-sources.json` for the app picker, on this Mac only and never sent.
+- **Try a Link** runs the same `traceOpening` and `traceLink` the real decision runs (`state/automation/decisions.ts`),
+  so it can't drift: a `tab.opening` rule that cancels or rewrites the link comes first, then it names the rule, hook,
+  Everything Else or usual routing that would take the link and where it would open. A program hook can't be asked
+  without sending the link, so it shows what happens if the program doesn't answer.
+- Code: `state/airTraffic/rules.ts` (the pure matching and the saved document), `store.ts`, `sourceApps.ts`,
+  `preview.ts`; the pane is `components/settings/panes/AirTraffic.tsx`.
+- Telemetry: `usage_counts.air_traffic_rule_links` and `air_traffic_fallback_links`, and `settings_snapshot`'s
+  `air_traffic_rules` (enabled rules) and `air_traffic_fallback` (true or false).
 
 ## Approvals
 
@@ -427,8 +472,11 @@ checks the server's uid, and exits 2 with one line when Ardia isn't running, con
   sending is reported, never retried, with exit 2 and a line saying the command may or may not have run.
 - `ardia commands [--json]` lists command ids, titles and variants.
 - `ardia windows [--json]` prints the windows and their tabs.
-- `ardia tabs [--window ID] [--profile ID] [--flat] [--json]` prints the workspace (each window's spaces, Top Apps,
-  pinned section, groups nested); `ardia tabs open|move|pin|unpin|activate|mute|unmute|sleep|wake|close|rename|icon …`
+- `ardia tabs [--window ID] [--profile ID] [--flat] [--usage] [--pid N] [--json]` prints the workspace (each window's
+  spaces, Top Apps, pinned section, groups nested). `--usage` prints one tab per line with its process id, CPU and
+  memory, hottest first (`--json`: the tree, or the flat list with `--flat`, with `pid`, `cpu` and `memory` on each
+  tab); `--pid N` prints only the tabs in process N (`--json`: a flat list), and exits 1 when no tab runs there
+  (`no_tab`) or the app reports no process ids (`no_pid`). An app from before `usage` gets "update Ardia"; `ardia tabs open|move|pin|unpin|activate|mute|unmute|sleep|wake|close|rename|icon …`
   and `ardia groups [create|update|rename|move|ungroup|close|delete] …` each send one `apply` operation; `ardia groups`
   alone lists the groups. `ardia apply [FILE|-]` sends a batch (a JSON list or `{"ops": [...]}`). Exit 1 for a
   refusal, a bad request or a stopped batch (with how many operations ran), 2 when Ardia can't be reached or the

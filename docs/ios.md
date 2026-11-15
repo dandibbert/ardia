@@ -54,14 +54,17 @@ the folder or the Mac's format changes, and a Mac that has never heard of the iP
   bring files down; dataless files are reported as pending, as on the Mac.
 - **Joining.** The Mac's Settings › Sync › Connect Another Device shows a QR code of the phrase. The iPhone scans it
   (or takes the 24 words typed or pasted), checks the checksum, and checks that the folder holds that phrase's
-  chain before saving anything. Its errors are the Mac's.
+  chain before saving anything. Its errors are the Mac's. A different phrase entered after a failure clears the old
+  error and, with a folder already chosen, tries again at once (`SyncConnectFlow`); the same words retyped don't.
 - **Keys.** The phrase's entropy is kept in the iPhone's Keychain (`Ardia Sync Key`, this device only,
   `AfterFirstUnlockThisDeviceOnly`, so background refresh can read it). The sync state (replica, base, version
   vectors, journal) is sealed with the file key in the app's container, like the Mac's `sync-state.nns`.
 - **What the iPhone writes.** `dev:<id>` (its name), `tabs:<id>` (its 30 most recent open tabs, as the Mac does),
   history visits as `h:<url>` (the union rule the Mac uses), `send:` records (below), and a new `bm:` bookmark in
   Other Bookmarks when you Pin to Mac (never from an Incognito tab, and never an edit or delete of an existing
-  bookmark). It never writes settings, profiles, pins or passwords, and it keeps every record it doesn't use in its replica untouched, so its snapshots
+  bookmark). A page is pinned once: when the profile's bookmarks already hold its URL (from a Mac, or a pin from
+  this iPhone still on its way), the star is filled, the menu says "Pinned to Mac" and Pin to Mac writes nothing;
+  `companionAddBookmark` refuses the duplicate too. There is no unpin, since the iPhone never deletes a bookmark. It never writes settings, profiles, pins or passwords, and it keeps every record it doesn't use in its replica untouched, so its snapshots
   would be as complete as a Mac's. It doesn't compact; Macs do. `companion.test.ts` holds it to that against a fake
   Mac writing every kind of record today's Macs write (settings, profiles and their themes, shared data, devices, pins
   with their rows, tile folders, homes, order and looks, bookmarks, history, passwords, extensions and their approvals,
@@ -70,19 +73,45 @@ the folder or the Mac's format changes, and a Mac that has never heard of the iP
 - **What it reads.** Device names, profiles (`prof:`, `pth:`), the search engine settings (`set:searchEngine`,
   `set:customSearchUrl`, `set:customSearchEngines`), and per profile the other devices' tabs, pinned tabs and groups,
   bookmarks and history.
+- **Devices.** Settings › Sync lists the other devices by name, with no time. A device writes to the folder only
+  when its own data changes, never to say it is still syncing, so the newest file from a Mac that is syncing but idle
+  can be hours old; the time it gave ("6 hr ago" for a Mac syncing every 15 s) read as "this Mac stopped". The Mac's
+  own Devices list has the same limit. The list is still ordered by each device's newest change.
 - **Cycle.** On launch, on returning to the foreground, every 15 s while in the foreground, 3 s after a local
   change, on pull to refresh, and in background app refresh (`com.ardia.browser.ios.sync`).
 
 ## What the app does
 
 Arc Search's shape, measured from its App Store screenshots, preview videos and a teardown of version 1.49 (springs,
-sizes, copy), on Apple's controls:
+sizes, copy), on Apple's controls, in the Mac's colours:
 
-- **Start.** The app opens on a search sheet over a grainy indigo-to-pink gradient (a synced profile's Mac theme
-  replaces it), keyboard up. Suggestions come from the Mac's own omnibox code: open tabs, local and synced history,
-  bookmarks, the Mac's tabs, network suggestions, bangs and the calculator. Dragging along the rows scrubs them.
-- **Browsing.** No URL bar: the page runs under the status bar, with a frosted bottom bar (tab stack, +, chevron)
-  tinted by the page. Swipe the bar to switch tabs, swipe anywhere to go back. The chevron opens the page menu:
+- **Colours.** `ProfileLook` (`ArdiaDesign`) is the Mac's profile look: its nine profile colours with their swatches
+  (plum is the default, as on the Mac) and the Mac's window tint for each (`windowTint`, the same sums as
+  `lib/windowTint.ts`, checked against the Mac's values in `ProfileLookTests`). Settings › Color picks one of the nine,
+  as the Mac's theme editor does; with sync on, Match My Mac (the default) follows the selected profile's colour or
+  custom theme instead (`AppModel.look`, in the environment as `profileLook`, and in the widget snapshot).
+  `ProfileBackdrop` draws it: the window tint top to bottom, pale in light and deep in dark, with the Mac's faint
+  grain, and never white text on a bright gradient. Text on it takes the ink that reads (`inkIsLight`). The same
+  tint is behind everything in the app, not only the start screen: Settings and its pages, the Archive, the page
+  menu, the search tray, the bar and the page behind a loading site (`lookBackdrop()`, `look.surface`), with the
+  system's white or dark cells on top, as the Mac's cards sit on its window. `Palette`
+  holds the Mac's colour roles from `components/ui/tokens.ts`: `primaryAction` and `onPrimaryAction` for the main
+  button, `formAccent` for links, checkmarks and the caret, `accent` for the loading line, `toast`, `panel`,
+  `success`. A new colour is a role there or a value derived from the look, never a literal in a view. Incognito is
+  the Mac's eyeglasses on its neutral dark tint.
+- **Start.** The app opens on a search sheet over the profile's window tint (a synced profile's Mac
+  theme replaces it), keyboard up. Suggestions come from the Mac's own omnibox code: open tabs, local and synced
+  history, bookmarks, the Mac's tabs, network suggestions, bangs and the calculator. Dragging along the rows scrubs
+  them.
+- **Browsing.** No URL bar: the page runs under the status bar and fills the screen, with the bottom bar floating
+  over it as one Liquid Glass pill holding the tab stack, + and chevron; there is no strip behind it, and only the
+  pill takes touches, so a link beside it can be tapped. The glyphs follow the page's light or dark tone. WebKit is
+  told the bar's height as an obscured inset, so a site's fixed footer lays out above the bar; the same inset
+  carries the top safe area, or the page would start under the status bar. The bar gives way to Find on Page and to
+  the search tray, and returns only after the find panel, the search tray and the keyboard have left. Where the
+  screen has a side inset (the iPhone Duo's sensor edge, a phone on its side) the pill keeps the larger inset on
+  both sides, so the plus stays in the middle of the screen.
+  Swipe the pill to switch tabs, swipe anywhere to go back. The chevron opens the page menu:
   back, forward, title, pin, reload; Reader, Copy Link (without trackers), Share; Find on Page, Send to a
   Mac, Night Shade, Page Zoom, Request Desktop Site, Translate, Site Settings.
 - **Tabs.** An app-switcher deck of live snapshots; flick a card up to close it. Closing archives; tabs left alone
@@ -103,7 +132,8 @@ and never touches real data. Captures can be driven without touch:
 `-BrowseQuery <text>`, `-BrowseSurface browsing`, `-BrowseTab <n>`, `-BrowseToolbar`, `-BrowseReader`,
 `-BrowseIncognito`, `-BrowseDelay <s>`, `-ArdiaDeck <script>`, `-ArdiaOnboarding YES`,
 `-ArdiaOpenSheet archive|spaces`, `-BrowsePlus` (taps the plus after twice the delay),
-`-BrowseOverlay <text>` (the search tray over the page), and `-ArdiaRestingStart` (the start screen without the tray).
+`-BrowseOverlay <text>` (the search tray over the page), `-ArdiaRestingStart` (the start screen without the tray),
+and `-ArdiaColor <name>` (the colour picked in Settings).
 Motion captures: `-BrowsePagerFreeze <fraction>` holds a tab swipe part way (negative swipes toward the
 previous tab), `-BrowsePagerScript` plays a scripted swipe (cancel, edge, commit, interrupted commit), and
 `-BrowseLoadFreeze <progress>` holds a page load with its loading line and placeholder.
@@ -178,7 +208,9 @@ are `.widgets`, `.share` and `.open`, and they share the app group `group.com.ar
   every build and works once Apple approves one; later builds of the same version usually pass without a full review.
   Apple has no setting that gives an external group every build, so each one is submitted. `-f public_testers=false`
   keeps an upload to the Internal group, and `gh workflow run ios-release.yml -f mode=public-link -f build=<number>`
-  sends an earlier build. To invite someone by email instead,
+  sends an earlier build. Only one build of a version can wait in Beta App Review, so a newer one is refused until
+  the older one is through. `-f mode=expire -f build=<number>` ends testing of an older build for good, so nobody
+  installs it again; Apple can't undo it and the script refuses the newest build. To invite someone by email instead,
   `gh workflow run ios-release.yml -f mode=add-tester -f email=<address>` adds them to Public Testers; TestFlight
   emails the invite once that group has an approved build.
 

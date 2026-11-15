@@ -94,7 +94,7 @@ def add_parsers(commands, formatter):
     listing = data_dir(commands.add_parser("commands", help="list the commands ardia run can run", description="List the commands ardia run can run: ids, titles and variants."))
     listing.add_argument("--json", action="store_true", help="print JSON")
 
-    windows = data_dir(commands.add_parser("windows", help="list Ardia's windows and their tabs", description="List Ardia's windows and their tabs (private windows are never included)."))
+    windows = data_dir(commands.add_parser("windows", help="list Ardia's windows and their tabs", description="List Ardia's windows and their tabs (private windows are never included). For each tab's process id, CPU and memory, use ardia tabs --usage."))
     windows.add_argument("--json", action="store_true", help="print JSON")
 
     events = data_dir(commands.add_parser("events", help="print events as they happen", description=EVENTS_DESCRIPTION, formatter_class=formatter))
@@ -181,6 +181,7 @@ def cmd_run(args) -> int:
     try:
         result, catalog = asyncio.run(control.with_connection(args.data_dir, work))
     except Unreachable as error:
+        error.noted()
         if error.sent:
             complain(f"ardia run: the connection dropped after the request went out, so {command} may or may not have run ({error})")
         else:
@@ -217,6 +218,7 @@ def parse_id(text: str):
 
 
 def unreachable_exit(error: Unreachable) -> int:
+    error.noted()
     complain(f"ardia: {error}")
     return 2
 

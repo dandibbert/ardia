@@ -35,6 +35,9 @@ Next to each one it installs cua-driver's own skill (cua-driver, for computer us
 ardia computer), pinned to the bundled driver; --no-cua skips it. A cua-driver skill that ardia didn't install, from
 cua's own installer for one, is left alone.
 
+Installing or updating the CLI runs `ardia skills install --auto`: the skill goes to every coding agent found here
+(Claude Code, Codex, Cursor, opencode; general when none is), never over a folder ardia didn't write, and not again where
+the user removed it.
 Ardia remembers where it installed the skill, and each CLI update rewrites those copies (ardia skills refresh).
 """
 SHARED_VALUE_FLAGS = frozenset({"--port", "--ws", "--data-dir", "--timeout"})
@@ -187,6 +190,7 @@ def build_parser():
     install.add_argument("--project", action="store_true", help="install into the current directory's project folders")
     install.add_argument("--no-cua", action="store_true", help="don't install cua-driver's computer-use skill next to it")
     install.add_argument("--replace", action="store_true", help="replace an ardia folder that ardia didn't install (only that folder)")
+    install.add_argument("--auto", action="store_true", help="install for every coding agent found on this Mac (or general when none is), skipping folders ardia didn't write and copies the user removed")
     skill_commands.add_parser("refresh", help="rewrite every copy of the skill installed before with this CLI's version")
 
     from ardia_cli import scripts_cli
@@ -241,7 +245,20 @@ def main(argv: list[str] | None = None) -> int:
         index = len(argv)
     browse_renders_its_own = index < len(argv) and argv[index] in ("browse", "notes")
     with printable.inert_output(json_stdout=browse_renders_its_own or printable.json_requested(argv)):
-        return telemetry.track(argv, lambda: run(argv))
+        return telemetry.track(argv, lambda: run_to_closed_pipe(argv))
+
+
+def run_to_closed_pipe(argv: list[str]) -> int:
+    from ardia_cli import printable, telemetry
+
+    try:
+        status = run(argv)
+        sys.stdout.flush()
+        return status
+    except BrokenPipeError:
+        printable.quiet_stdout()
+        telemetry.note_error_code("stdout_closed")
+        return 141
 
 
 def run(argv: list[str]) -> int:
@@ -275,6 +292,7 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(f"ardia: {error}\n")
         return 2
     if not path and rest and not rest[0].startswith("-"):
+        telemetry.note_error_code("removed_command" if rest[0] in REMOVED_COMMANDS else "unknown_command")
         sys.stderr.write(REMOVED_COMMANDS.get(rest[0], f"ardia: unknown command '{rest[0]}' (see ardia --help)") + "\n")
         return 2
     argv = path + hoisted + rest if path else rest
@@ -294,6 +312,8 @@ def run(argv: list[str]) -> int:
 
         if args.skills_command == "refresh":
             return skills.refresh()
+        if args.auto:
+            return skills.install_detected(not args.no_cua)
         return skills.install(args.target or ["general"], args.project, not args.no_cua, args.replace)
     if args.command == "scripts":
         from ardia_cli import scripts_cli

@@ -35,6 +35,7 @@ export type NowPlaying = {
   hasVideo: boolean;
   actions: string[];
   controllable: boolean;
+  loop?: boolean;
 };
 export type MediaCommand = "play" | "pause" | "toggle" | "next" | "previous" | "seekBy" | "seekTo" | "stop";
 export type MediaAccess = { camera: boolean; microphone: boolean; screen: boolean };
@@ -51,6 +52,7 @@ export type OpenWindowRequest = {
   point?: { x: number; y: number };
   site?: boolean;
   fromClick?: boolean;
+  linkWait?: "matched" | "skipped" | "timedOut";
 };
 
 export type BlockedPopup = { id: string; url: string; origin: string };
@@ -111,6 +113,7 @@ export type WebNotification = {
 };
 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean; fullScreenSpaces?: boolean; leftApp?: boolean };
+export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
 export type ControlPress = { clickAt: number; control: number };
 export type ActivateRequest = { reason: "pictureInPicture" };
 export type DisplayMediaSource = {
@@ -198,7 +201,7 @@ export type WebViewProps = ViewProps & {
   onNotification?: (notification: WebNotification) => void;
   onNotificationClose?: (id: string) => void;
   onPictureInPicture?: (state: PictureInPictureState) => void;
-  onAutoPictureInPictureKept?: (appSwitch: boolean) => void;
+  onAutoPictureInPictureKept?: (reason: AutoPictureInPictureHold) => void;
   onActivateRequest?: (request: ActivateRequest) => void;
   onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;
   onWindowClose?: () => void;
@@ -209,7 +212,7 @@ export type WebViewProps = ViewProps & {
   onScroll?: (state: ScrollState) => void;
   onProtectedMedia?: (request: ProtectedMediaRequest) => void;
   onReady?: () => void;
-  onDiscarded?: (url: string) => void;
+  onDiscarded?: (url: string, reason: DiscardReason | null) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;
   onAutofillPrompt?: (prompt: AutofillPrompt | null, id: number) => void;
   onExternalApp?: (request: ExternalAppRequest) => void;
@@ -266,3 +269,4 @@ export type WebViewHandle = {
 };
 
 export type DiscardOutcome = "discarded" | "already" | "refused" | "unsupported";
+export type DiscardReason = "external" | "urgent" | "proactive" | "suggested" | "frozen";

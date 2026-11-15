@@ -31,6 +31,11 @@ export const generalRows = {
           description: "For links clicked in a Little Ardia window: a link that would open a new tab loads right there instead of in a tab of the main window. ⌘-click still opens it behind. Links in the main window follow Settings › Tabs › Open new-tab links in.",
           keywords: ["little ardia", "target blank", "new tab", "links"],
         },
+        littleWindowGestures: {
+          title: "Close and expand Little Ardia and Peeks with trackpad gestures",
+          description: "Pinch in to close, spread to open in the main window, and swipe back on a Little Ardia page with nothing to go back to to close it. Off, pinching zooms the page.",
+          keywords: ["little ardia", "little arc", "peek", "pinch", "swipe", "gesture", "trackpad", "zoom", "close", "expand"],
+        },
       },
     },
     {
@@ -135,6 +140,11 @@ export const generalRows = {
           description: "In every window, the tabs slide out of view and come back when you move the pointer to the window's edge. ⌘S and View › Auto-Hide Tabs flip this same switch.",
           keywords: ["hide tabs", "hide sidebar", "show sidebar", "toggle sidebar", "hide tab bar", "tab strip", "top tabs", "focus mode", "full screen", "zen"],
         },
+        revealTabsOnHover: {
+          title: "Reveal hidden tabs on hover",
+          description: "With Auto-hide tabs on, the tabs slide back over the page while the pointer is at the window's edge. Off, they come back only with ⌘S or View › Auto-Hide Tabs.",
+          keywords: ["hover", "peek", "edge", "reveal", "pop out", "floating sidebar", "compact mode", "shortcut only", "accidental", "zen"],
+        },
         sidebarSide: {
           title: "Sidebar position",
           description: "On the left, as in Dia, or on the right, as in Arc. The window buttons stay at the top left.",
@@ -154,6 +164,13 @@ export const generalRows = {
           keywords: ["clear unpinned tabs", "close all tabs", "clear today", "divider", "arc"],
           shown: inSidebar,
         },
+        tidyTabs: {
+          advanced: true,
+          title: "Tidy Tabs",
+          description: "As in Arc: once you have more than six tabs, Tidy on the divider sorts them into groups by site. Pinned tabs stay where you put them.",
+          keywords: ["tidy", "broom", "organize tabs", "group by site", "clean up", "arc max"],
+          shown: inSidebar,
+        },
         balancedTopApps: {
           advanced: true,
           title: "Grow Top Apps as the sidebar widens",
@@ -163,8 +180,18 @@ export const generalRows = {
         },
         showUnreadCounts: {
           title: "Show unread counts on tabs",
-          description: "A notification badge with the unread count or dot a site like Gmail or Slack puts in its title, on its tab, pinned tile and Top App. Off by default. Once on, hide it for one site: right-click its tab and choose Hide Unread Count, or use Site Controls.",
+          description: "A notification badge with the unread count or dot a site like Gmail or Slack puts in its title, at the end of its tab. Off by default. Once on, hide it for one site: right-click its tab and choose Hide Unread Count, or use Site Controls.",
           keywords: ["unread", "badge", "badges", "bubble", "bubbles", "count", "notification", "notifications", "notis", "dot", "red", "gmail", "inbox", "messages", "arc"],
+        },
+        showTopAppBadges: {
+          title: "Show tab status on Top Apps",
+          description: "A Top App's tile shows a speaker while its tab plays or is muted, a mark while it is in Picture in Picture, and its unread count when unread counts are on. Off, as in Dia, a tile shows only the site's icon.",
+          keywords: ["pinned tiles", "favorites", "badges", "indicators", "unread count", "speaker", "audio", "muted", "playing", "clean", "dia"],
+        },
+        showTabHoverMenu: {
+          title: "Show tab hover menu",
+          description: "Rest the pointer on a tab or Top App and a card shows its title, address, and Pin, Bookmark, Split and Reset. Off, nothing pops up as you move over tabs; every one of those is in the tab's right-click menu. A playing tab's mini player still shows.",
+          keywords: ["hover", "hover card", "popup", "pop-up", "tooltip", "tab actions", "reset", "distracting", "dia"],
         },
         fadeUnloadedTabs: {
           advanced: true,
@@ -181,6 +208,12 @@ export const generalRows = {
           title: "New tab opens",
           description: "With Command Bar, ⌘T and New Tab open the command bar over the page, as in Arc. The tab appears when you pick a result; Esc leaves everything as it was.",
           keywords: ["new tab page", "command bar", "cmd t"],
+        },
+        reuseEmptyNewTab: {
+          title: "Reuse an empty New Tab page",
+          description: "When the tab you're on is still an empty New Tab page, ⌘T, + New Tab and a double-click under the tabs put the cursor in its address field instead of opening another empty tab. Off, each one opens a new tab.",
+          keywords: ["blank tab", "empty tab", "reuse", "one new tab", "multiple new tabs", "cmd t"],
+          shown: (settings) => settings.newTabOpens === "page",
         },
         newTabPosition: {
           title: "Add new tabs",
@@ -281,6 +314,11 @@ export const generalRows = {
           title: "Clean up tabs I haven't used in",
           description: "Closes tabs you haven't used (and duplicates) automatically, like the tab menu's Clean Up Daily.",
           keywords: ["archive", "auto close", "inactive tabs", "duplicates", "custom", "minutes"],
+        },
+        suggestCleanUp: {
+          title: "Suggest cleaning up when tabs pile up",
+          description: "Shows a card in the sidebar once 10 or more tabs haven't been used in a while.",
+          keywords: ["upsell", "tidy", "suggestion", "don't show again", "card", "inactive tabs"],
         },
       },
     },

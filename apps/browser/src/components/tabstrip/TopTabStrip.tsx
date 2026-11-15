@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { Animated, StyleSheet, View, type ViewStyle } from "react-native";
 import { downloadsOpenIn } from "../../state/browser/current";
-import { useWindowFullScreen, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
+import { useSettings, useWindowFullScreen, useWindowId, useWindowProfileId } from "../../state/browser/hooks";
 import { beginExternalDrag, endExternalDrag, moveExternalDrag } from "../../state/drag/tabDrag";
 import { lightsCenter, TOP_STRIP_LIGHTS_CENTER } from "../../state/windows/dockMotion";
 import { useWindowUiOf } from "../../state/windows/hooks";
@@ -35,7 +35,7 @@ import {
   PEEK_PAD,
   PEEK_TOP,
   PROFILE_ROOM,
-  TAB_RADIUS,
+  tabRadius,
   TOP_STRIP_HEIGHT,
 } from "./tokens";
 import { WindowDropGlow } from "./WindowDropGlow";
@@ -103,23 +103,26 @@ function StripDropArea({ style, children }: { style: ViewStyle; children: React.
 }
 
 function StripDropHighlight({ left, right }: { left: number; right: number }) {
-  const place = useMemo(() => ({ left: left - 4, right: right - 4, top: ITEM_TOP - 1, height: ITEM_HEIGHT + 2, borderRadius: TAB_RADIUS + 1 }), [left, right]);
+  const corner = tabRadius();
+  const place = useMemo(() => ({ left: left - 4, right: right - 4, top: ITEM_TOP - 1, height: ITEM_HEIGHT + 2, borderRadius: corner + 1 }), [left, right, corner]);
   return <WindowDropGlow place={place} />;
 }
 
-export function TopStripPeek({ windowWidth, enabled }: { windowWidth: number; enabled: boolean }) {
+export function TopStripPeek({ windowWidth, enabled: hidden }: { windowWidth: number; enabled: boolean }) {
   const theme = useTheme();
   const windowId = useWindowId();
+  const revealOnHover = useSettings((s) => s.revealTabsOnHover);
+  const enabled = hidden && revealOnHover;
   const downloadsOpen = useWindowUiOf(windowId, (u) => !!u?.downloadsOpen);
   const { slide, live, show, hide, recheck, cancelPending } = usePeek(enabled, false, () => downloadsOpenIn(windowId), undefined, noteTabStripPeek);
   useEffect(() => {
     if (!downloadsOpen) recheck();
   }, [downloadsOpen]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!hidden) return;
     void setTrafficLightsCenter(windowId, lightsCenter(layout.sidebarWidth));
     return () => void setTrafficLightsCenter(windowId, null);
-  }, [enabled, windowId]);
+  }, [hidden, windowId]);
   const leaveStrip = (e: { nativeEvent: { clientY: number } }) => {
     if (live && e.nativeEvent.clientY < PEEK_HOVER_HEIGHT) hide();
     else cancelPending();

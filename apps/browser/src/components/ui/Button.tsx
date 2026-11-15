@@ -1,4 +1,5 @@
-import { ContextMenuArea, Symbol, type SymbolProps } from "@ardia/shell";
+import { ContextMenuArea } from "@ardia/shell";
+import { Symbol, type SymbolProps } from "./Symbol";
 import { memo, type ReactNode } from "react";
 import { Image, Pressable, Text, View, type GestureResponderEvent, type StyleProp, type ViewStyle } from "react-native";
 import { modifiersOf, type ClickModifiers } from "../../lib/keys";
@@ -149,7 +150,7 @@ function IconButtonView(props: IconProps) {
   if (!props.toolbar)
     return (
       <View tooltip={tooltip} style={style} {...hoverProps}>
-        <Pressable onPress={props.onPress} disabled={disabled} style={hit ? { width: hit.width, height: hit.height } : undefined}>
+        <Pressable onPress={props.onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={tooltip} style={hit ? { width: hit.width, height: hit.height } : undefined}>
           {({ pressed }) => plate(pressed)}
         </Pressable>
       </View>

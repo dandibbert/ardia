@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, TextInput, View, type GestureResponderEvent } from "react-native";
+import { Animated, Pressable, TextInput, View, type GestureResponderEvent, type TextStyle } from "react-native";
 import { toggleMute } from "../../state/browser/actions";
 import { layout, useTheme } from "../ui/theme";
 import { useIsActiveTab, usePageProfileId, useTab, useWindow, useWindowId } from "../../state/browser/hooks";
@@ -8,7 +8,7 @@ import { useSplitRowPanes } from "../../state/sidebar/hooks";
 import { muteTitle } from "../../state/tabs/mute";
 import { usePictureInPicture } from "../../state/media/media";
 import { HoverSlot } from "../ui/HoverSlot";
-import { ActivitySpinner, Button, Divider, FadeLabel, font, ink, OutsidePressArea, radius, space, Symbol, useHover } from "../ui";
+import { ActivitySpinner, Button, Divider, FadeLabel, ink, OutsidePressArea, radius, sidebarFont, sidebarLineHeight, space, Symbol, typeFace, useHover } from "../ui";
 import { isPinnedRow, tabTitle } from "../../state/browser/model";
 import { awayFromPin, awayTitle } from "../../state/pins/organize";
 import { commitRename, endRename, startRename } from "../../state/sidebar/actions";
@@ -24,9 +24,9 @@ import { TabBadges } from "../media/TabBadges";
 import { UnreadCount } from "../unread/UnreadBadge";
 import { useTabUnread } from "../../state/tabs/unread";
 import { titleWithoutUnread } from "../../lib/unread";
-import { TAB_ROW, useSidebarTokens } from "./tokens";
+import { ROW_GLYPH, SIDEBAR_TYPE, TAB_ROW, useSidebarTokens } from "./tokens";
 import { useSidebarRowLook } from "./rowLook";
-import { ROW_TITLE_FRAME, SidebarRowLabel, SidebarRowSurface } from "./SidebarRow";
+import { rowTitleFrame, SidebarRowLabel, SidebarRowSurface } from "./SidebarRow";
 import { AwayTitleLabel } from "./AwayTitle";
 import { withShortcut } from "../../state/commands/commandShortcuts";
 import { TabPressArea } from "./TabPressArea";
@@ -79,6 +79,8 @@ export const TabRow = memo(function TabRow({
   const closeControl = useTabCloseControlWhile(tabId, hovered && !renaming);
   const { backToPinHint } = useSidebarRowLook();
   const unread = useTabUnread(tabId);
+  const [unreadDrawn, setUnreadDrawn] = useState(false);
+  const showsUnread = !!unread || unreadDrawn;
   if (!tab) return null;
   const resettable = (isPinnedRow(tab) || !tab.pin) && awayFromPin(tab);
   const resetting = resettable && backToPin.hovered && !renaming;
@@ -109,31 +111,31 @@ export const TabRow = memo(function TabRow({
               {resettable ? (
                 <Pressable onPress={() => returnToPinnedUrl(tab.id)} tooltip={withShortcut("Back to Pinned URL", backToPinHint)}>
                   {resetting ? (
-                    <View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
-                      <Symbol name="arrow.uturn.backward" size={11} weight="semibold" color={active ? theme.rowSelectedText : theme.textTab} style={{ width: 16, height: 16 }} />
+                    <View style={{ width: ROW_GLYPH.box, height: ROW_GLYPH.box, alignItems: "center", justifyContent: "center" }}>
+                      <Symbol name="arrow.uturn.backward" size={ROW_GLYPH.small} weight="semibold" color={active ? theme.rowSelectedText : theme.textTab} style={{ width: ROW_GLYPH.box, height: ROW_GLYPH.box }} />
                     </View>
                   ) : (
                     <View>
                       <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} marks={flags & ICON_MARKS} />
-                      <TabBadges tabId={tab.id} pip={false} unread={false} />
+                      <TabBadges tabId={tab.id} />
                     </View>
                   )}
                 </Pressable>
               ) : (
                 <>
                   <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} profileId={tab.profileId} marks={flags & ICON_MARKS} />
-                  <TabBadges tabId={tab.id} pip={false} unread={false} />
+                  <TabBadges tabId={tab.id} />
                 </>
               )}
             </View>
             {pip && (
               <Pressable onPress={togglePip} style={{ marginLeft: space.s }} tooltip="Exit Picture in Picture">
-                <Symbol name="pip" size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
+                <Symbol name="pip" size={ROW_GLYPH.symbol} color={theme.textTab} style={{ width: ROW_GLYPH.wide, height: ROW_GLYPH.box }} />
               </Pressable>
             )}
             {(playingAudio || mute) && (
               <Pressable onPress={() => toggleMute(tab.id)} style={{ marginLeft: space.s }} tooltip={muteTitle(mute)}>
-                <Symbol name={mute ? "speaker.slash" : "speaker.wave.2"} size={12} color={theme.textTab} style={{ width: 18, height: 16 }} />
+                <Symbol name={mute ? "speaker.slash" : "speaker.wave.2"} size={ROW_GLYPH.symbol} color={theme.textTab} style={{ width: ROW_GLYPH.wide, height: ROW_GLYPH.box }} />
               </Pressable>
             )}
             {renaming ? (
@@ -144,7 +146,7 @@ export const TabRow = memo(function TabRow({
                 onDone={(text) => (text === null ? endRename({ kind: "tab", id: tabId }) : commitRename({ kind: "tab", id: tabId }, text))}
               />
             ) : away ? (
-              <AwayTitleLabel away={away} color={active ? theme.rowSelectedText : theme.textTab} fontSize={font.body.fontSize} height={TAB_ROW.titleHeight} style={AWAY_FRAME} />
+              <AwayTitleLabel away={away} color={active ? theme.rowSelectedText : theme.textTab} fontSize={SIDEBAR_TYPE.title} height={TAB_ROW.titleHeight} style={AWAY_FRAME} />
             ) : (
               <SidebarRowLabel text={title} color={active ? theme.rowSelectedText : theme.textTab} />
             )}
@@ -153,8 +155,12 @@ export const TabRow = memo(function TabRow({
               reserve="hover"
               hover={closeControl && <Button variant="icon" icon={closeControl.icon} size="s" weight="semibold" onPress={() => pressTabClose(tab.id)} tooltip={closeControl.tooltip} />}
             >
-              {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: space.xxs }} />}
-              <UnreadCount unread={unread} ink={active ? theme.rowSelectedText : theme.textTab} />
+              {loading || showsUnread ? (
+                <>
+                  {loading && <ActivitySpinner style={{ width: 12, height: 12, marginRight: space.xxs }} />}
+                  {showsUnread && <UnreadCount unread={unread} ink={active ? theme.rowSelectedText : theme.textTab} onDrawn={setUnreadDrawn} />}
+                </>
+              ) : null}
             </HoverSlot>
           </SidebarRowSurface>
       )}
@@ -169,7 +175,7 @@ export function RenameField({
   initial,
   placeholder,
   color,
-  fontSize = font.body.fontSize,
+  fontSize = SIDEBAR_TYPE.title,
   weight,
   onDone,
 }: {
@@ -177,7 +183,7 @@ export function RenameField({
   placeholder: string;
   color: string;
   fontSize?: number;
-  weight?: "500" | "600";
+  weight?: TextStyle["fontWeight"];
   onDone(text: string | null): void;
 }) {
   const theme = useTheme();
@@ -194,7 +200,7 @@ export function RenameField({
     return () => clearTimeout(t);
   }, []);
   return (
-    <OutsidePressArea onOutsidePress={() => finish(text)} style={ROW_TITLE_FRAME}>
+    <OutsidePressArea onOutsidePress={() => finish(text)} style={rowTitleFrame()}>
       <TextInput
         ref={input}
         value={text}
@@ -208,7 +214,7 @@ export function RenameField({
         onBlur={() => finish(text)}
         keyDownEvents={[{ key: "Escape" }]}
         onKeyDown={(e) => e.nativeEvent.key === "Escape" && finish(null)}
-        style={{ flex: 1, fontSize, fontWeight: weight, color, paddingVertical: 0, paddingHorizontal: 0 }}
+        style={{ flex: 1, fontSize, fontWeight: weight, color, paddingVertical: 0, paddingHorizontal: 0, ...typeFace() }}
       />
     </OutsidePressArea>
   );
@@ -282,7 +288,7 @@ function SplitPane({ tabId, windowId }: { tabId: string; windowId: string }) {
             }}
           >
             <TabIcon tabId={tab.id} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} compact />
-            <FadeLabel text={tabTitle(tab)} fontSize={font.small.fontSize} color={active ? theme.rowSelectedText : theme.textTab} style={{ flex: 1, height: 16, marginLeft: space.xs }} />
+            <FadeLabel text={tabTitle(tab)} fontSize={sidebarFont.small.fontSize} color={active ? theme.rowSelectedText : theme.textTab} style={{ flex: 1, height: Math.max(ROW_GLYPH.box, sidebarLineHeight.small + 1), marginLeft: space.xs }} />
             <HoverSlot
               hovered={hovered}
               reserve="hover"

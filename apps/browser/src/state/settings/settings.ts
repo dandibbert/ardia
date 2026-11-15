@@ -17,6 +17,7 @@ import type { StateCreator } from "zustand";
 import { fromLegacyUrl } from "../../lib/legacy";
 import type { BrowserState } from "../browser/store";
 import { DEFAULT_SIDEBAR_WIDTH, PAGE_FRAME, validPageFrame } from "../../lib/windowLayout";
+import { SIDEBAR_TEXT_SIZES } from "../../lib/themeLook";
 import { isFields, isString, isStringList } from "../../lib/decode";
 import type { SavedObject } from "../../lib/savedDocument";
 import type { JsonSchema } from "../../lib/jsonSchema";
@@ -78,10 +79,12 @@ export const SETTING_SPECS = {
   tabLayout: oneOf(["sidebar", "top"], "sidebar", SYNCED),
   sidebarSide: oneOf(["left", "right"], "left", SYNCED),
   autoHideTabs: flag(false, SYNCED),
+  revealTabsOnHover: flag(true, SYNCED),
   hideToolbarWhileScrolling: flag(true, SYNCED),
   newTabPosition: oneOf(["top", "bottom", "nextToCurrent"], "bottom", SYNCED),
   newTabButtonPosition: oneOf(["top", "bottom"], "bottom", SYNCED),
   newTabOpens: oneOf(["page", "commandBar"], "page", SYNCED),
+  reuseEmptyNewTab: flag(false, SYNCED),
   warnBeforeClosingLastTab: flag(true, SYNCED),
   undoReopensClosedTab: flag(false, SYNCED),
   warnBeforeMovingTabsToProfile: flag(true, SYNCED),
@@ -97,8 +100,11 @@ export const SETTING_SPECS = {
   splitLinkModifier: oneOf(["altShift", "alt"], "altShift", SYNCED),
   autoGroupMeetingTabs: flag(true, SYNCED),
   cleanUpInactiveTabsAfterMinutes: shaped<number | null>(null, (v) => v === null || isWidth(v), { type: ["number", "null"], exclusiveMinimum: 0 }, SYNCED),
+  suggestCleanUp: flag(true, SYNCED),
   mutedSites: shaped<string[]>([], isStringList, STRING_LIST, SYNCED),
   showUnreadCounts: flag(false, SYNCED),
+  showTopAppBadges: flag(false, SYNCED),
+  showTabHoverMenu: flag(true, SYNCED),
   unreadHiddenSites: shaped<string[]>([], isStringList, STRING_LIST, SYNCED),
   neverTranslateSites: shaped<Record<string, string[]>>({}, (v) => isRecordOf(v, isStringList), recordOf(STRING_LIST)),
   autoPictureInPicture: flag(true, SYNCED),
@@ -108,9 +114,12 @@ export const SETTING_SPECS = {
   sidebarWidth: width(DEFAULT_SIDEBAR_WIDTH),
   showSidebarButton: flag(true, SYNCED),
   showClearButton: flag(true, SYNCED),
+  tidyTabs: flag(false, SYNCED),
   balancedTopApps: flag(false, SYNCED),
   showAdvancedSettings: flag(false),
   selectedTabGlow: oneOf(["full", "soft", "off"], "full", SYNCED),
+  sidebarTextSize: oneOf(SIDEBAR_TEXT_SIZES, "default"),
+  sidebarTextContrast: oneOf(["auto", "standard", "high"], "auto", SYNCED),
   interfaceStyle: oneOf(["glass", "classic"], "glass", SYNCED),
   glassTintWithTheme: flag(false, SYNCED),
   glassTintAmount: fraction(0.8, SYNCED),
@@ -146,6 +155,7 @@ export const SETTING_SPECS = {
   shortcuts: shaped<Record<string, string[]>>({}, (v) => isRecordOf(v, isStringList), recordOf(STRING_LIST), SYNCED),
   openLinksInLittleArdia: flag(true),
   littleArdiaOpensNewTabLinks: flag(true, SYNCED),
+  littleWindowGestures: flag(true, SYNCED),
   littleArdiaSize: shaped<[number, number]>([900, 640], (v) => Array.isArray(v) && v.length === 2 && v.every(isWidth), { type: "array", prefixItems: [WIDTH, WIDTH], minItems: 2, maxItems: 2 }),
   pageEngine: oneOf(["chromium", "webkit"], "chromium"),
   websiteEngines: shaped<Record<string, "chromium" | "webkit">>({}, (v) => isRecordOf(v, (e) => e === "chromium" || e === "webkit"), recordOf({ type: "string", enum: ["chromium", "webkit"] })),

@@ -35,6 +35,9 @@ export function startDevHarness() {
   const ac = {
     store: useBrowser, actions, runCommand, webviews, shell, engine: { call, on }, omnibox: omniboxDrivers, pages: pagesDrivers,
     pageState: usePages,
+    get downloads(): typeof import("../../state/downloads/progress") {
+      return require("../../state/downloads/progress");
+    },
     openSettings,
     favicons,
     get bookmarks(): typeof import("../../state/bookmarks/bookmarks") {
@@ -121,6 +124,9 @@ export function startDevHarness() {
     get report(): typeof import("../../state/report/actions") & typeof import("../../state/report/recording") & typeof import("../../state/report/store") {
       return { ...require("../../state/report/actions"), ...require("../../state/report/recording"), ...require("../../state/report/store") };
     },
+    get model(): typeof import("../../state/browser/model") {
+      return require("../../state/browser/model");
+    },
     get unread(): typeof import("../../state/tabs/unread") {
       return require("../../state/tabs/unread");
     },
@@ -163,6 +169,9 @@ export function startDevHarness() {
     },
     get automation(): typeof import("../../state/automation/approvals") & typeof import("../../state/automation/hookRules") & typeof import("../../state/automation/hookPolicy") & typeof import("../../state/automation/decideSocket") {
       return { ...require("../../state/automation/approvals"), ...require("../../state/automation/hookRules"), ...require("../../state/automation/hookPolicy"), ...require("../../state/automation/decideSocket") };
+    },
+    get airTraffic(): typeof import("../../state/airTraffic/store") & typeof import("../../state/airTraffic/preview") & typeof import("../../state/littleArdia/actions") {
+      return { ...require("../../state/airTraffic/store"), ...require("../../state/airTraffic/preview"), ...require("../../state/littleArdia/actions") };
     },
   };
   (globalThis as { ac?: typeof ac }).ac = ac;

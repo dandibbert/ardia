@@ -84,6 +84,7 @@ enum WebKitPageScript {
       hasVideo: m.tagName === "VIDEO" && m.videoWidth > 0,
       actions: pageActions,
       controllable: fromSession !== "none" || !(m.duration > 0 && m.duration <= 5),
+      loop: !pagePosition && m.loop,
     });
   };
   const schedule = () => {
@@ -337,15 +338,16 @@ enum WebKitPageScript {
       schedule();
       return !!m || pageActions.length > 0;
     },
-    pictureInPicture(on) {
+    pictureInPicture(on, automatic) {
       if (!on) {
         if (document.pictureInPictureElement) document.exitPictureInPicture();
         for (const v of document.querySelectorAll("video")) if (v.webkitPresentationMode === "picture-in-picture") v.webkitSetPresentationMode("inline");
         return true;
       }
       const videos = Array.from(document.querySelectorAll("video"));
-      const v = videos.find((x) => !x.paused) || videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
-      if (!v) return false;
+      const largest = () => videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+      const v = videos.find(playing) || (automatic ? null : largest());
+      if (!v) return automatic ? "nothingPlaying" : false;
       if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode("picture-in-picture")) v.webkitSetPresentationMode("picture-in-picture");
       else if (v.requestPictureInPicture) v.requestPictureInPicture();
       else return false;

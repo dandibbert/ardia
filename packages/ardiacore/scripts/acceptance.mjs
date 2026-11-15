@@ -57,7 +57,7 @@ const usesPageA = [
   "context-menu-search", "duplicate-and-reopen", "device-chooser", "bluetooth-chooser",
   "bluetooth-settings", "cast-dialog", "cast-routes", "theme-commit", "user-selection",
   "password-prompt", "screen-share-picker", "tab-capture", "share-instead-two-captures", "blank-frame-share", "pip-share-without-click",
-  "restore-after-close", "discard-outcomes", "memory-saver", "capture-picture", "unresponsive", "permission-dismissed",
+  "restore-after-close", "discard-outcomes", "memory-saver", "memory-saver-pinned", "capture-picture", "unresponsive", "permission-dismissed",
   "save-page", "activate-request", "extension-popup-and-panel", "scroll-zoom", "print-preview",
   "extension-prompts", "traffic-lights-after-profile-switch", "extension-configure",
   "private-windows-create", "extension-private-window", "extension-installed-bubble", "popup-window", "autofill-save-prompts",
@@ -1825,6 +1825,39 @@ try {
     }
   });
 
+  await check("memory-saver-pinned", async () => {
+    const plain = await openTab(`${base}/d?plain`, "Page D", true);
+    const tile = await openTab(`${base}/d?tile`, "Page D", true);
+    const sleeping = (id) => evalApp(`return !!globalThis.acLifecycle.state().discarded["${id}"]`);
+    const rowsOf = `(() => { const out = []; const walk = (root) => { for (const el of root.querySelectorAll("*")) { if (el.shadowRoot) walk(el.shadowRoot); if (el.tagName === "TR" && el.querySelectorAll("td").length > 8) out.push(el); } }; walk(document); return out; })()`;
+    const rowOf = (part) => `${rowsOf}.find((r) => r.querySelectorAll("td")[3].textContent.includes(${JSON.stringify(part)}))`;
+    let discards = null;
+    try {
+      await evalApp(`ac.store.getState().pinTabs(["${tile.id}"], true, false); return true`);
+      discards = await openTab("chrome://discards/", "Discards");
+      const page = await until("chrome://discards", async () => (await targets()).find((t) => t.type === "page" && t.url.startsWith("chrome://discards")), 10000);
+      const inPage = async (expression) => (await cdp(page, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result?.value;
+      const reasons = (part) => inPage(`${rowOf(part)}?.querySelectorAll("td")[7].textContent.replace(/\\s+/g, " ").trim() ?? null`);
+      const pinnedInChrome = await until("Chrome's strip has the tile pinned", async () => (await engine("tabs.strips")).strips.some((strip) => strip.tabs.some((t) => t.key === tile.id && t.pinned)), 10000);
+      const proactive = (part) => inPage(`(() => { const b = [...${rowOf(part)}.querySelectorAll("*")].find((x) => !x.children.length && /Proactive Discard/.test(x.textContent)); b?.click(); return !!b; })()`);
+      const out = { pinnedInChrome, clicked: [await proactive("d?plain"), await proactive("d?tile")] };
+      out.plain = await until("Memory Saver's discard of the plain tab", () => sleeping(plain.id), 8000).catch(() => false);
+      out.tile = await until("Memory Saver's discard of the pinned tile", () => sleeping(tile.id), 8000).catch(() => false);
+      out.reason = (await eventsOf(tile.id)).findLast((x) => x.name === "discarded")?.payload?.reason ?? null;
+      const problems = [];
+      if (!out.clicked.every(Boolean)) problems.push(`no Proactive Discard button: ${JSON.stringify(out.clicked)}`);
+      if (!out.plain) problems.push("the plain tab stayed loaded");
+      if (!out.tile) problems.push(`the pinned tile stayed loaded: ${await reasons("d?tile")}`);
+      else if (out.reason !== "proactive") problems.push(`the tile's discarded event says ${JSON.stringify(out.reason)}`);
+      if (problems.length) throw new Error(problems.join("; "));
+      return out;
+    } finally {
+      await evalApp(`ac.store.getState().pinTabs(["${tile.id}"], false); return true`).catch(() => null);
+      for (const tab of [discards, tile, plain]) if (tab) await closeTab(tab.id).catch(() => null);
+      await evalApp(`ac.actions.switchToTab("${first.id}"); return true`).catch(() => null);
+    }
+  });
+
   await check("capture-picture", async () => {
     await evalApp(`ac.actions.switchToTab("${first.id}"); return true`);
     await until("A shown", async () => (await state()).active === first.id);
@@ -3145,7 +3178,7 @@ try {
 
   await check("download-controls", async () => {
     await evalApp(`ac.actions.openUrls(["${base}/slow.bin"], ${JSON.stringify(mainWindow)}); return true`);
-    const find = () => evalApp(`return ac.store.getState().downloads.map((d) => ({ id: d.id, state: d.state, paused: d.paused, filename: d.filename, received: d.received }))`)
+    const find = () => evalApp(`return ac.downloads.withLiveProgress(ac.store.getState().downloads).map((d) => ({ id: d.id, state: d.state, paused: d.paused, filename: d.filename, received: d.received }))`)
       .then((l) => l.find((x) => x.filename?.includes("ardiacore-slow")) ?? null);
     try {
       const d = await until("the slow download running", async () => { const x = await find(); return x?.state === "downloading" && !x.paused && x.received > 0 ? x : null; }, 15000);

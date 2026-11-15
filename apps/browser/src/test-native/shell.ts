@@ -116,6 +116,9 @@ const windowsModule: Modules["ArdiaAppWindows"] = {
   replyToTerminate: () => Promise.resolve(),
 };
 
+export const pressesWithoutRelease = { count: 0 };
+export const pressRepeated: { earlier: { landedOn: string; ms: number } | null } = { earlier: null };
+
 const focus: Modules["ArdiaFocus"] = {
   setSwitcherCapture: () => Promise.resolve(),
   setDragEscapeCapture: () => Promise.resolve(),
@@ -125,6 +128,8 @@ const focus: Modules["ArdiaFocus"] = {
   switcherPointerMoved: () => true,
   cancelFocusMove: () => Promise.resolve(),
   claimFocus: () => Promise.resolve(),
+  pressesWithoutRelease: () => pressesWithoutRelease.count,
+  pressRepeated: () => Promise.resolve(pressRepeated.earlier),
 };
 
 const menus: Modules["ArdiaMenus"] = {
@@ -285,6 +290,7 @@ const fileDrop: Modules["ArdiaFileDrop"] = {
 const cliEvents = nativeEvents();
 const cli: Modules["ArdiaCli"] = {
   installedVersion: () => null,
+  canInstallUnattended: () => false,
   install: () => Promise.resolve({ ok: false, appVersion: appInfo.appVersion ?? "", error: "no installs in tests", lines: [] }),
   addListener: cliEvents.addListener,
 };

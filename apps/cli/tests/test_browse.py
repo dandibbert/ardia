@@ -803,7 +803,8 @@ class RenderTest(unittest.TestCase):
 
     def test_page_output_limits(self):
         result = commands.Result({}, "x" * 50, page_content=True)
-        _, out, _ = daemon.render({"max_output": "10"}, result=result)
+        with mock.patch.object(daemon, "spill", return_value=None):
+            _, out, _ = daemon.render({"max_output": "10"}, result=result)
         self.assertTrue(out.startswith("x" * 10 + "\n[output capped at 10 of 50 characters. Narrow it instead:"))
         self.assertIn("Only if you need every line: --max-output 50]", out)
         _, out, _ = daemon.render({"content_boundaries": True}, result=commands.Result({}, "hi", page_content=True))
@@ -833,6 +834,20 @@ class RenderTest(unittest.TestCase):
         self.assertTrue(named.message.endswith("(Ardia has it open as tab-1 at chrome://settings/)"))
         self.assertEqual(named.reason, "to that target")
         self.assertEqual(Gated("Fetch.enable").data, {"method": "Fetch.enable", "reason": ""})
+
+    def test_a_viewport_refused_on_a_tab_the_command_didnt_open_says_where_it_works(self):
+        from ardia_cli.browse.errors import refusal_reason
+
+        method = "Emulation.setDeviceMetricsOverride"
+        said = f"ardia: {method} on a tab the ardia command didn't open isn't allowed for the ardia command"
+        reason = refusal_reason(said, method)
+        self.assertEqual(reason, "on a tab the ardia command didn't open")
+        error = Gated(method, reason=reason).during("set viewport")
+        self.assertTrue(error.message.startswith("`set viewport` needs Emulation.setDeviceMetricsOverride, which Ardia allows"))
+        self.assertIn("only on a tab this command opened: `ardia browse open <url>`", error.message)
+        taken = Gated(method, reason="on a tab that isn't off-screen").during("set viewport")
+        self.assertIn("only on a tab it has taken off-screen", taken.message)
+        self.assertNotIn("once the engine's token policy allows it", error.message)
 
     def test_every_documented_command_is_registered_or_skipped(self):
         daemon.load_commands()
