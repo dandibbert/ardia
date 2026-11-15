@@ -195,6 +195,7 @@ export const toolRows = {
       section: "Command line",
       rows: {
         cliControl: { advanced: true, title: "Let the ardia command control Ardia", keywords: ["cli", "command line", "terminal", "shell", "devtools", "automation", "remote debugging"] },
+        agentTabsGrouped: { advanced: true, title: "Keep agents' tabs in a folded Agents group", description: "Tabs the ardia command opens in the background go into one folded group in the sidebar. Click one to step in, or drag it out to keep it.", keywords: ["agent", "ai", "browser use", "automation", "background", "cli", "group"] },
         cliInstall: { advanced: true, title: "The ardia command", keywords: ["cli", "command line", "terminal", "shell", "install"] },
       },
     },

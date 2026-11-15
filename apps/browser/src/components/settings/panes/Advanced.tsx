@@ -147,6 +147,7 @@ function CommandLineSection() {
       <SectionHeader title="Command line" />
       <Group>
         <SettingToggle anchor="advanced.cliControl" description={serverNote} />
+        <SettingToggle anchor="advanced.agentTabsGrouped" />
         <Row
           anchor="advanced.cliInstall"
           description={

@@ -136,6 +136,7 @@ export const SETTING_SPECS = {
   showFullUrl: flag(false, SYNCED),
   allowJavaScriptFromAppleEvents: flag(false),
   cliControl: flag(false),
+  agentTabsGrouped: flag(true),
   showBookmarks: flag(true, SYNCED),
   bookmarksBar: oneOf(["always", "newTab", "never"], "never", SYNCED),
   bookmarksBarSize: oneOf(["default", "large"], "default", SYNCED),

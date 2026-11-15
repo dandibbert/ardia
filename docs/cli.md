@@ -522,6 +522,17 @@ token or other credentials, however it was chosen (the token path, `--ws`, `$ARD
 plain `--port`/`--ws` URL. After `frame <iframe>`, if that iframe goes away, commands fail with `frame_gone` until
 `frame main` or another `frame`, instead of falling back to the main document.
 
+**The Agents group.** With Settings › Advanced › Keep agents' tabs in a folded Agents group on (`agentTabsGrouped`, on by
+default, settable in `config.json`), the app puts each background tab the command opened into one folded tab group
+named Agents in that window and profile (`state/automation/agentGroup.ts`): when a tab appears, it asks the engine
+whether a token connection created it and it was never shown (`engine.cliOwnsTab`), and if so adds it to the group
+and folds its row away. The tab stays a normal tab in the user's window, so the command's own view of it, its input
+and its lifetime don't change, and nothing here needs a newer command. Clicking a row in the group steps into the
+page; dragging it out of the group keeps it as the user's. It is not the automation window: a tab there is closed
+5 s after its connection goes, and the command drops its connection after 30 s idle unless it holds the off-screen
+lease, which only a command that moved the tab itself holds. `usage_counts.agent_tabs_grouped` counts each tab
+grouped; watch it against `setting_agentTabsGrouped` in the settings snapshot.
+
 ### Snapshots
 
 `snapshot` renders a native `date`, `time`, `datetime-local`, `month` or `week` input (accessibility roles `Date`,
