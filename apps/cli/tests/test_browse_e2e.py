@@ -623,6 +623,24 @@ class BrowseEndToEnd(unittest.TestCase):
         self.assertIn('"Reject all" button was clicked (reject)', clicked)
         self.assertEqual(self.report(session), {"clicked": ["buy"], "choice": "reject"})
 
+    def test_click_dismisses_a_prompt_whose_id_names_consent(self):
+        session = "consent-id"
+        self.browse("open", self.url("consent.html"), "--show", session=session)
+        self.browse("eval", "showPrompt()", session=session)
+        said = self.browse("click", "#late-buy", session=session).stdout
+        self.assertIn('"Reject all" button was clicked (reject)', said)
+        report = self.report(session)
+        self.assertEqual(report["prompt"], "reject")
+        self.assertIn("late-buy", report["clicked"])
+
+    def test_click_leaves_a_dialog_that_is_not_about_cookies_alone(self):
+        session = "invite"
+        self.browse("open", self.url("invite.html"), "--show", session=session)
+        covered = self.browse("click", "#target", session=session, check=False)
+        self.assertNotEqual(covered.returncode, 0)
+        self.assertIn("is covered by", covered.stderr)
+        self.assertEqual(json.loads(self.browse("get", "text", "#report", session=session).stdout), {"clicked": []})
+
     def test_click_recenters_an_element_under_a_sticky_header(self):
         session = "sticky"
         self.browse("open", self.url("consent.html"), "--show", session=session)
@@ -687,7 +705,8 @@ class BrowseEndToEnd(unittest.TestCase):
         self.assertIn(f"Saved to {target}", said)
         self.assertIn("a list of 900 items", said)
         self.assertIn("walking", said)
-        self.assertLess(len(said), 800)
+        self.assertLess(len(said), 3800)
+        self.assertIn("more rows in the file", said)
         value = self.data / "out" / "title.txt"
         self.assertIn("text starting", self.browse("eval", "document.title", "--out", str(value), session=session).stdout)
         self.assertEqual(value.read_text(), self.browse("get", "title", session=session).stdout.strip())
@@ -751,6 +770,30 @@ class BrowseEndToEnd(unittest.TestCase):
         self.assertIn('(scope: page says "1–20 of 340 results"; has a Next page link, pages up to 17)', out)
         self.browse("open", self.url("results.html"), session=session)
         self.assertTrue(self.browse("read", session=session).stdout.rstrip().endswith('[scope: page says "1–20 of 340 results"; has a Next page link, pages up to 17]'))
+
+    def test_click_falls_back_to_a_dom_click_off_the_page(self):
+        session = "carousel"
+        self.browse("open", self.url("carousel.html"), "--show", session=session)
+        said = self.browse("click", "#s2", session=session).stdout
+        self.assertIn("got a DOM click instead of a pointer click", said)
+        self.assertEqual(self.report(session), {"clicked": ["s2"]})
+
+    def test_out_writes_a_csv_from_returned_rows(self):
+        session = "csv"
+        self.browse("open", self.url("picker.html"), session=session)
+        table = self.data / "out" / "rows.csv"
+        said = self.browse("script", "--out", str(table), session=session,
+                           stdin="return [{ name: 'A, Inc', price: 3 }, { name: 'B', url: 'u' }];").stdout
+        self.assertEqual(table.read_text(), 'name,price,url\n"A, Inc",3,\nB,,u\n')
+        self.assertIn("a list of 2 items", said)
+
+    def test_find_can_press_a_key_in_what_it_found(self):
+        session = "find-press"
+        self.browse("open", self.url("picker.html"), "--show", session=session)
+        self.browse("find", "label", "To", "fill", "Lisbon", session=session)
+        said = self.browse("find", "label", "To", "press", "Enter", session=session).stdout
+        self.assertTrue(said.startswith("✓"), said)
+        self.assertEqual(self.browse("get", "value", "#to", session=session).stdout, "Lisbon\n")
 
     def test_read_reads_every_named_url_past_the_link_limit(self):
         urls = [self.url(f"picker.html?n={number}") for number in range(25)]

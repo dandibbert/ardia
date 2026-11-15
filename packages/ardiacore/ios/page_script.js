@@ -184,7 +184,9 @@
     const size = (a) => Math.max(0, ...String(a.sizes || "0x0").split(/\s+/).map((s) => parseInt(s, 10) || 0));
     return absolute([...art].sort((a, b) => size(b) - size(a))[0].src);
   };
-  let lastNowPlaying = "";
+  const NOW_PLAYING_DRIFT_S = 1;
+  let lastNowPlaying = null;
+  const projectedPosition = (last, now) => last.position + (last.playing ? ((now - last.at) / 1000) * last.rate : 0);
   const reportNowPlaying = later(() => {
     const el = pickMedia();
     const md = session && session.metadata;
@@ -205,15 +207,24 @@
         hasVideo: !!el && el.tagName === "VIDEO" && el.videoWidth > 0,
         actions: [...actions.keys()],
         controllable: !!el && heard.has(el) && (sessionState !== "none" || !oneShot(el)),
+        loop: !positionState && !!el && el.loop,
       };
       if (!state.title && !el) state = null;
     }
-    const json = serialize(state && { ...state, position: Math.round(state.position) });
-    if (json === lastNowPlaying) return;
-    lastNowPlaying = json;
-    send("nowPlaying", state && { ...state, timestamp: Date.now() });
+    const now = Date.now();
+    const key = serialize(state && { ...state, position: 0 });
+    const last = lastNowPlaying;
+    if (last && key === last.key && (!state || Math.abs(state.position - projectedPosition(last, now)) < NOW_PLAYING_DRIFT_S)) return;
+    lastNowPlaying = { key, position: state ? state.position : 0, at: now, playing: !!state && state.playbackState === "playing", rate: (state && state.playbackRate) || 1 };
+    send("nowPlaying", state && { ...state, timestamp: now });
   }, 100);
   let blockAutoplay = false;
+  let usedHere = false;
+  const noteUse = (e) => {
+    if (e.isTrusted && !(e.type === "keydown" && (e.key === "Escape" || e.metaKey))) usedHere = true;
+  };
+  for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, noteUse, true);
+  const askedToPlay = () => usedHere;
   let pipTrace = false;
   let pipHandlerSet = null;
   const playingMedia = new Set();
@@ -222,7 +233,7 @@
     if (!(m instanceof HTMLMediaElement)) return;
     if (e.type === "play" || e.type === "playing") playingMedia.add(m);
     else if (e.type === "pause" || e.type === "ended" || e.type === "emptied") playingMedia.delete(m);
-    if (blockAutoplay && e.type === "play" && !(navigator.userActivation && navigator.userActivation.hasBeenActive)) {
+    if (blockAutoplay && e.type === "play" && !askedToPlay()) {
       m.pause();
       return;
     }
@@ -259,6 +270,8 @@
       for (const e of mediaEvents) self.addEventListener(e, onMediaEvent);
       for (const watch of detachedMediaWatchers) guard(watch)(self);
     }
+    if (media && blockAutoplay && !askedToPlay())
+      return Promise.reject(new DOMException("play() failed because the user didn't interact with the document first.", "NotAllowedError"));
     return apply(target, self, args);
   });
 
@@ -306,6 +319,7 @@
       return true;
     };
     const playing = session?.playbackState === "playing" || (el && !el.paused);
+    if (action === "play" || action === "toggle") usedHere = true;
     switch (action) {
       case "play":
         call("play") || el?.play();
@@ -1106,7 +1120,7 @@
     if (pipTrace && pipHandlerSet !== null)
       send("pipTrace", { event: "setActionHandler", action: "enterpictureinpicture", set: pipHandlerSet });
     if (blockAutoplay)
-      pauseUnasked([...playingMedia, ...document.querySelectorAll("video, audio")], !!(navigator.userActivation && navigator.userActivation.hasBeenActive));
+      pauseUnasked([...playingMedia, ...document.querySelectorAll("video, audio")], askedToPlay());
     if (config.displayMediaPicker) installDisplayMedia();
     else restoreDisplayMedia();
     if (config.fieldTiming) setFieldTiming(true);
