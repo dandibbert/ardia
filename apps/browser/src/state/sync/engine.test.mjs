@@ -265,3 +265,30 @@ test("a sync asked for while another device's reset ends the cycle doesn't make 
   assert.ok(delays.includes(15_000), `the next cycle is due in 15 s, not at once: ${delays}`);
   assert.ok(!delays.includes(0), `nothing asked for a sync during this cycle: ${delays}`);
 });
+
+test("a missing sync key reads as locked and asks for the phrase, and a cycle while locked doesn't turn that into stalled", async () => {
+  reset();
+  shell.docs.clear();
+  const first = await import("./engine.ts?locked-setup");
+  first.startSync();
+  assert.ok("ok" in (await first.turnOnSync("/sync")));
+  await first.syncNow();
+  const native = globalThis.acTestNativeModules.ArdiaSync;
+  const { unlock, chainStatus } = native;
+  native.unlock = async () => false;
+  native.chainStatus = async () => {
+    throw Object.assign(new Error("Sync isn't set up on this computer."), { code: "locked" });
+  };
+  try {
+    const relaunched = await import("./engine.ts?locked-relaunch");
+    relaunched.startSync();
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+    await relaunched.syncNow();
+    const { status, error } = relaunched.useSync.getState();
+    assert.equal(status, "locked");
+    assert.match(error ?? "", /Enter your recovery phrase/);
+  } finally {
+    native.unlock = unlock;
+    native.chainStatus = chainStatus;
+  }
+});

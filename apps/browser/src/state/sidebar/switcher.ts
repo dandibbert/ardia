@@ -8,7 +8,9 @@ import { isAsleep } from "../tabs/pageSession";
 import { isSleeping, useLifecycle } from "../tabs/sleepingTabs";
 import { rememberPicture } from "../tabs/tabPictures";
 import { noteTabSwitcherOpened } from "../telemetry/usage";
-import { noteTabSwitcherOpenedInWebKit } from "../telemetry/tabSwitcherOpens";
+import { closeTab } from "../browser/actions";
+import { noteTabSwitcherOpenedInWebKit, noteTabSwitcherRowClosed } from "../telemetry/tabSwitcherOpens";
+import { isWindowClosing } from "../windows/closingWindows";
 import { setSidebarUi, sidebarUi } from "./sidebarUi";
 
 const SHOW_AFTER_MS = 140;
@@ -53,7 +55,7 @@ function syncSwitcherTabs(windowId: string, state = useBrowser.getState()) {
     return !!tab && inWindow.has(id) && !isAsleep(tab) && !isSleeping(id) && !isPageUnloaded(state, id);
   });
   if (ids.length === s.ids.length) return;
-  if (ids.length < 2) return endSwitcher();
+  if (!ids.length) return endSwitcher();
   const selected = s.ids[s.index];
   const selectedIndex = selected ? ids.indexOf(selected) : -1;
   setPointer(POINTER_IDLE);
@@ -121,10 +123,24 @@ export function leaveSwitcherRow(index: number) {
   if (hoveredRow === index) hoveredRow = null;
 }
 
+function pointedRow(s: NonNullable<ReturnType<typeof sidebarUi>["switcher"]>) {
+  return s.visible && pointer.phase !== "stale" && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
+}
+
+export async function closeSwitcherRow() {
+  const s = sidebarUi().switcher;
+  if (!s) return;
+  const id = s.ids[pointedRow(s) ?? s.index];
+  if (!id) return;
+  await closeTab(id);
+  syncSwitcherTabs(s.windowId);
+  if (!sidebarUi().switcher?.ids.includes(id) || isWindowClosing(s.windowId)) noteTabSwitcherRowClosed();
+}
+
 export function commitSwitcher(index?: number) {
   const s = sidebarUi().switcher;
   if (!s) return;
-  const pointed = s.visible && pointer.phase !== "stale" && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
+  const pointed = pointedRow(s);
   endSwitcher();
   const id = s.ids[index ?? pointed ?? s.index];
   const state = useBrowser.getState();

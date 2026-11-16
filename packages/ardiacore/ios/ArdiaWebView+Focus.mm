@@ -124,6 +124,7 @@ static ArdiaWebView *ShownPageUnder(NSEvent *event) {
 - (void)storePageFocusFrom:(NSResponder *)responder {
   _focus.onActivate = NO;
   _focus.devTools = nil;
+  _focus.elsewhere = nil;
   NSWindow *window = self.window;
   if (!window || !_tab) return;
   NSView *view = [responder isKindOfClass:NSView.class] ? (NSView *)responder : nil;
@@ -136,6 +137,7 @@ static ArdiaWebView *ShownPageUnder(NSEvent *event) {
     _focus.page = ArdiaPageFocus::Unknown;
   } else {
     _focus.page = ArdiaPageFocus::Elsewhere;
+    _focus.elsewhere = view;
   }
 }
 
@@ -173,13 +175,17 @@ static ArdiaWebView *ShownPageUnder(NSEvent *event) {
   NSView *devTools = _focus.devTools;
   if (_focus.page == ArdiaPageFocus::DevTools && devTools.window == window && _devtoolsView && [devTools isDescendantOf:_devtoolsView]) {
     [window makeFirstResponder:devTools];
-  } else if (_focus.page != ArdiaPageFocus::Elsewhere) {
+  } else if (_focus.page != ArdiaPageFocus::Elsewhere || _focus.elsewhere.window != window) {
     [self focusPage];
   }
 }
 
 - (void)focusAfterLoad {
-  if (_visible && _tab) [self focusPage];
+  if (!_tab) return;
+  if (_visible) return [self focusPage];
+  _focus.page = ArdiaPageFocus::Page;
+  _focus.devTools = nil;
+  [self requestFocusRestore];
 }
 
 - (void)focusPage {

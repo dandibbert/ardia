@@ -10,8 +10,8 @@ import { parkWindowPins } from "../pins/parkedPins";
 import { closedWindowEntry, MAX_CLOSED_WINDOWS } from "../pins/closedTabs";
 import { isPeekTab } from "../peek/peek";
 import type { BrowserWindow, ClosedWindow, ParkedPins, SplitView, Tab } from "../browser/types";
-import { downloadSession } from "../downloads/downloadsSlice";
-import { withLiveProgress } from "../downloads/progress";
+import { downloadSession, withoutRepeats } from "../downloads/downloadsSlice";
+import { anyDownloadProgress, withLiveProgress } from "../downloads/progress";
 import { noteDownloadHistoryWrite } from "../telemetry/downloadWork";
 import { parseSaved, versionedJson, unchanged, type Migrations, type SavedObject } from "../../lib/savedDocument";
 import { sessionWithCleanUpMinutes } from "../settings/cleanUpAfter";
@@ -23,8 +23,8 @@ import { isFields, isString, isStringList } from "../../lib/decode";
 import { pageFromDisk, pinFromDisk, splitsChecked, savedPage, sessionWithSplitSlots, sessionWithTabPages, sessionWithTabPins, slotsFromDisk } from "./savedShapes";
 
 const SAVE_DELAY_MS = 800;
-const SESSION_VERSION = 11;
-const SESSION_MIGRATIONS: Migrations = { 2: sessionWithCleanUpMinutes, 3: sessionWithOwnTabMutes, 4: sessionWithTabPages, 5: sessionWithTabPins, 6: sessionWithSplitSlots, 7: sessionWithSettingsMeta, 8: sessionWithPinChoiceStamps, 9: sessionWithNewTabLinksInLittleArdia, 10: sessionWithUnreadCountsOffByDefault };
+export const SESSION_VERSION = 11;
+export const SESSION_MIGRATIONS: Migrations = { 2: sessionWithCleanUpMinutes, 3: sessionWithOwnTabMutes, 4: sessionWithTabPages, 5: sessionWithTabPins, 6: sessionWithSplitSlots, 7: sessionWithSettingsMeta, 8: sessionWithPinChoiceStamps, 9: sessionWithNewTabLinksInLittleArdia, 10: sessionWithUnreadCountsOffByDefault };
 const downloadsWithStagingPathOnly = (doc: SavedObject): SavedObject => ({
   ...doc,
   downloads: Array.isArray(doc.downloads)
@@ -221,7 +221,7 @@ function savedDownloads(saved: Pick<BrowserState, "profiles">): Download[] {
   const raw = parseSaved(read(DOWNLOADS_DOCUMENT), DOWNLOADS_VERSION, DOWNLOADS_MIGRATIONS);
   const downloads = rows<Download>(raw?.downloads, (d) => isString(d.id) && isString(d.state));
   droppedPrivateDownloads = downloads.some((d) => downloadSession(saved, d) !== null);
-  return downloads.filter((d) => downloadSession(saved, d) === null).map((d, i) => {
+  return withoutRepeats(downloads.filter((d) => downloadSession(saved, d) === null)).map((d, i) => {
     const id = `saved-${i}`;
     const { staging, ...kept } = d;
     if (!staging || d.state === "downloading") return { ...kept, id };
@@ -270,10 +270,12 @@ export function loadSession({ restoreSession }: LaunchOverrides = {}): (HydrateD
 let flush: () => void = () => {};
 let unstaged: () => boolean = () => false;
 let resume: () => void = () => {};
+let stageDownloads: () => void = () => {};
 let frozen = false;
 
 export function flushPersistence({ final = false } = {}): boolean {
   const saving = !frozen;
+  if (final && anyDownloadProgress()) stageDownloads();
   flush();
   if (final && !frozen) saveLaunchLook(useBrowser.getState());
   if (final) frozen = true;
@@ -330,6 +332,7 @@ export function startPersistence(overrides: LaunchOverrides = {}) {
     if (dirty.size) timer = setTimeout(save, SAVE_DELAY_MS);
   };
   flush = save;
+  stageDownloads = () => dirty.add(DOCS.find((d) => d.name === DOWNLOADS_DOCUMENT)!);
   unstaged = () => [...dirty].some((d) => d.name === SESSION_DOCUMENT);
 
   const check = (s: BrowserState, initial = false) => {

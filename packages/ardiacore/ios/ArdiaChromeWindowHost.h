@@ -14,6 +14,8 @@ NS_ASSUME_NONNULL_BEGIN
                                chromeWindow:(nullable NSString *)chromeWindow
                                   appWindow:(nullable NSString *)appWindow;
 
++ (void)floatForWindowManagers:(NSWindow *)window;
+
 + (void)recordLaunchLayout;
 + (void)forgetLaunchPictures;
 + (BOOL)takeDismissedAppWindow:(NSString *)appWindow;
@@ -30,6 +32,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)moveTrafficLightsCenter:(nullable NSValue *)center trailing:(BOOL)trailing inWindow:(NSWindow *)window;
 
 + (void)closeWindow:(NSWindow *)window;
+
++ (NSSize)windowSizeFromInterfaceSize:(NSSize)size forWindow:(nullable NSWindow *)window NS_SWIFT_NAME(windowSize(fromInterface:for:));
++ (void)setInterfaceMinSize:(NSSize)size ofWindow:(NSWindow *)window NS_SWIFT_NAME(setInterfaceMinSize(_:of:));
++ (void)keepInterfaceContentSizeOfWindow:(NSWindow *)window NS_SWIFT_NAME(keepInterfaceContentSize(of:));
 
 + (void)showProfile:(NSString *)profile inWindow:(NSWindow *)window;
 + (void)prepareProfiles:(NSArray<NSString *> *)profiles forWindow:(NSWindow *)window;

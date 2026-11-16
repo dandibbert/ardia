@@ -27,6 +27,9 @@ NO_SESSION_TAB = (
 )
 
 
+NAVIGATED_REFS_KEPT = 4000
+
+
 @dataclass
 class Ref:
     id: str
@@ -58,6 +61,7 @@ class State:
         self.pending_reaction: dict | None = None
         self.consent_dismissed: str | None = None
         self.click_note: str | None = None
+        self.load_note: str | None = None
         self.script_state: str = "{}"
         self.sessions: dict[str, Page] = {}
         self.tab_ids: dict[str, str] = {}
@@ -72,6 +76,8 @@ class State:
         self.refs: dict[str, Ref] = {}
         self.issued_refs = 0
         self.ref_keys: dict[tuple, str] = {}
+        self.navigated_refs: dict[str, Ref] = {}
+        self.loader_urls: dict[tuple, str] = {}
         self.current_refs: list[str] = []
         self.generation = 0
         self.last_snapshot: str | None = None
@@ -217,7 +223,7 @@ class State:
             page = self.sessions.get(session_id)
             if page is not None:
                 if method == "Inspector.detached":
-                    page.detach()
+                    command_metrics.flag("renderer_exit_kept_session", True)
                     return
                 if method == "Inspector.targetCrashed":
                     page.mark_crashed()
@@ -275,6 +281,21 @@ class State:
             await page.enable_page()
         self.extras["had_tab"] = True
         command_metrics.spent("attach_ms", started)
+        return page
+
+    async def reattach(self, page: Page) -> Page:
+        if page.session_id is not None and page.browser is self.browser:
+            return page
+        from ardia_cli.browse.errors import CdpError
+        from ardia_cli.browse.page import DETACHED
+
+        if self.pages.get(page.target_id) is not page or page.target_id not in self.target_infos:
+            raise BrowseError(DETACHED, code="tab_detached")
+        try:
+            await page.attach(self.browser)
+        except CdpError:
+            raise BrowseError(DETACHED, code="tab_detached") from None
+        command_metrics.flag("reattached_after_detach", True)
         return page
 
     async def follow_lost_tab(self) -> str:
@@ -397,6 +418,10 @@ class State:
         for ref in refs:
             ref.generation = self.generation
             self.refs[ref.id] = ref
+            if page is not None and ref.frame == getattr(page, "main_frame", None):
+                self.loader_urls[(ref.target, ref.loader)] = getattr(page, "url", "")
+        while len(self.loader_urls) > NAVIGATED_REFS_KEPT:
+            self.loader_urls.pop(next(iter(self.loader_urls)))
         self.current_refs = [ref.id for ref in refs]
         if snapshot_text is not None:
             self.last_snapshot = snapshot_text
@@ -407,7 +432,11 @@ class State:
             instance, target, frame, loader, _ = key
             if instance != self.instance or (target == page.target_id and (frame, loader) not in live):
                 del self.ref_keys[key]
-                self.refs.pop(ref_id, None)
+                gone = self.refs.pop(ref_id, None)
+                if gone is not None and instance == self.instance:
+                    self.navigated_refs[ref_id] = gone
+        while len(self.navigated_refs) > NAVIGATED_REFS_KEPT:
+            self.navigated_refs.pop(next(iter(self.navigated_refs)))
 
     def next_ref(self) -> str:
         self.issued_refs += 1
@@ -435,6 +464,13 @@ class State:
     async def resolve_ref(self, ref_id: str, follow: bool = True):
         ref = self.refs.get(ref_id)
         if ref is None:
+            if ref_id in self.navigated_refs:
+                old = self.navigated_refs[ref_id]
+                if follow:
+                    reloaded = await self.follow_after_reload(ref_id, old)
+                    if reloaded is not None:
+                        return reloaded
+                raise StaleRef(ref_id, await self.after_navigation(old))
             if ref_id[1:].isdigit() and int(ref_id[1:]) <= self.issued_refs:
                 raise StaleRef(ref_id, "it came from an earlier snapshot, and refs are never reused")
             raise BrowseError(f"Unknown ref: {ref_id}", code="unknown_ref")
@@ -453,6 +489,10 @@ class State:
         if frame is None:
             raise StaleRef(ref_id, "its frame is gone")
         if frame.get("loader") != ref.loader:
+            if follow:
+                reloaded = await self.follow_after_reload(ref_id, ref)
+                if reloaded is not None:
+                    return reloaded
             raise StaleRef(ref_id, "the page navigated since that snapshot")
         element = await page.resolve_backend(ref.backend, ref.frame, f"@{ref_id}")
         if element is None:
@@ -471,6 +511,40 @@ class State:
             self.extras["notice"] = "\n".join(part for part in (self.extras.get("notice"), notice) if part)
             return found_page, found
         raise StaleRef(ref_id, f'{gone}; the page redrew it, and the same {ref.role} "{ref.name}" is now @{successor.id}')
+
+    async def follow_after_reload(self, ref_id: str, old: Ref):
+        page = self.pages.get(old.target)
+        before = self.loader_urls.get((old.target, old.loader))
+        if page is None or not before or not old.unique or same_address(before) != same_address(page.url):
+            return None
+        try:
+            successor = await self.redrawn(page, old)
+        except ConnectionLost:
+            raise
+        except BrowseError:
+            return None
+        if successor is None or not successor.unique or successor.frame != page.main_frame or successor.context != old.context:
+            return None
+        found_page, found = await self.resolve_ref(successor.id, follow=False)
+        command_metrics.flag("followed_ref_after_reload", True)
+        notice = f'→ @{ref_id} was from before the page reloaded the same address, so this used the same {old.role} "{old.name}", now @{successor.id}'
+        self.extras["notice"] = "\n".join(part for part in (self.extras.get("notice"), notice) if part)
+        return found_page, found
+
+    async def after_navigation(self, old: Ref) -> str:
+        why = "the page navigated since that snapshot (an earlier step loaded a new document)"
+        if old.target not in self.pages:
+            return why
+        command_metrics.flag("stale_ref_after_navigation", True)
+        try:
+            successor = await self.redrawn(self.pages[old.target], old)
+        except ConnectionLost:
+            raise
+        except BrowseError:
+            successor = None
+        if successor is None:
+            return why
+        return f'{why}; the new page has the same {old.role} "{old.name}" as @{successor.id}, if it is the one you meant'
 
     async def redrawn(self, page: Page, ref: Ref) -> Ref | None:
         from ardia_cli.browse import snapshot
@@ -577,11 +651,17 @@ class State:
         return {ref.id: {"name": ref.name, "role": ref.role} for ref in self.snapshot_refs()}
 
 
+def same_address(url: str) -> str:
+    return (url or "").split("#", 1)[0].rstrip("/")
+
+
 def parse_ref(selector: str) -> str | None:
     if selector.startswith("@") and selector[1:2] == "e" and selector[2:].isdigit():
         return selector[1:]
     if selector.startswith("ref=") and selector[4:5] == "e" and selector[5:].isdigit():
         return selector[4:]
+    if selector.startswith("[ref=") and selector.endswith("]") and selector[5:6] == "e" and selector[6:-1].isdigit():
+        return selector[5:-1]
     return None
 
 

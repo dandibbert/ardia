@@ -3,18 +3,24 @@ import { exportBookmarks } from "../../../state/bookmarks/exportHtml";
 import { profileOfWindow } from "../../../state/bookmarks/bookmarkGroups";
 import { settingsBrowserWindow } from "../../../state/settings/settingsWindows";
 import { Button } from "../../ui";
-import { ProfilePicker, Row } from "../Form";
+import { ProfilePicker, Row, useHiddenSetting } from "../Form";
+import { findSetting } from "../settingsIndex";
 import { actionMessage, actionRunning, finishedAction, IDLE_ACTION, RUNNING_ACTION, type ActionState } from "./actionState";
 
 export function ExportBookmarksRow() {
   const [profileId, setProfileId] = useState(() => profileOfWindow(settingsBrowserWindow()));
   const [exporting, setExporting] = useState<ActionState<string>>(IDLE_ACTION);
+  const hidden = useHiddenSetting();
+  if (hidden(findSetting("general.exportBookmarks"))) return null;
   const run = async () => {
     setExporting(RUNNING_ACTION);
     let message: string | null = null;
     try {
       const path = await exportBookmarks(profileId);
-      if (path) message = `Saved “${path.split("/").pop()}” to “${path.split("/").slice(-2, -1)[0] ?? ""}”.`;
+      if (path) {
+        const parts = path.split(/[\\/]/);
+        message = `Saved “${parts.at(-1) ?? path}” to “${parts.at(-2) ?? ""}”.`;
+      }
     } catch (error) {
       message = `Couldn't export: ${(error as Error).message}`;
     } finally {

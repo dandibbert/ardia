@@ -1,5 +1,6 @@
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaRuntime.h"
+#import "ArdiaFairPlay.h"
 
 using namespace ardia_web_view;
 using namespace ardia_runtime;
@@ -7,7 +8,7 @@ using namespace ardia_runtime;
 @implementation ArdiaWebView (PageCommands)
 
 - (void)emitMedia {
-  const BOOL playing = _tab.audible;
+  const BOOL playing = _tab.audible || [ArdiaFairPlay playsInTab:_tab];
   const BOOL muted = _tab ? _tab.muted : _muted;
   [self emit:@"media" payload:@{@"playing" : @(playing), @"muted" : @(muted)}];
 }
@@ -34,6 +35,7 @@ using namespace ardia_runtime;
 
 - (void)tabDidChangeAudio:(ArdiaCoreTab *)tab {
   if (_muted && !tab.muted) tab.muted = YES;
+  [ArdiaFairPlay muteChangedInTab:tab];
   [self emitMedia];
 }
 
@@ -44,6 +46,7 @@ using namespace ardia_runtime;
 - (void)setMuted:(BOOL)muted {
   _muted = muted;
   _tab.muted = muted;
+  [ArdiaFairPlay muteChangedInTab:_tab];
 }
 
 - (void)setZoomFactor:(double)factor {
@@ -116,9 +119,8 @@ using namespace ardia_runtime;
 - (void)capturePicture:(double)scale completion:(void (^)(NSDictionary<NSString *, id> *))completion {
   NSWindow *window = self.window;
   if (!_tab || !window || self.hidden || self.awaitsFirstDocument) return completion(nil);
-  NSRect inWindow = [self convertRect:self.bounds toView:nil];
-  CGFloat top = NSHeight(window.contentView.frame);
-  NSArray *frame = @[ @(NSMinX(inWindow)), @(top - NSMaxY(inWindow)), @(NSWidth(inWindow)), @(NSHeight(inWindow)) ];
+  const NSRect inRoot = RootRectFromWindow(window, [self convertRect:self.bounds toView:nil]);
+  NSArray *frame = @[ @(NSMinX(inRoot)), @(NSMinY(inRoot)), @(NSWidth(inRoot)), @(NSHeight(inRoot)) ];
   __block BOOL answered = NO;
   void (^answer)(NSDictionary *) = ^(NSDictionary *result) {
     if (answered) return;
@@ -150,6 +152,14 @@ using namespace ardia_runtime;
   [self thawHiddenPage];
   if ([action isEqualToString:@"play"] || [action isEqualToString:@"toggle"]) [_tab grantUserActivationToFrame:_reports.nowPlaying.frame ?: @""];
   [self callFrame:_reports.nowPlaying.frame ?: @"" kind:@"media" json:JSONText(@{@"action" : action ?: @"", @"seconds" : @(seconds)})];
+}
+
+- (void)seekPictureInPictureBy:(double)seconds {
+  [self thawHiddenPage];
+  NSString *json = JSONText(@{@"action" : @"seekPictureInPictureBy", @"seconds" : @(seconds)});
+  NSArray<NSString *> *frames = ScriptFramesOf(_tab).array;
+  if (!frames.count) return [self callFrame:@"" kind:@"media" json:json];
+  for (NSString *frameId in frames) [self callFrame:frameId kind:@"media" json:json];
 }
 
 @end

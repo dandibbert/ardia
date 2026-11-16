@@ -1,5 +1,6 @@
 import { OutsidePressArea, showMenu, type MenuItem } from "@ardia/shell";
 import { withIconNames } from "../../lib/activeLook";
+import { modifiersOf, type ClickModifiers } from "../../lib/keys";
 import { Symbol } from "./Symbol";
 import { useEffect, useRef, type Ref } from "react";
 import { Animated, Pressable, StyleSheet, Text, TextInput, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
@@ -183,12 +184,14 @@ export function PopUp<T extends string>({
   onChange,
   minWidth = 120,
   disabled,
+  accessibilityLabel,
 }: {
   value: T;
   options: Option<T>[];
   onChange: (value: T) => void;
   minWidth?: number;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   const theme = useTheme();
   const { hovered, hoverProps } = useHover();
@@ -205,7 +208,7 @@ export function PopUp<T extends string>({
   };
   return (
     <View {...hoverProps} style={{ opacity: disabled ? opacity.disabled : 1 }}>
-      <Pressable disabled={disabled} onPress={open} onPressIn={pressMotion.onPressIn} onPressOut={pressMotion.onPressOut}>
+      <Pressable disabled={disabled} onPress={open} onPressIn={pressMotion.onPressIn} onPressOut={pressMotion.onPressOut} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
         {({ pressed }) => (
           <Animated.View
             style={[
@@ -253,7 +256,7 @@ export function Checkbox({
   size = "m",
 }: {
   value: boolean;
-  onChange?: (value: boolean) => void;
+  onChange?: (value: boolean, modifiers?: ClickModifiers) => void;
   label?: string;
   disabled?: boolean;
   mixed?: boolean;
@@ -284,7 +287,7 @@ export function Checkbox({
   return (
     <Pressable
       disabled={disabled || !onChange}
-      onPress={() => onChange?.(!value)}
+      onPress={(e) => onChange?.(!value, modifiersOf(e))}
       onPressIn={pressMotion.onPressIn}
       onPressOut={pressMotion.onPressOut}
       style={{ flexDirection: "row", alignItems: "center", gap: space.m, opacity: disabled ? opacity.disabled : 1 }}

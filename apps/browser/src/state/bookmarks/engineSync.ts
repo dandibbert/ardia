@@ -7,7 +7,7 @@ import { useBrowser, type BrowserState } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import type { BookmarkFolder, BookmarkNode, Bookmarks } from "../browser/types";
 import { engineProfiles } from "../profiles/engineProfiles";
-import { onProfilesOpened, openedEngineProfiles, openProfile, profileOpened } from "../profiles/profileLoading";
+import { onProfilesOpened, onProfilesUnloaded, openedEngineProfiles, openProfile, profileOpened } from "../profiles/profileLoading";
 import { migrateLegacyFile } from "../app/legacyFiles";
 import { noteBookmarkSyncDiff } from "../telemetry/bookmarkMoves";
 
@@ -25,13 +25,14 @@ type EngineState = {
   tree: EngineTree;
   busy: boolean;
   pending: "read" | "push" | null;
+  unloads: number;
 };
 const engines = new Map<string, EngineState>();
 const isCurrent = (engine: string, state: EngineState) => engines.get(engine) === state;
 
 const stateOf = (engine: string) => {
   let state = engines.get(engine);
-  if (!state) engines.set(engine, (state = { tree: { kind: "none" }, busy: false, pending: null }));
+  if (!state) engines.set(engine, (state = { tree: { kind: "none" }, busy: false, pending: null, unloads: 0 }));
   return state;
 };
 const synced = (state: EngineState | undefined) => state?.tree.kind === "synced";
@@ -81,10 +82,13 @@ async function sendOps(engine: string, ops: BookmarkOp[]): Promise<boolean> {
 }
 
 async function readTree(engine: string, state: EngineState) {
+  const unloads = state.unloads;
+  const left = () => state.unloads !== unloads || !isCurrent(engine, state);
   await watchBookmarks(engine);
-  if (!isCurrent(engine, state)) return;
-  const fetched = flatFromEngine(await bookmarkTree(engine), engine);
-  if (!isCurrent(engine, state)) return;
+  if (left()) return;
+  const engineTree = await bookmarkTree(engine);
+  if (left()) return;
+  const fetched = flatFromEngine(engineTree, engine);
   const { tree } = state;
   const base = tree.kind === "synced" ? tree.shadow : tree.kind === "cached" ? tree.shown : flatFromStore({ nodes: {} }, engine);
   const edits = bookmarkOps(base, flatFromStore(store().bookmarks, engine), engine);
@@ -92,7 +96,9 @@ async function readTree(engine: string, state: EngineState) {
   state.tree = { kind: "synced", shadow: fetched };
   adopt(engine, merged);
   if (!edits.length) return;
-  if (await sendOps(engine, edits)) state.tree = { kind: "synced", shadow: merged };
+  const sent = await sendOps(engine, edits);
+  if (state.unloads !== unloads) return;
+  if (sent) state.tree = { kind: "synced", shadow: merged };
   else state.pending = "read";
 }
 
@@ -104,7 +110,10 @@ async function pushTree(engine: string, state: EngineState) {
   const ops = bookmarkOps(state.tree.shadow, desired, engine);
   noteBookmarkSyncDiff(Date.now() - started);
   if (!ops.length) return;
-  if (await sendOps(engine, ops)) state.tree = { kind: "synced", shadow: desired };
+  const unloads = state.unloads;
+  const sent = await sendOps(engine, ops);
+  if (state.unloads !== unloads) return;
+  if (sent) state.tree = { kind: "synced", shadow: desired };
   else state.pending = "read";
 }
 
@@ -263,7 +272,15 @@ export function startBookmarks() {
     if (!stopped) for (const engine of openedEngineProfiles(store())) read(engine);
   });
   const opened = onProfilesOpened((now) => {
-    for (const engine of now) if (!synced(stateOf(engine)) && !stateOf(engine).busy) read(engine);
+    for (const engine of now) if (!synced(stateOf(engine))) read(engine);
+  });
+  const unloaded = onProfilesUnloaded((now) => {
+    for (const engine of now) {
+      const state = stateOf(engine);
+      state.unloads++;
+      if (state.tree.kind === "synced") state.tree = { kind: "cached", shown: state.tree.shadow };
+      state.pending = null;
+    }
   });
   const stop = useBrowser.subscribe((s, prev) => {
     if (s.profiles !== prev.profiles) {
@@ -284,6 +301,7 @@ export function startBookmarks() {
     cacheTimer = undefined;
     changes.remove();
     opened();
+    unloaded();
     stop();
     engines.clear();
     legacyMoved = false;

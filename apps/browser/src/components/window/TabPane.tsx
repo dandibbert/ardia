@@ -15,6 +15,7 @@ import { SplitEmptyState } from "../split/SplitEmptyState";
 import { NewTabPage } from "../ntp/NewTabPage";
 import { EmptyCard } from "./EmptyCard";
 import { NewTabDropArea } from "./NewTabDropArea";
+import { TabContentArea } from "./TabContentArea";
 import { InternalPage } from "../pages";
 import { ShareBar } from "../media/ShareBar";
 import { Toolbar, ToolbarBackdrop } from "../toolbar/Toolbar";
@@ -28,6 +29,7 @@ import { paneBar, type CardChrome } from "./paneChrome";
 import { PageOverlays } from "./PageOverlays";
 import { useProfileTheme } from "./ThemeScope";
 import { useCardFrame } from "./cardFrame";
+import { newTabOpensOf } from "../../state/settings/settings";
 
 const LINGERING_PANE = "ardia.lingeringPane";
 
@@ -80,7 +82,7 @@ export const TabPane = memo(function TabPane({
   const theme = useProfileTheme(own.profileId);
   const toolbarHeight = useToolbarRow().height;
   const isNewTab = !own.url;
-  const emptyCard = useSettings((st) => isNewTab && st.newTabOpens === "commandBar");
+  const emptyCard = useSettings((st) => isNewTab && newTabOpensOf(st) === "commandBar");
   const newTabShown = useStoreWhile(usePages, live, (s) => !!s.pages[tabId]?.newTabShown);
   const inSomeSplit = useBrowserWhile(!!warm, (s) => !!warm && !!splitOf(s, tabId));
   const inSplit = visible ? inActiveSplit : inSomeSplit;
@@ -137,11 +139,17 @@ export const TabPane = memo(function TabPane({
           <View style={{ flex: 1 }}>
             {(mounted || prewarmed) && <TabWebView tabId={tabId} visible={visible && !newTabShown && !isNewTab} warm={!!warm && !newTabShown && !isNewTab} />}
             {visible && isNewTab && !small && (
-              <NewTabDropArea tabId={tabId} accepting={!covered && !lingering}>
-                {inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : emptyCard ? <EmptyCard windowId={windowId} tabId={tabId} /> : <NewTabPage key={tabId} tabId={tabId} toolbar={toolbar} />}
-              </NewTabDropArea>
+              <TabContentArea contentAreaOf={tabId}>
+                <NewTabDropArea tabId={tabId} accepting={!covered && !lingering}>
+                  {inSplit ? <SplitEmptyState tabId={tabId} focused={focused} /> : emptyCard ? <EmptyCard windowId={windowId} tabId={tabId} /> : <NewTabPage key={tabId} tabId={tabId} toolbar={toolbar} />}
+                </NewTabDropArea>
+              </TabContentArea>
             )}
-            {visible && <InternalPage tabId={tabId} />}
+            {visible && (
+              <TabContentArea contentAreaOf={tabId}>
+                <InternalPage tabId={tabId} />
+              </TabContentArea>
+            )}
             {visible && (
               <PageOverlays
                 tabId={tabId}

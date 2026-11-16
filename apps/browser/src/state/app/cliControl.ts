@@ -91,7 +91,7 @@ let callerNoted: "sinceLastHide" | "beforeLastHide" = "sinceLastHide";
 
 function showIndicator(shown: boolean) {
   if (!shown) callerNoted = "beforeLastHide";
-  else noteCliPillShown();
+  else noteCliPillShown(useBrowser.getState().settings.compactCliPill);
   const caller = shown && callerNoted === "beforeLastHide" ? null : useCliIndicator.getState().caller;
   useCliIndicator.setState({ shown, caller });
 }

@@ -11,7 +11,7 @@ import { peekTabId } from "../peek/peek";
 import { splitOf, splitTabIdsOf } from "../splits/splits";
 import { hostOf } from "@ardia/core";
 import { capture } from "../telemetry/client";
-import { noteNowPlayingLoopRestart } from "../telemetry/mediaCardCounts";
+import { noteMediaPositionReport, noteNowPlayingLoopRestart } from "../telemetry/mediaCardCounts";
 import { isSleeping } from "../tabs/sleepingTabs";
 
 export type Session = NowPlaying & {
@@ -39,8 +39,8 @@ const PER_TAB = Object.keys(noMedia()) as (keyof Store)[];
 
 export const useMedia = create<Store>()(noMedia);
 
-export function setPictureInPictureState(tabId: string, { kind, active, fullScreenSpaces, leftApp }: PictureInPictureState) {
-  if (active && fullScreenSpaces !== undefined) capture("pip_shown", { kind, full_screen_spaces: fullScreenSpaces, left_app: !!leftApp });
+export function setPictureInPictureState(tabId: string, { kind, active, fullScreenSpaces, leftApp, leftTab }: PictureInPictureState) {
+  if (active && fullScreenSpaces !== undefined) capture("pip_shown", { kind, full_screen_spaces: fullScreenSpaces, left_app: !!leftApp, left_tab: !!leftTab });
   useMedia.setState((s) => {
     if (active ? s.pipOpen[tabId] === kind : !s.pipOpen[tabId]) return s;
     const pipOpen = { ...s.pipOpen };
@@ -53,6 +53,16 @@ export function setPictureInPictureState(tabId: string, { kind, active, fullScre
 }
 
 export function setNowPlaying(tabId: string, state: NowPlaying | null) {
+  if (state) notePositionReport(useMedia.getState().sessions[tabId], state);
+  applyNowPlaying(tabId, state);
+}
+
+function notePositionReport(before: Session | undefined, report: NowPlaying) {
+  if (isLoopRestart(before, report)) noteNowPlayingLoopRestart();
+  else noteMediaPositionReport(before, report);
+}
+
+function applyNowPlaying(tabId: string, state: NowPlaying | null) {
   useMedia.setState((s) => {
     const sessions = { ...s.sessions };
     if (!state) {
@@ -61,7 +71,6 @@ export function setNowPlaying(tabId: string, state: NowPlaying | null) {
       return { sessions };
     }
     const before = sessions[tabId];
-    if (isLoopRestart(before, state)) noteNowPlayingLoopRestart();
     if (before && sameNowPlaying(before, state)) return s;
     const started = isControllablyPlaying(state) && !(before && isControllablyPlaying(before));
     sessions[tabId] = { ...state, playedAt: started ? Date.now() : (before?.playedAt ?? 0) };
@@ -89,8 +98,7 @@ function sameNowPlaying(before: Session, next: NowPlaying): boolean {
     if (!Object.is(before[key], next[key])) return false;
   }
   if (before.actions.length !== next.actions.length || before.actions.some((a, i) => a !== next.actions[i])) return false;
-  const now = Date.now();
-  return Math.abs(positionOf(before, now) - positionOf(next, now)) < POSITION_DRIFT_SECONDS;
+  return Math.abs(positionOf(before, next.timestamp) - positionOf(next, next.timestamp)) < POSITION_DRIFT_SECONDS;
 }
 
 const isControllablyPlaying = (state: NowPlaying) => state.controllable && state.playbackState === "playing";
@@ -185,12 +193,12 @@ export const SKIP_SECONDS = 15;
 export function skipBy(tabId: string, session: Session, seconds: number) {
   const now = Date.now();
   const position = Math.max(0, Math.min(session.duration ?? Infinity, positionOf(session, now) + seconds));
-  setNowPlaying(tabId, { ...session, position, timestamp: now });
+  applyNowPlaying(tabId, { ...session, position, timestamp: now });
   mediaCommand(tabId, "seekBy", seconds);
 }
 
 export function seekTo(tabId: string, session: Session, seconds: number) {
-  setNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
+  applyNowPlaying(tabId, { ...session, position: seconds, timestamp: Date.now() });
   mediaCommand(tabId, "seekTo", seconds);
 }
 

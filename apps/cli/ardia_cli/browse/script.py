@@ -12,7 +12,7 @@ MAX_TIMEOUT = 600.0
 MAX_SOURCE = 1024 * 1024
 STATE_LIMIT = 16 * 1024 * 1024
 LOG_LIMIT = 1024 * 1024
-CONTROL_TIMEOUT = 5.0
+CONTROL_TIMEOUT = 20.0
 SOURCE_URL = "ardia-script.js"
 REFUSED = ("close", "script", "batch")
 FATAL = ("outcome_unknown", "connection_lost")
@@ -469,6 +469,11 @@ async def run(ctx, source: str, seconds: float):
             stopped = await stop_worker(page, handle)
             kept = keep_state(ctx.state, stopped.get("state"))
             raise timed_out(seconds, current, source, list(stopped.get("logs") or []), kept, done) from None
+        except asyncio.CancelledError:
+            stopped = await stop_worker(page, handle)
+            if keep_state(ctx.state, stopped.get("state")):
+                command_metrics.flag("script_state_kept_on_interrupt", True)
+            raise
     finally:
         await temptabs.release(state, owned)
     keep_state(ctx.state, message.get("state"))
