@@ -56,6 +56,7 @@ export type FakeWindow = OpenWindowOptions & { title?: string; trafficLightsCent
 const shellEvents = nativeEvents();
 export const windows = {
   closeRequests: [] as string[],
+  closesHeard: [] as string[],
   open: new Map<string, FakeWindow>(),
   closed: [] as string[],
   focused: null as string | null,
@@ -86,6 +87,10 @@ const windowsModule: Modules["ArdiaAppWindows"] & { requestClose(id: string): Pr
   },
   requestClose: (id) => {
     windows.closeRequests.push(id);
+    return Promise.resolve();
+  },
+  closeHeard: (id) => {
+    windows.closesHeard.push(id);
     return Promise.resolve();
   },
   closeWindow: (id) => {

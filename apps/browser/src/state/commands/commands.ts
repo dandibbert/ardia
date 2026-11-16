@@ -69,7 +69,7 @@ import { expectFocus, findFocus } from "../focus/focusClaims";
 import { isWebPageUrl } from "../../lib/url";
 import { findStep, openFind } from "../find/actions";
 import { runHidingCommand } from "../site/hiddenElements";
-import { requestWindowClose } from "../windows/windowClose";
+import { closeHeard, requestWindowClose } from "../windows/windowClose";
 
 const newOrId = (arg: string) => (arg === "new" ? null : arg);
 
@@ -348,6 +348,7 @@ function runLittleArdiaCommand(command: string, arg: string | null | undefined, 
   const tab = tabId ? s.tabs[tabId] : undefined;
   switch (command) {
     case "closeTab":
+      closeHeard(windowId);
       if (s.windowUi[windowId]?.panel.open && tab?.url) s.closePanel(windowId);
       else closeLittleArdia(windowId);
       return true;

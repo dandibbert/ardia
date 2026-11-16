@@ -1,5 +1,5 @@
 import { confirm } from "../../platform/dialogs";
-import { closeWindow as closeNativeWindow, onWindowEvent } from "../../platform/windows";
+import { closeHeard, closeWindow as closeNativeWindow, onWindowEvent } from "../../platform/windows";
 import { useBrowser } from "../browser/store";
 import { inPinnedContainer, plural, profileFor } from "../browser/model";
 import { tabsLostWithWindow } from "../tabs/sharedWindowClose";
@@ -9,6 +9,8 @@ import { closeWindowAnimated } from "./closeAnimated";
 import { isEmptyCardTab } from "../omnibox/newTabBarPolicy";
 import { askBeforeQuitting } from "./quitWarning";
 import { startClosingWindow, stopClosingWindow } from "./closingWindows";
+
+export { closeHeard };
 
 const MIN_TABS = 2;
 
@@ -22,7 +24,9 @@ export function requestWindowClose(windowId: string, onceAgreed?: () => void) {
 
 export function startWindowCloseGuard() {
   onWindowEvent((e) => {
-    if (e.type === "closeRequest") requestWindowClose(e.id);
+    if (e.type !== "closeRequest") return;
+    closeHeard(e.id);
+    requestWindowClose(e.id);
   });
 }
 

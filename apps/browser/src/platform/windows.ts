@@ -15,6 +15,7 @@ export const forgetWindowCornerRadius = () => {
 
 export const openWindow = (id: string, options: OpenWindowOptions = {}) => Windows.openWindow(id, options);
 export const closeWindow = (id: string) => Windows.closeWindow(id);
+export const closeHeard = (id: string) => void Windows.closeHeard?.(id);
 export const animateWindowClose = (id: string, after: string | null = null) => Windows.animateWindowClose(id, after);
 export const restoreFullScreen = (ids: string[], focus: string | null) => Windows.restoreFullScreen(ids, focus);
 export const focusWindow = (id: string) => Windows.focusWindow(id);

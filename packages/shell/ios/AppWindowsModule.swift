@@ -37,6 +37,7 @@ public class AppWindowsModule: Module {
       WindowManager.shared.open(id: id, options, focus: options.focus)
     }.runOnQueue(.main)
     AsyncFunction("closeWindow") { (id: String) in WindowManager.shared.close(id: id) }.runOnQueue(.main)
+    AsyncFunction("closeHeard") { (id: String) in WindowManager.shared.closeHeard(id: id) }.runOnQueue(.main)
     AsyncFunction("animateWindowClose") { (id: String, after: String?, promise: Promise) in
       WindowManager.shared.animateClose(id: id, after: after) { promise.resolve(nil) }
     }.runOnQueue(.main)

@@ -110,6 +110,8 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "How many Peek cards and Little Ardia windows you opened or closed with a trackpad pinch, how many Little Ardia windows you closed by swiping back or started to and let go, summed up once an hour",
       "How many Little Ardia windows you closed with Escape, and whether the page had the keyboard, nothing in the window did, or the window was still blank, summed up once an hour",
       "How many Little Ardia windows closed on their own because their page opened another app, and how many times closing a Little Ardia window brought back the app you came from, summed up once an hour. Never which app or page",
+      "How many Little Ardia windows closed without waiting for the rest of Ardia, because Ardia hadn't answered the last close for a second, summed up once an hour",
+      "When Ardia stops answering for a second or more while you click or type: how long, how long since the Mac last woke, the size of its memory, how many memory clean-ups ran meanwhile and the names of up to three of its own tasks that ran longest. At most 50 a session. Never what you clicked or typed",
       "How many times a Peek came back because you returned to the tab it was opened from, summed up once an hour. Never which tab or page",
       "How many links from other apps opened as a tab or in Little Ardia, each with whether Settings › General › Open links from other apps in Little Ardia was on, summed up once an hour. Never which links or which app",
       "How many links from other apps an Air Traffic Control rule routed, and how many went by its Everything Else choice, summed up once an hour. Never which links, rules, apps or profiles",

@@ -7,7 +7,7 @@ const { useBrowser } = await import("../browser/store.ts");
 const { makeTab } = await import("../browser/model.ts");
 const { startMemoryTrim } = await import("./memoryTrim.ts");
 
-test("a forced GC that held the JS thread for a second is the session's last", () => {
+test("a tab count change trims once input is idle and never forces a JavaScript collection", () => {
   mock.timers.enable({ apis: ["setTimeout"] });
   let now = 1_000_000;
   const realNow = Date.now;
@@ -18,30 +18,20 @@ test("a forced GC that held the JS thread for a second is the session's last", (
       mock.timers.tick(250);
     }
   };
-  let heap = 400 * 1048576;
   const collections = [];
-  globalThis.HermesInternal = { getInstrumentedStats: () => ({ js_heapSize: heap }) };
-  globalThis.gc = () => {
-    collections.push(now);
-    heap -= 1048576;
-    now += collections.length === 1 ? 100 : 6500;
-  };
+  globalThis.HermesInternal = { getInstrumentedStats: () => ({ js_heapSize: 400 * 1048576 }) };
+  globalThis.gc = () => collections.push(now);
   const addTab = () => {
     const tab = makeTab("w-test", "default", "https://example.com/");
     useBrowser.setState((s) => ({ tabs: { ...s.tabs, [tab.id]: tab } }));
   };
   try {
     startMemoryTrim();
-
-    addTab();
-    advance(10_000);
-    assert.equal(collections.length, 2, "a quick collection that shrank the heap is followed by another");
-    advance(60_000);
-    assert.equal(collections.length, 2, "the slow one ends the run");
-
     addTab();
     advance(60_000);
-    assert.equal(collections.length, 2, "later tab changes don't force one either");
+    addTab();
+    advance(60_000);
+    assert.deepEqual(collections, [], "a forced full collection stops the JS thread for seconds on a large heap");
   } finally {
     Date.now = realNow;
     mock.timers.reset();

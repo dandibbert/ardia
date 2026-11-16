@@ -1,5 +1,6 @@
 import { fieldTiming } from "../../platform/fieldTiming";
 import { timeEngineEvents } from "../../platform/performance";
+import { onSystemWake } from "../../platform/systemSignals";
 import { capture, isSharing } from "./client";
 
 type Bridge = Record<string, unknown>;
@@ -16,9 +17,12 @@ const MAX_STALLS_PER_SESSION = 50;
 
 const longTasks: LongTask[] = [];
 let stallsSent = 0;
-let lastBeat = 0;
+let lastBeatUptime = 0;
+let lastWakeUptime: number | null = null;
 let statsAtBeat: RuntimeStats | null = null;
 let beat: ReturnType<typeof setInterval> | undefined;
+
+const uptime = () => (globalThis as { performance?: { now?: () => number } }).performance?.now?.() ?? Date.now();
 
 const hermes = (globalThis as { HermesInternal?: { getInstrumentedStats?: () => HermesStats } }).HermesInternal;
 
@@ -96,14 +100,16 @@ export function stallReport(
 
 function onBeat() {
   const now = Date.now();
-  const from = lastBeat + BEAT_MS;
+  const awake = uptime();
+  const from = now - (awake - lastBeatUptime) + BEAT_MS;
   const before = statsAtBeat;
-  lastBeat = now;
+  lastBeatUptime = awake;
   statsAtBeat = runtimeStats();
   if (now - from < STALL_MS || stallsSent >= MAX_STALLS_PER_SESSION || !isSharing()) return;
   const [inputAt] = fieldTiming.lastInput();
   const report = stallReport(from, now, inputAt, before, statsAtBeat);
   if (!report) return;
+  if (lastWakeUptime !== null) report.since_wake_s = Math.round((awake - lastWakeUptime) / 1000);
   stallsSent++;
   capture("js_stall", report);
 }
@@ -112,7 +118,10 @@ export function startJsStalls() {
   timeBridge((globalThis as { __fbBatchedBridge?: Bridge }).__fbBatchedBridge);
   timeEngineEvents((name, run) => timed(`engine ${name}`, run));
   if (beat) return;
-  lastBeat = Date.now();
+  lastBeatUptime = uptime();
   statsAtBeat = runtimeStats();
+  onSystemWake(() => {
+    lastWakeUptime = uptime();
+  });
   beat = setInterval(onBeat, BEAT_MS);
 }

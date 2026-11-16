@@ -9,7 +9,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     var options: OpenWindowOptions
   }
 
-  private var managed: [String: ManagedWindow] = [:]
+  private(set) var managed: [String: ManagedWindow] = [:]
   private var pending: [PendingOpen] = []
   private var lightsCenters: [String: (center: NSPoint, trailing: Bool)] = [:]
   private var unreportedFrames = Set<ObjectIdentifier>()
@@ -444,6 +444,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     guard isBrowserWindow(sender), let id = id(of: sender), ShellEvents.isAttached(.app) else { return true }
+    if closesWithoutAnswer(id) { return true }
     flushFrameReport(sender)
     return !ShellEvents.send(.window, ["type": "closeRequest", "id": id])
   }
@@ -466,7 +467,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
     forget(entry)
     if !closedByJS {
-      ShellEvents.send(.window, ["type": "close", "id": id])
+      ShellEvents.send(.window, ["type": "close", "id": id, "unanswered": entry.jsMissedClose])
     }
     DispatchQueue.main.async {
       if ArdiaChromeWindowHost.rootView(of: window) != nil { return ArdiaChromeWindowHost.removeRootView(of: window) }

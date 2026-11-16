@@ -7,6 +7,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
   func dispatch(_ command: String, _ arg: String?, windowId: String?) {
     guard !swallowsCommands else { return }
     if command == "closeTab", WindowManager.shared.closeForeignKeyWindow() { return }
+    if command == "closeTab", WindowManager.shared.closeUnansweredSmallKeyWindow() { return }
     ShellEvents.send(.command, [
       "command": command, "arg": arg as Any, "windowId": windowId as Any, "focusGeneration": FocusHandoff.shared.takeBegun() as Any,
     ])

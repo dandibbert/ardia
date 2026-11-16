@@ -4,6 +4,7 @@ import { engineProfile, windowTitle } from "../browser/model";
 import { windowOpens } from "./windowOpenOrder";
 import { focusedWindowOf } from "./ui";
 import { adoptOf } from "../tabs/pageSession";
+import { noteLittleArdiaUnansweredClose } from "../telemetry/littleArdiaEscapes";
 
 export type LightsCenter = LightsPlace | null;
 
@@ -46,6 +47,7 @@ export function createWindowSync({ port, getState, isQuitting, lightsCenter, isU
       if (e.type === "fullScreen" && !isQuitting()) s.setWindowFullScreen(e.id, e.on);
       if (e.type === "close") {
         if (isQuitting()) return;
+        if (e.unanswered) noteLittleArdiaUnansweredClose();
         open.delete(e.id);
         s.closeWindow(e.id);
         releasePrivateProfile(e.id);

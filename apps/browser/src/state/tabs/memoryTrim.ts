@@ -1,31 +1,20 @@
 import { inputIdleSeconds, trimEngineMemory } from "../../platform/performance";
 import { useBrowser } from "../browser/store";
 import { isQuitting } from "../app/quit";
-import { timed } from "../telemetry/jsStalls";
 import { noteMemoryTrim, noteMemoryTrimFailure, noteMemoryTrimGivenUp } from "../telemetry/memoryTrimCounts";
 
 const QUIET_MS = 5000;
 const MIN_GAP_MS = 30000;
-const STEP_MS = 250;
 const BUSY_RETRY_MS = 1000;
-const MAX_COLLECTIONS = 8;
 const MAX_POSTPONES = 30;
 const INPUT_IDLE_SECONDS = 2;
 const TIMER_LATE_MS = 50;
-const SLOW_GC_MS = 1000;
-
-type HermesStats = { js_heapSize?: number };
-const runtime = globalThis as { gc?: () => void; HermesInternal?: { getInstrumentedStats?: () => HermesStats } };
-
-const heapSize = () => runtime.HermesInternal?.getInstrumentedStats?.().js_heapSize ?? null;
 
 let started = false;
 
 export function startMemoryTrim() {
   if (started) return;
-  const compactsHeap = typeof runtime.gc === "function" && heapSize() !== null;
   started = true;
-  let gcTooSlow = false;
 
   let tabCount = Object.keys(useBrowser.getState().tabs).length;
   let lastTrimAt = 0;
@@ -46,26 +35,6 @@ export function startMemoryTrim() {
 
   const idle = (lateMs: number) => lateMs < TIMER_LATE_MS && (inputIdleSeconds() ?? Infinity) >= INPUT_IDLE_SECONDS;
 
-  const finish = () => {
-    if (isQuitting()) return;
-    trimEngineMemory().then(noteMemoryTrim, noteMemoryTrimFailure);
-  };
-
-  const compact = (step: number, before: number, postponed: number, lateMs: number) => {
-    if (isQuitting()) return;
-    if (!idle(lateMs)) {
-      if (postponed < MAX_POSTPONES) later((late) => compact(step, before, postponed + 1, late), BUSY_RETRY_MS);
-      else noteMemoryTrimGivenUp();
-      return;
-    }
-    const gcStart = Date.now();
-    timed("memoryTrim gc", runtime.gc!);
-    if (Date.now() - gcStart >= SLOW_GC_MS) gcTooSlow = true;
-    const after = heapSize() ?? before;
-    if (!gcTooSlow && after < before && step + 1 < MAX_COLLECTIONS) later((late) => compact(step + 1, after, postponed, late), STEP_MS);
-    else finish();
-  };
-
   const begin = (lateMs: number, postponed = 0) => {
     if (isQuitting()) return;
     const wait = lastTrimAt + MIN_GAP_MS - Date.now();
@@ -76,8 +45,7 @@ export function startMemoryTrim() {
       return;
     }
     lastTrimAt = Date.now();
-    if (compactsHeap && !gcTooSlow) compact(0, heapSize() ?? 0, 0, 0);
-    else finish();
+    trimEngineMemory().then(noteMemoryTrim, noteMemoryTrimFailure);
   };
 
   useBrowser.subscribe((s, prev) => {
