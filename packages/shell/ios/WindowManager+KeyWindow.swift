@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 
 extension WindowManager {
   var background: Bool { LaunchConfig.shared.background }

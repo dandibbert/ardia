@@ -1,4 +1,5 @@
 import AppKit
+import ArdiaCore
 
 extension ManagedWindow {
   static let closeAnswerWithin: TimeInterval = 1
