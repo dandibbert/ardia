@@ -70,6 +70,7 @@ type NativeEvents = {
   onScroll: { state: ScrollState };
   onProtectedMedia: ProtectedMediaRequest;
   onFairPlay: FairPlayReport;
+  onAutoplayBlocked: { count?: number };
   onReady: object;
   onDiscarded: { url: string; reason?: DiscardReason | "" };
   onPasswordPrompt: PasswordPrompt;
@@ -120,6 +121,7 @@ const PAGE_EVENTS = {
   onScroll: "scroll",
   onProtectedMedia: "protectedMedia",
   onFairPlay: "fairPlay",
+  onAutoplayBlocked: "autoplayBlocked",
   onReady: "ready",
   onDiscarded: "discarded",
   onPasswordPrompt: "passwordPrompt",
@@ -170,6 +172,7 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onScroll: (e) => [e.state],
   onProtectedMedia: (e) => [e],
   onFairPlay: (e) => [e],
+  onAutoplayBlocked: (e) => [Number.isInteger(e.count) ? Math.min(Math.max(e.count!, 1), 20) : 1],
   onReady: () => [],
   onDiscarded: (e) => [toAppUrl(e.url), e.reason || null],
   onPasswordPrompt: (e) => [e],

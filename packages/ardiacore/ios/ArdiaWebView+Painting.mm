@@ -173,6 +173,7 @@ BOOL Above(NSView *a, NSView *b) {
   if (NSView *standIn = _standIn.page; standIn.superview == self) standIn.frame = self.bounds;
   NSView *page = _tab.view;
   if (!page || page.superview != self) return;
+  if (NSIsEmptyRect(self.bounds) && !NSIsEmptyRect(page.frame) && !self.paints) return;
   if (_devtoolsView) {
     NSRect devtools = NSZeroRect, pageFrame = self.bounds;
     [_tab devToolsLayoutForSize:self.bounds.size devTools:&devtools page:&pageFrame];
@@ -300,6 +301,7 @@ BOOL Above(NSView *a, NSView *b) {
   NSResponder *responder = window.firstResponder;
   if (!_visible && !_standalone && [responder isKindOfClass:NSView.class] && [(NSView *)responder isDescendantOf:self])
     [window makeFirstResponder:nil];
+  if (shown && NSIsEmptyRect(self.bounds)) [self layoutPage];
   for (NSView *sub in self.subviews) {
     sub.hidden = !shown;
     AcceptDrops(sub, _visible);

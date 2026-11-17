@@ -242,6 +242,7 @@ void AddLaunchSwitches(base::CommandLine* command_line) {
   command_line->AppendSwitch(switches::kNoFirstRun);
   command_line->AppendSwitch(switches::kNoDefaultBrowserCheck);
   command_line->AppendSwitch(switches::kHideCrashRestoreBubble);
+  command_line->AppendSwitch("keep-old-history");
   AddFeatures(command_line, switches::kDisableFeatures,
               "CalculateNativeWinOcclusion");
   AddFeatures(command_line, switches::kEnableFeatures, "WebContentsDiscard");

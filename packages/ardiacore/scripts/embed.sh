@@ -49,6 +49,7 @@ if [ -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]; then
   extensions="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Extensions"
   mkdir -p "$extensions"
   rsync -a --delete "$repo/packages/ardiacore/extensions/little-ardia-link-menu/" "$extensions/little-ardia-link-menu/"
+  rsync -a --delete "$repo/packages/ardiacore/extensions/protected-video-ua/" "$extensions/protected-video-ua/"
 fi
 
 "$here/ubol.sh"

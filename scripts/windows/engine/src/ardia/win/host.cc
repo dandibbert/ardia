@@ -11,6 +11,7 @@
 
 #include "ardia/core/ac_host_visibility.h"
 #include "ardia/core/ac_launch_switches.h"
+#include "ardia/win/autoplay.h"
 #include "ardia/win/context_menu.h"
 #include "ardia/win/frame_view.h"
 #include "ardia/win/hooks.h"
@@ -333,6 +334,7 @@ void Host::Start() {
   g_ardia_win_open_as_offer = &HostOpensAsOffer;
   g_ardia_win_offer_inserted = &HostNotesOfferInserted;
   InstallHostedPageMenus();
+  InstallAutoplayPolicy();
   browsers_observation_.Observe(GlobalBrowserCollection::GetInstance());
 }
 
@@ -386,6 +388,8 @@ void Host::Call(const std::string& verb,
   } else if (verb == "keyboard.forget") {
     keyboard_wanted_.erase(window);
     result = Ok();
+  } else if (verb == "autoplay.everywhere") {
+    result = SetBlockAutoplayEverywhere(args);
   } else if (verb == "peek.config") {
     PageLinks::Configure(args);
     result = PageLinks::Config();
@@ -1605,6 +1609,9 @@ void Host::OnTabStripModelChanged(TabStripModel* tab_strip_model,
     return;
   }
   if (change.type() == TabStripModelChange::kInserted) {
+    for (const auto& inserted : change.GetInsert()->contents) {
+      WatchAutoplay(inserted.contents);
+    }
     if (creating_tab_ || moving_tab_) {
       return;
     }

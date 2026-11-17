@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)][string]$App,
   [Parameter(Mandatory = $true)][string]$Out,
   [int]$Seconds = 25,
-  [int]$SelfCheckSeconds = 120,
+  [int]$SelfCheckSeconds = 300,
   [switch]$NoInput,
   [ValidateSet("all", "launch", "gate")][string]$Part = "all"
 )
@@ -448,6 +448,22 @@ param([int]$Port, [string]$Log)
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
 $listener.Start()
 $held = [System.Collections.Generic.List[object]]::new()
+$rate = 8000
+$count = $rate * 2
+$wav = [byte[]]::new(44 + 2 * $count)
+[System.Text.Encoding]::ASCII.GetBytes("RIFF").CopyTo($wav, 0)
+[BitConverter]::GetBytes([int](36 + 2 * $count)).CopyTo($wav, 4)
+[System.Text.Encoding]::ASCII.GetBytes("WAVEfmt ").CopyTo($wav, 8)
+[BitConverter]::GetBytes([int]16).CopyTo($wav, 16)
+[BitConverter]::GetBytes([int16]1).CopyTo($wav, 20)
+[BitConverter]::GetBytes([int16]1).CopyTo($wav, 22)
+[BitConverter]::GetBytes([int]$rate).CopyTo($wav, 24)
+[BitConverter]::GetBytes([int](2 * $rate)).CopyTo($wav, 28)
+[BitConverter]::GetBytes([int16]2).CopyTo($wav, 32)
+[BitConverter]::GetBytes([int16]16).CopyTo($wav, 34)
+[System.Text.Encoding]::ASCII.GetBytes("data").CopyTo($wav, 36)
+[BitConverter]::GetBytes([int](2 * $count)).CopyTo($wav, 40)
+for ($i = 0; $i -lt $count; $i++) { [BitConverter]::GetBytes([int16]([Math]::Sin($i * 0.345) * 3000)).CopyTo($wav, 44 + 2 * $i) }
 while ($true) {
   $client = $listener.AcceptTcpClient()
   $keep = $false
@@ -474,9 +490,36 @@ while ($true) {
       $keep = $true
       continue
     }
-    $name = @{ "/a" = "a"; "/b" = "b"; "/hover" = "hover"; "/sleep" = "sleep"; "/links" = "links"; "/drag" = "drag"; "/event/hovered" = "event"; "/event/left" = "event"; "/event/pressed" = "event"; "/event/selected" = "event"; "/event/released" = "event"; "/event/dragstart" = "event"; "/event/fullscreen" = "event"; "/event/windowed" = "event" }[$($path -replace '\?.*$', '')]
+    if (($path -replace '\?.*$', '') -eq "/tone.wav") {
+      $head = [System.Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: audio/wav`r`nContent-Length: $($wav.Length)`r`nConnection: close`r`n`r`n")
+      $stream.Write($head, 0, $head.Length)
+      $stream.Write($wav, 0, $wav.Length)
+      $stream.Flush()
+      continue
+    }
+    if (($path -replace '\?.*$', '') -eq "/clobber") {
+      $first = [System.Text.Encoding]::UTF8.GetBytes("<!doctype html><meta charset=utf-8><title>clobber page</title><div id=ardiaAutoplayGuard></div>")
+      $rest = [System.Text.Encoding]::UTF8.GetBytes("<video id=m src='/tone.wav' autoplay muted loop></video><script>window.tries = ['attribute'];</script>")
+      $head = [System.Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: text/html; charset=utf-8`r`nContent-Length: $($first.Length + $rest.Length)`r`nConnection: close`r`n`r`n")
+      $stream.Write($head, 0, $head.Length)
+      $stream.Write($first, 0, $first.Length)
+      $stream.Flush()
+      Start-Sleep -Milliseconds 1000
+      $stream.Write($rest, 0, $rest.Length)
+      $stream.Flush()
+      continue
+    }
+    if (($path -replace '\?.*$', '') -eq "/download.bin") {
+      $file = [System.Text.Encoding]::ASCII.GetBytes("ardia blank check")
+      $head = [System.Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/octet-stream`r`nContent-Disposition: attachment; filename=ardia-blank-check.bin`r`nContent-Length: $($file.Length)`r`nConnection: close`r`n`r`n")
+      $stream.Write($head, 0, $head.Length)
+      $stream.Write($file, 0, $file.Length)
+      $stream.Flush()
+      continue
+    }
+    $name = @{ "/a" = "a"; "/b" = "b"; "/hover" = "hover"; "/sleep" = "sleep"; "/links" = "links"; "/drag" = "drag"; "/media" = "media"; "/framed" = "framed"; "/event/hovered" = "event"; "/event/left" = "event"; "/event/pressed" = "event"; "/event/selected" = "event"; "/event/released" = "event"; "/event/dragstart" = "event"; "/event/fullscreen" = "event"; "/event/windowed" = "event"; "/event/local-state-start" = "event"; "/event/local-state-stop" = "event" }[$($path -replace '\?.*$', '')]
     $status = if ($name -eq "event") { "204 No Content" } elseif ($name) { "200 OK" } else { "404 Not Found" }
-    $text = if ($name -eq "event") { "" } elseif ($name -eq "links") { "<!doctype html><meta charset=utf-8><title>links page</title><style>body{margin:0}a{position:absolute;left:10px;width:200px;height:40px;display:block;background:#ddd}</style><a id=peek style='top:10px' href='/a'>peek</a><a id=blank style='top:70px' target=_blank href='/b'>blank</a><a id=app style='top:130px' href='ardia-sleep-check-link:woke'>app</a>" } elseif ($name -eq "sleep") { "<!doctype html><meta charset=utf-8><title>sleep page</title><body style='margin:0;height:6000px'><input id=field></body>" } elseif ($name -eq "drag") { "<!doctype html><meta charset=utf-8><title>drag page</title><style>body{margin:0;font:18px sans-serif}#words{position:absolute;left:40px;top:120px;width:560px;margin:0}#link{position:absolute;left:40px;top:240px}#full{position:absolute;left:40px;top:320px;width:160px;height:40px}</style><p id=words>Plain words to select by dragging across them, plain words to select by dragging across them.</p><a id=link href='/a'>a link to drag</a><button id=full>full screen</button><script>const report = (name) => fetch('/event/' + name); addEventListener('mousedown', () => report('pressed')); addEventListener('mouseup', () => report(getSelection().toString().length > 0 ? 'selected' : 'released')); addEventListener('dragstart', () => report('dragstart')); document.getElementById('full').addEventListener('click', (event) => { event.stopPropagation(); document.documentElement.requestFullscreen(); }); addEventListener('fullscreenchange', () => report(document.fullscreenElement ? 'fullscreen' : 'windowed'));</script>" } elseif ($name -eq "hover") { "<!doctype html><meta charset=utf-8><title>ready</title><style>body{margin:0}#strip{height:160px;background:#ddd}</style><div id=strip>hover strip</div><script>const strip = document.getElementById('strip'); strip.addEventListener('mouseenter', () => { document.title = 'hovered'; fetch('/event/hovered'); }); strip.addEventListener('mouseleave', () => { document.title = 'left'; fetch('/event/left'); });</script>" } elseif ($name) { "<!doctype html><meta charset=utf-8><p>cached page $name</p><script>addEventListener('pageshow', (event) => { document.title = (event.persisted ? 'restored ' : 'loaded ') + '$name'; });</script>" } else { "" }
+    $text = if ($name -eq "event") { "" } elseif ($name -eq "links") { "<!doctype html><meta charset=utf-8><title>links page</title><style>body{margin:0}a{position:absolute;left:10px;width:200px;height:40px;display:block;background:#ddd}</style><a id=peek style='top:10px' href='/a'>peek</a><a id=blank style='top:70px' target=_blank href='/b'>blank</a><a id=app style='top:130px' href='ardia-sleep-check-link:woke'>app</a>" } elseif ($name -eq "sleep") { "<!doctype html><meta charset=utf-8><title>sleep page</title><body style='margin:0;height:6000px'><input id=field></body>" } elseif ($name -eq "drag") { "<!doctype html><meta charset=utf-8><title>drag page</title><style>body{margin:0;font:18px sans-serif}#words{position:absolute;left:40px;top:120px;width:560px;margin:0}#link{position:absolute;left:40px;top:240px}#full{position:absolute;left:40px;top:320px;width:160px;height:40px}</style><p id=words>Plain words to select by dragging across them, plain words to select by dragging across them.</p><a id=link href='/a'>a link to drag</a><button id=full>full screen</button><script>const report = (name) => fetch('/event/' + name); addEventListener('mousedown', () => report('pressed')); addEventListener('mouseup', () => report(getSelection().toString().length > 0 ? 'selected' : 'released')); addEventListener('dragstart', () => report('dragstart')); document.getElementById('full').addEventListener('click', (event) => { event.stopPropagation(); document.documentElement.requestFullscreen(); }); addEventListener('fullscreenchange', () => report(document.fullscreenElement ? 'fullscreen' : 'windowed'));</script>" } elseif ($name -eq "media") { "<!doctype html><meta charset=utf-8><title>media page</title><style>body{margin:0}#m{width:160px;height:90px}#go{position:absolute;left:0;top:100px;width:200px;height:60px}#next{position:absolute;left:0;top:170px;width:200px;height:30px;display:block;background:#ddd}</style><video id=m src='/tone.wav' loop></video><button id=go>play</button><a id=next href='/media?second'>next</a><script>const m = document.getElementById('m'); if (location.search.includes('muted')) m.muted = true; window.tries = []; const attempt = () => m.play().then(() => 'played', (error) => error.name).then((result) => tries.push(result)); if (location.search.includes('auto')) attempt(); const burst = () => { for (let i = 0; i < 25; i++) new Audio().play().catch(() => {}); }; if (location.search.includes('burst')) burst(); if (location.search.includes('again')) addEventListener('pageshow', (event) => { if (event.persisted) burst(); }); if (location.search.includes('session')) navigator.mediaSession.setActionHandler('play', () => attempt()); if (location.search.includes('touchplay')) addEventListener('pointerdown', (event) => { if (event.pointerType === 'touch') attempt(); }); document.getElementById('go').addEventListener('click', attempt); addEventListener('message', (event) => { if (event.data === 'play-muted') { m.muted = true; attempt(); } if (event.data === 'play-again') attempt(); }); if (parent !== window) setInterval(() => parent.postMessage({ paused: m.paused, time: m.currentTime, tries, active: !!(navigator.userActivation && navigator.userActivation.hasBeenActive) }, '*'), 200);</script>" } elseif ($name -eq "framed") { "<!doctype html><meta charset=utf-8><title>framed page</title><style>body{margin:0}iframe{width:280px;height:200px;border:0}</style><body><script>window.frameState = null; window.restored = false; addEventListener('message', (event) => { frameState = event.data; }); window.showPlay = null; addEventListener('pageshow', (event) => { restored = event.persisted; const shows = Number(sessionStorage.getItem('ardia-shows') || 0) + 1; sessionStorage.setItem('ardia-shows', String(shows)); if (shows > 1 && location.search.includes('showplay')) Object.assign(document.createElement('video'), { muted: true, loop: true, src: '/tone.wav' }).play().then(() => 'played', (error) => error.name).then((result) => { showPlay = result; }); }); if (location.search.includes('burst')) for (let i = 0; i < 25; i++) new Audio().play().catch(() => {}); const frame = document.createElement('iframe'); frame.allow = 'autoplay'; frame.src = (location.search.includes('same') ? location.origin : 'http://localhost:$Port') + '/media' + (location.search.includes('burst') ? '?again' : location.search.includes('quiet') ? '' : '?auto-muted'); document.body.append(frame);</script>" } elseif ($name -eq "hover") { "<!doctype html><meta charset=utf-8><title>ready</title><style>body{margin:0}#strip{height:160px;background:#ddd}</style><div id=strip>hover strip</div><script>const strip = document.getElementById('strip'); strip.addEventListener('mouseenter', () => { document.title = 'hovered'; fetch('/event/hovered'); }); strip.addEventListener('mouseleave', () => { document.title = 'left'; fetch('/event/left'); });</script>" } elseif ($name) { "<!doctype html><meta charset=utf-8><p>cached page $name</p><script>addEventListener('pageshow', (event) => { document.title = (event.persisted ? 'restored ' : 'loaded ') + '$name'; });</script>" } else { "" }
     $body = [System.Text.Encoding]::UTF8.GetBytes($text)
     $head = [System.Text.Encoding]::ASCII.GetBytes("HTTP/1.1 $status`r`nContent-Type: text/html; charset=utf-8`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n")
     $stream.Write($head, 0, $head.Length)
@@ -528,6 +571,95 @@ elseif (Select-String -Path $browserLog -Pattern "^(js-error|fatal|error) " -Qui
   $failures += "the launch with onboarding done has errors"
 }
 elseif (-not (Select-String -Path $browserLog -Pattern "\[ardia windows\] first window" -Quiet)) { $failures += "the browser window never rendered with onboarding done" }
+
+function Start-PlacementRun([string]$Name) {
+  $runLog = Join-Path $Out "placement-$Name.log"
+  Remove-Item -Force -ErrorAction SilentlyContinue $runLog
+  $run = Start-Process -FilePath $App -ArgumentList "--log-file=`"$runLog`"" -PassThru
+  $by = (Get-Date).AddSeconds(40)
+  while ((Get-Date) -lt $by -and -not $run.HasExited) {
+    $run.Refresh()
+    if ($run.MainWindowHandle -ne [IntPtr]::Zero -and (Test-Path $runLog) -and (Select-String -Path $runLog -Pattern "\[ardia windows\] first window" -Quiet)) { break }
+    Start-Sleep -Milliseconds 300
+  }
+  Start-Sleep -Seconds 3
+  $run.Refresh()
+  return [pscustomobject]@{ Process = $run; Log = $runLog; Handle = $run.MainWindowHandle }
+}
+
+function Stop-PlacementRun($Run, [string]$What) {
+  if ($Run.Process.HasExited) { return @("placement: the app had exited before $What") }
+  [ArdiaInput]::PostMessage($Run.Handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+  if ($Run.Process.WaitForExit(20000)) { return @() }
+  Stop-Process -Id $Run.Process.Id -Force -ErrorAction SilentlyContinue
+  $Run.Process.WaitForExit(10000) | Out-Null
+  return @("placement: closing the last window did not quit the app within 20 s ($What)")
+}
+
+function Test-RectNear($Rect, $Expected, [string]$What) {
+  if (-not $Rect) { return @("placement: no window to measure $What") }
+  $got = "$($Rect.Left),$($Rect.Top) $($Rect.Right - $Rect.Left)x$($Rect.Bottom - $Rect.Top)"
+  $want = "$($Expected.Left),$($Expected.Top) $($Expected.Right - $Expected.Left)x$($Expected.Bottom - $Expected.Top)"
+  $near = [Math]::Abs($Rect.Left - $Expected.Left) -le 4 -and [Math]::Abs($Rect.Top - $Expected.Top) -le 4 -and [Math]::Abs($Rect.Right - $Expected.Right) -le 4 -and [Math]::Abs($Rect.Bottom - $Expected.Bottom) -le 4
+  if ($near) { Write-Host "Placement: $What came back at $got."; return @() }
+  return @("placement: $What came back at $got, not $want")
+}
+
+function Test-WindowPlacementKept {
+  $env:ARDIA_DATA_DIR = New-DataDirectory "placement-data"
+  Set-Content -Path (Join-Path $env:ARDIA_DATA_DIR "onboarding.json") -Value '{"completedAt":1700000000000,"version":1}' -Encoding utf8NoBOM
+  $notes = @()
+  $first = Start-PlacementRun "first"
+  if ($first.Handle -eq [IntPtr]::Zero) { Stop-Process -Id $first.Process.Id -Force -ErrorAction SilentlyContinue; return @("placement: the first run showed no window") }
+  $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  $placeWidth = [int]($work.Width * 0.7)
+  $placeHeight = [int]($work.Height * 0.7)
+  $placeX = $work.X + [int](($work.Width - $placeWidth) / 3)
+  $placeY = $work.Y + [int](($work.Height - $placeHeight) / 3)
+  Write-Host "Placement: the work area is $($work.Width)x$($work.Height); the window goes to $placeX,$placeY ${placeWidth}x$placeHeight."
+  [ArdiaInput]::SetWindowPos($first.Handle, [IntPtr]::Zero, $placeX, $placeY, $placeWidth, $placeHeight, 0x0014) | Out-Null
+  Start-Sleep -Milliseconds 800
+  $placed = Get-WindowRect $first.Process
+  [ArdiaInput]::ShowWindow($first.Handle, 3) | Out-Null
+  Start-Sleep -Milliseconds 1200
+  if (-not [ArdiaInput]::IsZoomed($first.Handle)) { $notes += "placement: the window did not maximize before the app quit" }
+  Save-Screenshot (Join-Path $Out "placement-before-quit.png")
+  $notes += @(Stop-PlacementRun $first "the maximized run")
+  $saved = Join-Path $env:ARDIA_DATA_DIR "window-placement.txt"
+  if (Test-Path $saved) { Write-Host "Placement: the app saved '$((Get-Content -Raw $saved).Trim())' as the last window placement." }
+  else { $notes += "placement: the app saved no window-placement.txt when it quit" }
+
+  $second = Start-PlacementRun "maximized"
+  Save-Screenshot (Join-Path $Out "placement-relaunched-maximized.png")
+  $how = Get-LastLogLine $second.Log "^window \d+ (placed |opened \S+ maximized)"
+  Write-Host "Placement: the relaunch logged '$how'."
+  if ($second.Handle -eq [IntPtr]::Zero) { $notes += "placement: the relaunch showed no window" }
+  elseif (-not [ArdiaInput]::IsZoomed($second.Handle)) { $notes += "placement: a window maximized when the app quit came back not maximized ($(Get-WindowRect $second.Process | ForEach-Object { "$($_.Left),$($_.Top) $($_.Right - $_.Left)x$($_.Bottom - $_.Top)" }))" }
+  else {
+    Write-Host "Placement: a window maximized when the app quit came back maximized."
+    [ArdiaInput]::ShowWindow($second.Handle, 9) | Out-Null
+    Start-Sleep -Milliseconds 1200
+    $notes += @(Test-RectNear (Get-WindowRect $second.Process) $placed "the maximized window, restored,")
+  }
+  $notes += @(Stop-PlacementRun $second "the restored run")
+
+  $third = Start-PlacementRun "restored"
+  Save-Screenshot (Join-Path $Out "placement-relaunched-restored.png")
+  if ($third.Handle -eq [IntPtr]::Zero) { $notes += "placement: the third run showed no window" }
+  elseif ([ArdiaInput]::IsZoomed($third.Handle)) { $notes += "placement: a window restored before the app quit came back maximized" }
+  else { $notes += @(Test-RectNear (Get-WindowRect $third.Process) $placed "a window left restored") }
+  $notes += @(Stop-PlacementRun $third "the last run")
+  foreach ($name in "first", "maximized", "restored") {
+    $runLog = Join-Path $Out "placement-$name.log"
+    if ((Test-Path $runLog) -and (Select-String -Path $runLog -Pattern "^(js-error|fatal|error) " -Quiet)) {
+      Select-String -Path $runLog -Pattern "^(js-error|fatal|error) " | ForEach-Object { Write-Host $_.Line }
+      $notes += "placement: the $name run logged errors"
+    }
+  }
+  return $notes
+}
+
+if (-not $NoInput) { Test-WindowPlacementKept | ForEach-Object { $failures += $_ } }
 
 function Get-PageEvents {
   if (-not (Test-Path -LiteralPath $httpPagesLog)) { return @() }
@@ -845,9 +977,68 @@ $env:ARDIA_TEST = "pipHover=first,pipHover=last,httpPages=$httpPagesPort"
 $leftover = Join-Path $env:ARDIA_DATA_DIR "Chromium\Ardia self-check-stuck (removing)"
 $held = $null
 $check = $null
+Add-Type @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class LocalStateRace {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool ReplaceFileW(string replaced, string replacement, string backup, uint flags, IntPtr exclude, IntPtr reserved);
+  static Thread runner;
+  static volatile bool done;
+  public static int Replaces;
+  static bool Logged(string path, string text) {
+    try {
+      using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+      using (var reader = new StreamReader(stream)) return reader.ReadToEnd().Contains(text);
+    } catch { return false; }
+  }
+  static byte[] ReadShared(string path) {
+    try {
+      using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+        var bytes = new byte[stream.Length];
+        int read = 0;
+        while (read < bytes.Length) { int got = stream.Read(bytes, read, bytes.Length - read); if (got <= 0) break; read += got; }
+        return read == bytes.Length ? bytes : null;
+      }
+    } catch { return null; }
+  }
+  public static void Start(string localState, string requests) {
+    done = false;
+    Replaces = 0;
+    runner = new Thread(() => {
+      DateTime giveUp = DateTime.UtcNow.AddMinutes(10);
+      while (!done && DateTime.UtcNow < giveUp && !Logged(requests, "/event/local-state-start")) Thread.Sleep(25);
+      DateTime stopAt = DateTime.UtcNow.AddSeconds(60);
+      DateTime nextLook = DateTime.UtcNow;
+      string temp = localState + "~race.TMP";
+      while (!done && DateTime.UtcNow < stopAt) {
+        if (DateTime.UtcNow >= nextLook) {
+          if (Logged(requests, "/event/local-state-stop")) break;
+          nextLook = DateTime.UtcNow.AddMilliseconds(100);
+        }
+        byte[] bytes = ReadShared(localState);
+        if (bytes == null) continue;
+        try {
+          File.WriteAllBytes(temp, bytes);
+          if (ReplaceFileW(localState, temp, null, 2, IntPtr.Zero, IntPtr.Zero)) Replaces++;
+        } catch { }
+      }
+    });
+    runner.IsBackground = true;
+    runner.Start();
+  }
+  public static int Stop() {
+    done = true;
+    if (runner != null) runner.Join(5000);
+    return Replaces;
+  }
+}
+"@
 try {
   New-Item -ItemType Directory -Force -Path $leftover | Out-Null
   $held = [System.IO.File]::Open((Join-Path $leftover "held.txt"), [System.IO.FileMode]::Create, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+  [LocalStateRace]::Start((Join-Path $env:ARDIA_DATA_DIR "Chromium\Local State"), $httpPagesLog)
   $check = Start-Process -FilePath $App -ArgumentList "--self-check", "--log-file=`"$checkLog`"" -PassThru
   $env:ARDIA_TEST = ""
   if (-not $check.WaitForExit($SelfCheckSeconds * 1000)) { $failures += "the self-check did not finish within $SelfCheckSeconds s" }
@@ -862,6 +1053,7 @@ try {
     }
   }
 } finally {
+  Write-Host "Local State was saved $([LocalStateRace]::Stop()) times the way Chromium saves it while the self-check removed a profile whose earlier removal is held"
   try {
     if ($check -and -not $check.HasExited) {
       Save-Screenshot (Join-Path $Out "self-check-stuck.png")

@@ -61,6 +61,7 @@ chromium-tab-sharing-capturer.patch
 chromium-desktop-capture-window-audio.patch
 chromium-video-super-resolution.patch
 chromium-keep-old-frame-on-swap.patch
+chromium-windowless-page-screen-rects.patch
 chromium-freeze-spares-live-connections.patch
 chromium-memory-saver-pinned-tabs.patch
 chromium-temporary-tab-restore-hook.patch
@@ -97,3 +98,4 @@ chromium-win-strict-login-list.patch
 chromium-win-keep-every-login.patch
 chromium-win-discard-asks-the-host.patch
 chromium-win-devtools-other-clients.patch
+chromium-win-autoplay-policy.patch

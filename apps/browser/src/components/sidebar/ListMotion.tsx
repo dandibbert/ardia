@@ -5,7 +5,7 @@ import { layout, useTheme } from "../ui/theme";
 import type { BrowserState } from "../../state/browser/store";
 import { workspaceSnapshot } from "../../state/browser/current";
 import type { Capture, ListSnapshot } from "../../state/sidebar/listCapture";
-import { useAnimatedStyle, type ClipSource, type EntryMotion } from "./EntryMotion";
+import { setSliding, useAnimatedStyle, type ClipSource, type EntryMotion } from "./EntryMotion";
 import { groupEntries } from "../../state/sidebar/entries";
 import { entryHeight } from "../../state/sidebar/geometry";
 import { ghostEntry, snapshotEntry, type EntrySnapshot } from "./GhostEntry";
@@ -13,7 +13,8 @@ import { curve } from "../ui/motion";
 import { SIDEBAR_MOTION } from "./tokens";
 import { entryId, entryKey, parseEntry } from "../../state/sidebar/entryKey";
 import { splitTabIdsOf } from "../../state/splits/splits";
-import { ghostOver, neverStarted, slideOver, STARTS_WITHIN_MS, withPending } from "./mergePlans";
+import { noteSidebarMotion } from "../../state/telemetry/usage";
+import { settleSlides, type Slide } from "./slideSettle";
 
 export const SLIDE_MS = SIDEBAR_MOTION.listSlide;
 export const FADE_MS = SIDEBAR_MOTION.listFade;
@@ -23,8 +24,7 @@ const TAIL = "~tail";
 const FRAME_SLACK_MS = 50;
 const devScale = () => (__DEV__ ? ((globalThis as { sidebarMotionScale?: number }).sidebarMotionScale ?? 1) : 1);
 
-type Slide = { value: Animated.Value; from: number; at: number; until: number; landed: boolean; run: number };
-type Ghost = { key: string; anchor: string | null; y: number; snapshot: EntrySnapshot; opacity: Animated.Value; born: number; until: number };
+type Ghost = { key: string; anchor: string | null; y: number; snapshot: EntrySnapshot; opacity: Animated.Value; until: number };
 type Snapshot = ListSnapshot;
 type Move = { key: string; from: number };
 type Plan = { moves: Move[]; ghosts: Ghost[]; clipped: string[]; below: number };
@@ -119,7 +119,7 @@ function buildPlan({ before, after, old, next, removed, added, slides, ghosts, t
     const shot = snapshot(e);
     if (!shot) return [];
     const y = old.at.get(e)! + shiftAt(slides.get(e), t);
-    return [{ key: `ghost:${++ghostIds}`, anchor: anchorAfter(e), y, snapshot: shot, opacity: new Animated.Value(1), born: t, until: 0 }];
+    return [{ key: `ghost:${++ghostIds}`, anchor: anchorAfter(e), y, snapshot: shot, opacity: new Animated.Value(1), until: 0 }];
   });
   if (!moves.length) return born.length ? { moves, ghosts: born, clipped: [], below: 0 } : null;
   const fresh = new Set(added);
@@ -128,6 +128,16 @@ function buildPlan({ before, after, old, next, removed, added, slides, ghosts, t
     return following === undefined ? (tail ? [TAIL] : []) : fresh.has(following) ? [] : [following];
   });
   return { moves, ghosts: born, clipped, below: 0 };
+}
+
+function mergePlans(first: Plan, then: Plan): Plan {
+  const later = new Set(then.moves.map((m) => m.key));
+  return {
+    moves: [...first.moves.filter((m) => !later.has(m.key)), ...then.moves],
+    ghosts: [...first.ghosts, ...then.ghosts],
+    clipped: [...new Set([...first.clipped, ...then.clipped])],
+    below: first.below + then.below,
+  };
 }
 
 type GroupChange = "same" | "grown" | "extended" | "other";
@@ -201,32 +211,19 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
   const [, rerender] = useState(0);
   if (enabled) devRegister("sidebarMotion", devKey, { slides, ghosts, clipped });
 
-  const settleSlides = (now: number) => {
-    for (const slide of slides.values()) {
-      if (!slideOver(slide, now)) continue;
-      slide.until = 0;
-      slide.value.setValue(0);
-      slide.landed = true;
-    }
-  };
-  const endClipping = (token: object | null) => {
-    if (!token || clipping.current !== token) return;
-    clipping.current = null;
-    clipped.clear();
-    announce();
-  };
   const now = Date.now();
-  settleSlides(now);
-  if (ghosts.current.some((g) => ghostOver(g, now))) ghosts.current = ghosts.current.filter((g) => !ghostOver(g, now));
+  if (settleSlides(slides.values(), now)) noteSidebarMotion("overrun");
+  if (ghosts.current.some((g) => g.until && now >= g.until)) ghosts.current = ghosts.current.filter((g) => !g.until || now < g.until);
 
   const prepare = (plan: Plan, at: number) => {
-    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, landed: false, run: 0 });
+    for (const m of plan.moves) if (!slides.has(m.key)) slides.set(m.key, { value: new Animated.Value(m.from), from: m.from, at, until: 0, run: null, landed: false });
     ghosts.current = [...ghosts.current, ...plan.ghosts];
-    const next = withPending(queued.current, plan);
+    const pending = queued.current;
+    const next = pending ? mergePlans(pending, plan) : plan;
+    if (pending) noteSidebarMotion("merge");
     clipped.clear();
     for (const key of next.clipped) clipped.add(key);
     queued.current = next;
-    setTimeout(() => neverStarted(slides.values(), ghosts.current, Date.now()) && rerender((n) => n + 1), STARTS_WITHIN_MS + FRAME_SLACK_MS);
   };
 
   const before = from.pending;
@@ -269,25 +266,30 @@ function useMotion({ devKey, entries, from, planner, height, enabled, nativeTail
       slide.at = at;
       slide.until = at + slideMs + FRAME_SLACK_MS;
       slide.landed = false;
-      const run = ++slide.run;
-      const timing = Animated.timing(slide.value, { toValue: 0, duration: slideMs, easing: SLIDE_EASING, useNativeDriver: nativeTail || m.key !== TAIL });
+      const run = Animated.timing(slide.value, { toValue: 0, duration: slideMs, easing: SLIDE_EASING, useNativeDriver: nativeTail || m.key !== TAIL });
+      slide.run = run;
+      setSliding(slide.value, true);
       const clips = i === 0 && token;
-      timing.start(({ finished }) => {
-        if (slide.run !== run) return;
-        if (!finished) slide.value.setValue(0);
+      run.start(({ finished }) => {
+        if (slide.run === run) {
+          slide.run = null;
+          setSliding(slide.value, false);
+        }
+        if (!finished) return;
         slide.landed = true;
-        if (clips) queueMicrotask(() => endClipping(token));
+        if (!clips) return;
+        queueMicrotask(() => {
+          if (clipping.current !== token) return;
+          clipping.current = null;
+          clipped.clear();
+          announce();
+        });
       });
     }
-    const fadeMs = FADE_MS * devScale();
-    const fading = ghosts.current.filter((g) => !g.until);
-    for (const g of fading) {
-      g.until = at + fadeMs + FRAME_SLACK_MS;
-      Animated.timing(g.opacity, { toValue: 0, duration: fadeMs, easing: FADE_EASING, useNativeDriver: true }).start();
+    for (const g of plan.ghosts) {
+      g.until = at + FADE_MS * devScale() + FRAME_SLACK_MS;
+      Animated.timing(g.opacity, { toValue: 0, duration: FADE_MS * devScale(), easing: FADE_EASING, useNativeDriver: true }).start();
     }
-    const settleMs = Math.max(plan.moves.length ? slideMs : 0, fading.length ? fadeMs : 0) + 2 * FRAME_SLACK_MS;
-    const settle = () => { settleSlides(Date.now()); endClipping(token); rerender((n) => n + 1); };
-    if (plan.moves.length || fading.length) setTimeout(settle, settleMs);
     announce();
     if (plan.below) below?.(plan.below);
   });

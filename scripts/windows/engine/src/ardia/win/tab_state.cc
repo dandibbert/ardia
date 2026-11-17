@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "ardia/win/api.h"
+#include "ardia/win/autoplay.h"
 #include "ardia/win/host.h"
 #include "ardia/win/page_links.h"
 #include "ardia/win/tab_events.h"
@@ -50,6 +51,7 @@ TabState* TabState::Bind(content::WebContents* contents, std::string key) {
     }
   }
   PageLinks::Watch(contents);
+  WatchAutoplay(contents);
   state->WatchKeys();
   return state;
 }

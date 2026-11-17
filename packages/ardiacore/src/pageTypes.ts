@@ -165,7 +165,13 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
 export type ScrollState = "down" | "up" | "top";
 export type ProtectedMediaRequest = { keySystem: string; main: boolean };
-export type FairPlayReport = { event: "played" | "failed"; step?: "license" | "playback" | "player" };
+export type FairPlayReport = {
+  event: "played" | "failed" | "mirrored" | "mirrorResync" | "pip" | "pipReopen" | "choppy" | "nowPlayingCommand";
+  step?: "license" | "playback" | "player";
+  video?: boolean;
+  site?: "youtube";
+  fitted?: boolean;
+};
 
 export type WebViewProps = ViewProps & {
   engine?: PageEngine;
@@ -221,6 +227,7 @@ export type WebViewProps = ViewProps & {
   onScroll?: (state: ScrollState) => void;
   onProtectedMedia?: (request: ProtectedMediaRequest) => void;
   onFairPlay?: (report: FairPlayReport) => void;
+  onAutoplayBlocked?: (count: number) => void;
   onReady?: () => void;
   onDiscarded?: (url: string, reason: DiscardReason | null) => void;
   onPasswordPrompt?: (prompt: PasswordPrompt) => void;
