@@ -120,6 +120,8 @@ export const menuLayout = {
   zoomButton: { width: 40, height: 34 },
   zoomReset: 48,
   sheetTopGap: Platform.OS === "ios" ? 0 : 24,
+  sheetMaxShare: Platform.OS === "ios" ? 0.9 : 1,
+  sheetGrabber: Platform.OS === "ios" ? { width: 36, height: 5, top: 6 } : null,
 } as const;
 
 export const pageMenuLayout = { actionGlyph: 24, barSpacing: 8, groupSpacing: 16, zoomHeight: 32, zoomButtonWidth: 40, zoomReset: 48, rowInset: 16, accessibilityBottom: 24, accessibilityTextScale: 1.6, pressedScale: 0.94 } as const;
@@ -249,7 +251,7 @@ export const floatingBarLayout = {
 
 export const floatingPanelLayout = {
   inset: 8,
-  radius: 26,
+  radius: 32.75,
   aboveKeyboard: 8,
   departLift: 120,
   departMs: 200,
@@ -289,7 +291,6 @@ export const startLayout = {
   badgeSymbolShare: 0.85,
   badgeSymbolWidth: 1.25,
   badgeEmojiShare: 0.8,
-  badgeInitialShare: 0.55,
   titleSpacing: 8,
   chevron: 12,
   pageDot: 7,
@@ -307,6 +308,7 @@ export const deckChromeLayout = {
   pillPadding: 14,
   pillSpacing: 8,
   pillGlyph: 16,
+  pillEyes: 13,
   barCircle: 48,
   barSideInset: 12,
   barGap: 8,
@@ -315,6 +317,9 @@ export const deckChromeLayout = {
   searchTrailFilled: 8,
   searchSpacing: 8,
   searchGlyph: 16.8,
+  incognitoGlyph: 30,
+  incognitoEyes: 18,
+  incognitoOn: 38,
   clearGlyph: 22.8,
   clearHit: 32,
   archiveCenter: 78.5,
@@ -336,8 +341,8 @@ export const deckChromeInk = { pill: "#FFFFFF" } as const;
 
 export const startInk = {
   veil: "rgba(255,255,255,0.34)",
-  light: { pageDot: "rgba(0,0,0,0.32)", badge: "#FFFFFF", badgeInk: "#000000" },
-  dark: { pageDot: "rgba(255,255,255,0.32)", badge: "#1C1C1E", badgeInk: "#FFFFFF" },
+  light: { pageDot: "rgba(0,0,0,0.32)", badgeInk: "#000000" },
+  dark: { pageDot: "rgba(255,255,255,0.32)", badgeInk: "#FFFFFF" },
 } as const;
 
 export const chromeLayout = { edge: 0.5, shadowRadius: 10, shadowY: 2 } as const;
@@ -440,7 +445,6 @@ export const spacesLayout = {
 
 export const tabsInk = {
   incognitoCard: "#1C1D22",
-  poof: "#F7F5FF",
   incognitoCardRaised: "#2A2B31",
   incognitoBackdrop: ["#1A1A1E", "#0E0E10"] as const,
   incognitoSheet: "#151517",
@@ -460,6 +464,9 @@ export const tabsLayout = {
   cardRadius: 13,
   displayCornerRadius: 55,
   faviconSize: 16,
+  eyesChip: 13,
+  eyesIcon: 9,
+  eyesFace: 30,
   headerSpacing: 6,
   headerGap: 8,
   headerHeight: 20,
@@ -517,6 +524,7 @@ export const font = {
 
 export const browseLayout = {
   barCollapseTravel: 30,
+  barSwipeUp: 22,
   searchFieldHeight: 47.5,
   searchFieldInset: 15,
   fieldLeading: 18,

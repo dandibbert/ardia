@@ -8,6 +8,7 @@ export { EmptyState } from "./EmptyState";
 export { Checkbox, PopUp, SearchField, TextField, type Option } from "./Field";
 export { GlassFill, GlassLookContext, liquidGlass, useGlass, useGlassLook, type GlassLook } from "./Glass";
 export { HoverCard, type HoverCardProps } from "./HoverCard";
+export { HoverFill, HoverSwap } from "./HoverFill";
 export { HoverSlot } from "./HoverSlot";
 export { IconTile } from "./IconTile";
 export { KeyCap } from "./KeyCap";
@@ -18,12 +19,14 @@ export { PinchArea, pinchSettle } from "./PinchArea";
 export { pinchFollow, pinchScale, type PinchMotion } from "./pinch";
 export { ProgressTrack } from "./ProgressTrack";
 export { GradientFill, type GradientStop } from "./GradientFill";
-export { curve, duration, period, spring, springs, springSpec, usePresence, type Fade, type SpringSpec } from "./motion";
+export { curve, duration, legsEasing, nativeLoop, period, spring, springs, springSpec, usePresence, type Fade, type LoopLeg, type SpringSpec } from "./motion";
 export { reduceMotion, reduceMotionKnown } from "./reduceMotion";
 export { PANEL, PanelCloseButton, PanelHeader, Popover, POPOVER_MARGIN, POPOVER_MOTION, PopoverSurface, PopoverValue, usePopoverMotion, usePopoverMotionStyle, usePopoverPresence } from "./Popover";
 export { Radio } from "./Radio";
 export { Segmented, type SegmentOption } from "./Segmented";
+export { SlidingThumb, useSlidingThumb } from "./SlidingThumb";
 export { Group, Row } from "./Row";
+export { NativeFormContext, useNativeForm } from "./nativeForm";
 export { Swatch } from "./Swatch";
 export { Toggle } from "./Switch";
 export { Text, TextScopeContext, type TextProps, type TextScope } from "./Text";
@@ -50,6 +53,7 @@ export {
   OutsidePressArea,
   PopoverBubble,
   PowerUp,
+  PluginPageView,
   ReportVideo,
   Surface,
   SwipeArea,

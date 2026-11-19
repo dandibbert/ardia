@@ -39,6 +39,7 @@ export type OpenRequest = {
   selecting?: boolean;
   profileSyncId?: string | null;
   received?: { key: string; fromDevice: string | null } | null;
+  pinnedKey?: string | null;
 };
 
 export const UNDO_LIMIT = 20;
@@ -68,6 +69,13 @@ export const tabMenuTitle = (tab: BrowserTab, host: string, byAddress = false): 
 export const spaceTabs = (data: Pick<TabsData, "open" | "spaces">): readonly BrowserTab[] => tabsInSpace(data.open, data.spaces);
 
 export const deckOrder = (data: TabsData): BrowserTab[] => recencyOrder([...spaceTabs(data), ...data.privates], data.selectedId);
+
+export function tabBefore(data: TabsData, id: string): BrowserTab | null {
+  const closing = findTab(data, id);
+  const others = deckOrder(data).filter((t) => t.id !== id);
+  const sameKind = others.filter((t) => t.isPrivate === (closing?.isPrivate ?? false));
+  return sameKind[sameKind.length - 1] ?? others[others.length - 1] ?? null;
+}
 
 const mostRecent = (tabs: readonly BrowserTab[]) => tabs.reduce<BrowserTab | null>((best, tab) => (best === null || tab.lastActive > best.lastActive ? tab : best), null);
 
@@ -178,12 +186,13 @@ export function openTab(data: TabsData, request: OpenRequest, now: number, id: s
     origin: request.origin,
     receivedKey: request.received?.key ?? null,
     receivedFromDevice: request.received?.fromDevice ?? null,
+    pinnedKey: request.pinnedKey ?? null,
     isPrivate: false,
   };
   const selecting = request.selecting ?? true;
   if (request.isPrivate || afterPrivate) {
     const placed = placeAfter(data.privates, request.after);
-    const tab = { ...base, isPrivate: true, profileSyncId: null, position: placed.position };
+    const tab = { ...base, isPrivate: true, profileSyncId: null, pinnedKey: null, position: placed.position };
     const next = { ...data, privates: insertSorted(placed.list, tab) };
     const change = selecting ? selectTab(next, tab.id, now) : unchanged(next);
     return { change: { ...change, put: change.put.filter((t) => !t.isPrivate) }, tab };

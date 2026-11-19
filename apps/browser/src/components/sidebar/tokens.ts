@@ -1,3 +1,4 @@
+import { Easing } from "react-native";
 import { useTheme } from "../ui/theme";
 import { duration } from "../ui/motion";
 import { font, ink, radius, shadow, sidebarFont, sidebarIconSize, sidebarPoints, space, withAlpha, type ShadowLevel } from "../ui/tokens";
@@ -19,9 +20,10 @@ const DARK = {
   newTabLabel: "#FFFFFF8C",
   newTabIcon: "#FFFFFF40",
   folderDropFill: "rgba(255,255,255,0.08)",
-  folderMosaic: "rgba(255,255,255,0.1)",
   liveDotRing: "rgba(0,0,0,0.3)",
   engineMarkPlate: "#2C2C2E",
+  selectedRowPillFill: "#141617",
+  selectedRowPillStroke: "rgba(255,255,255,0.1)",
   incognitoBadge: "rgba(255,255,255,0.08)",
   tileGlow: "#FFFFFF",
   fieldButtonPlate: "rgba(255,255,255,0.08)",
@@ -49,9 +51,10 @@ const LIGHT: typeof DARK = {
   newTabLabel: "#00000080",
   newTabIcon: "#00000042",
   folderDropFill: "rgba(0,0,0,0.05)",
-  folderMosaic: "rgba(0,0,0,0.06)",
   liveDotRing: "rgba(0,0,0,0.1)",
   engineMarkPlate: "#FFFFFF",
+  selectedRowPillFill: "#FFFFFF",
+  selectedRowPillStroke: "rgba(0,0,0,0.1)",
   incognitoBadge: "rgba(0,0,0,0.06)",
   tileGlow: "#000000",
   fieldButtonPlate: "rgba(255,255,255,0.75)",
@@ -86,6 +89,8 @@ export const SIDEBAR_SHADOW = {
   searchTabs: shadow.dialog,
   tabSwitcher: { ...shadow.dialog, opacity: { dark: 0.45, light: 0.45 }, radius: 32, offset: [0, 14] },
 } satisfies Record<string, ShadowLevel>;
+
+export const TAB_SWITCHER_SCROLL_ID = "ardia-tab-switcher";
 
 export const TAB_SWITCHER = {
   card: 168,
@@ -124,9 +129,6 @@ export const SELECTED_ROW_SHADOW_OFFSET: [number, number] = [0, 0.5];
 export const TILE_GLOW = { opacity: { dark: 0.15, light: 0.12 }, radius: 1.5, offset: [0, 0.5] as [number, number] };
 
 export const SIDEBAR_MOTION = { liveFold: duration.long, fold: duration.base, listSlide: 140, listFade: 100, hoverCardFade: 100 } as const;
-
-export const HOVER_CARD_IN_SPRING = { response: 0.25, damping: 0.75 } as const;
-export const HOVER_CARD_OUT_SPRING = { response: 0.2, damping: 0.6 } as const;
 
 export const SLEEPING_TITLE_OPACITY = 0.6;
 
@@ -201,3 +203,20 @@ export function groupSurface(color: GroupColor | null | undefined, tokens: Sideb
 
 export { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "../../lib/windowLayout";
 export const SIDEBAR_RESIZE_HANDLE = { top: 46, width: 8 } as const;
+export const SELECTED_ROW_PILL = {
+  height: 28,
+  gap: 6,
+  icon: 16,
+  padLeft: 10,
+  padRight: 9,
+  iconGap: 6,
+  arrow: 10,
+  enter: { scale: 0.3, rise: 18 },
+  exit: { scale: 0.8, drop: 4 },
+} as const;
+export const SELECTED_ROW_PILL_MOTION = {
+  enter: { duration: 140, easing: Easing.out(Easing.quad) },
+  exit: { duration: 60, easing: Easing.linear },
+} as const;
+export const SELECTED_ROW_REVEAL_SETTLE_MS = 400;
+export const REVEAL_GLIDE = { duration: 300, easing: Easing.inOut(Easing.quad), margin: space.s } as const;

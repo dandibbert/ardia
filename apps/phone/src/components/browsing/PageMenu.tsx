@@ -1,3 +1,4 @@
+import { countUsage } from "../../state/telemetry/telemetry";
 import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig } from "react-native-reanimated";
@@ -30,8 +31,8 @@ import {
   zoomIn,
   zoomOut,
 } from "../../state/page/actions";
-import type { MenuModel } from "../../state/page/pageMenu";
-import { useMenuModel, useMenuPage, useMenuTitle, useTitleFeedback } from "../../state/page/hooks";
+import { translationAsks, type MenuModel } from "../../state/page/pageMenu";
+import { useMenuModel, useMenuPage, useMenuTitle, useTitleFeedback, useTranslationConfirmed } from "../../state/page/hooks";
 import { SiteSettingsGroups } from "../settings/SitePages";
 import { useIsPinned, useSendTargets } from "../../state/sync/hooks";
 import { useTab } from "../../state/tabs/hooks";
@@ -42,6 +43,9 @@ import { syncOffered } from "../../state/sync/offer";
 export function PageMenu({ tabId, open, onHidden }: { tabId: string; open: boolean; onHidden: () => void }) {
   const model = useMenuModel(tabId);
   const [confirmsTranslation, setConfirmsTranslation] = useState(false);
+  const isPrivate = useTab(tabId)?.isPrivate ?? false;
+  const confirmed = useTranslationConfirmed();
+  const translate = () => (translationAsks(isPrivate, confirmed) ? setConfirmsTranslation(true) : translatePage());
   const page = useMenuPage();
   const redesigned = useDesign() === "redesigned";
   const ink = usePageMenuInk();
@@ -50,7 +54,7 @@ export function PageMenu({ tabId, open, onHidden }: { tabId: string; open: boole
     pageMenuHidden();
   };
   return (
-    <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={redesigned ? ink.sheet : undefined}>
+    <Sheet open={open} onDismiss={closePageMenu} onHidden={hidden} fill={redesigned ? ink.sheet : undefined} onTapAway={isPrivate ? undefined : () => countUsage("page_menu_tapped_away")}>
       {confirmsTranslation ? (
         <ConfirmDialog
           confirmation={{ title: "Translate with Google?", message: "Google will see this page’s address.", action: "Translate", destructive: false, run: translatePage }}
@@ -58,11 +62,11 @@ export function PageMenu({ tabId, open, onHidden }: { tabId: string; open: boole
         />
       ) : null}
       {redesigned ? (
-        <PageMenuWords tabId={tabId} model={model} onTranslate={() => setConfirmsTranslation(true)} />
+        <PageMenuWords tabId={tabId} model={model} onTranslate={translate} />
       ) : (
         <LayoutAnimationConfig skipEntering>
           <Animated.View key={page} entering={FadeIn.duration(tabsMotion.surfaceFade)} exiting={FadeOut.duration(tabsMotion.surfaceFade)}>
-            {page === "siteSettings" ? <MenuSiteSettings /> : <MenuMain tabId={tabId} model={model} onTranslate={() => setConfirmsTranslation(true)} />}
+            {page === "siteSettings" ? <MenuSiteSettings /> : <MenuMain tabId={tabId} model={model} onTranslate={translate} />}
           </Animated.View>
         </LayoutAnimationConfig>
       )}
@@ -92,7 +96,7 @@ function MenuMain({ tabId, model, onTranslate }: { tabId: string; model: MenuMod
       <Group>
         <Row icon="textMagnifyingglass" title="Find on Page" enabled={model.find} divider={model.pageRows} onPress={showFind} />
         {model.pageRows ? <SendRow tabId={tabId} enabled={model.isWebPage} /> : null}
-        {model.pageRows ? <Row icon="translate" title="Translate" enabled={model.translate} divider={canPrintPages()} onPress={onTranslate} /> : null}
+        {model.pageRows ? <Row icon="translate" title={model.translateTitle} enabled={model.translate} divider={canPrintPages()} onPress={onTranslate} /> : null}
         {model.pageRows && canPrintPages() ? <Row icon="printer" title="Print" enabled={model.print} divider={false} onPress={printCurrentPage} /> : null}
       </Group>
       {model.pageRows ? (

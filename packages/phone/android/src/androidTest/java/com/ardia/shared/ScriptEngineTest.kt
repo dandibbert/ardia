@@ -16,8 +16,9 @@ class ScriptEngineTest {
     fun syncAndAsyncCallsRoundTripJson() {
         ScriptEngine(
             assets,
-            listOf(SharedScript.SYNC, SharedScript.CORE),
+            listOf(SharedScript.SYNC),
             listOf(
+                "ArdiaSync.__echo = (value) => ({ got: value });",
                 "ArdiaSync.__probe = async (n) => { const listing = await __host.read(JSON.stringify(n)); return { n, listing: JSON.parse(listing) }; };",
                 "ArdiaSync.__fail = async () => { await null; throw new Error('nope'); };",
                 "ArdiaSync.__never = () => new Promise(() => {});",
@@ -27,12 +28,12 @@ class ScriptEngineTest {
         ).use { engine ->
             engine.register("read") { args -> "{\"echo\":${args[0]}}" }
             engine.register("boom") { throw IllegalStateException("host broke") }
-            assertEquals("\"https://apple.com\"", engine.call(SharedScript.CORE, "resolveInput", listOf("\"apple.com\"")))
+            assertEquals("{\"got\":{\"a\":[1,\"b\"]}}", engine.call(SharedScript.SYNC, "__echo", listOf("{\"a\":[1,\"b\"]}")))
             assertEquals("{\"n\":{\"a\":1},\"listing\":{\"echo\":{\"a\":1}}}", engine.callAsync(SharedScript.SYNC, "__probe", listOf("{\"a\":1}")))
             assertThrows("nope") { engine.callAsync(SharedScript.SYNC, "__fail") }
             assertThrows("never resolves") { engine.callAsync(SharedScript.SYNC, "__never") }
-            assertThrows("doesn't exist") { engine.call(SharedScript.CORE, "missing") }
-            assertThrows("bad argument") { engine.call(SharedScript.CORE, "resolveInput", listOf("{nope")) }
+            assertThrows("doesn't exist") { engine.call(SharedScript.SYNC, "missing") }
+            assertThrows("bad argument") { engine.call(SharedScript.SYNC, "__echo", listOf("{nope")) }
             assertTrue(engine.call(SharedScript.SYNC, "__hostThrows").contains("host broke"))
             assertEquals("\"xé😀\"", engine.call(SharedScript.SYNC, "__text", listOf("\"x\"")))
         }

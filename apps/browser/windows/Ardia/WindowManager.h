@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <commctrl.h>
@@ -23,6 +24,7 @@
 #include "AppIcon.h"
 #include "Events.h"
 #include "Host.h"
+#include "InstanceLoad.h"
 #include "ModalThread.h"
 #include "LaunchLog.h"
 #include "LaunchConfig.h"
@@ -223,7 +225,7 @@ struct WindowManager {
       ApplyTheme(entry, m_dark);
       bool maximize = Place(entry, request);
       Watch(entry);
-      Mount(entry);
+      if (InstanceLoad::Shared().loaded) Mount(entry);
       ConnectNonClientInput(entry);
       ApplyInputRegions(entry);
 
@@ -235,6 +237,11 @@ struct WindowManager {
       auto appWindow = entry.appWindow;
       m_order.push_back(entry.id);
       auto placed = m_windows.emplace(entry.id, std::move(entry)).first;
+      if (!InstanceLoad::Shared().loaded) {
+        InstanceLoad::Shared().WhenLoaded(std::wstring(L"window ").append(Paths::Wide(placed->first)), [this, id = placed->first, window = placed->second.window]() {
+          if (ManagedWindow *found = Find(id); found && found->window == window) Mount(*found);
+        });
+      }
       if (fades) BeginEntrance(placed->second);
       bool quietPopup = !activate && placed->second.kind == "popup";
       if (quietPopup) ShowAboveOpener(hwnd, openedFrom);
@@ -504,7 +511,22 @@ struct WindowManager {
     });
   }
 
+  HWND TakePageLeftBySecondaryPress(HWND app, ULONGLONG withinMs) noexcept {
+    FollowSecondaryPress();
+    PageLeft left = m_pageLeftBySecondaryPress;
+    ClearPageLeftBySecondaryPress();
+    if (!app || left.app != app || !left.releasedAt || GetTickCount64() - left.releasedAt > withinMs) return nullptr;
+    return left.page;
+  }
+
  private:
+  struct PageLeft {
+    HWND app = nullptr;
+    HWND page = nullptr;
+    ULONGLONG pressedAt = 0;
+    ULONGLONG releasedAt = 0;
+  };
+
   static constexpr UINT_PTR kSubclassId = 0xA2D1A;
   static constexpr double kPopupMinWidth = 200;
   static constexpr double kPopupMinPageHeight = 150;
@@ -512,6 +534,9 @@ struct WindowManager {
   static constexpr double kPopupWidth = 500;
   static constexpr double kPopupPageHeight = 600;
   static constexpr int kEdgePollMs = 40;
+  static constexpr int kSecondaryPressPollMs = 15;
+  static constexpr ULONGLONG kSecondaryHoldLimitMs = 10000;
+  static constexpr ULONGLONG kPageLeftKeptAfterReleaseMs = 2000;
   static constexpr double kEdgeReach = 24.0;
   static constexpr double kCascadeStep = 28.0;
   static constexpr std::chrono::milliseconds kPlacementSaveDelay{400};
@@ -878,6 +903,7 @@ struct WindowManager {
   void Closed(std::string const &id) noexcept {
     auto found = m_windows.find(id);
     if (found == m_windows.end()) return;
+    if (m_pageLeftBySecondaryPress.app == found->second.hwnd) ClearPageLeftBySecondaryPress();
     RemoveWindowSubclass(found->second.hwnd, &WindowManager::WindowProc, kSubclassId);
     auto closedWindow = found->second.window;
     auto exits = std::move(found->second.exits);
@@ -931,15 +957,81 @@ struct WindowManager {
           Host::Current()->reactHost.InstanceSettings().Properties(), reinterpret_cast<uint64_t>(hwnd));
     } catch (...) {
     }
+    bool fromPage = OwnPageWindow(hwnd, previous);
+    ClearPageLeftBySecondaryPress();
+    if (fromPage && SecondaryButtonDown()) {
+      m_pageLeftBySecondaryPress = PageLeft{hwnd, previous, GetTickCount64(), 0};
+      if (!StartSecondaryPressWatch()) ClearPageLeftBySecondaryPress();
+    }
     winrt::Microsoft::ReactNative::JSValueObject event;
     event["type"] = "focus";
     event["id"] = entry->id;
-    if (OwnPageWindow(hwnd, previous)) event["fromPage"] = true;
+    if (fromPage) event["fromPage"] = true;
     EmitWindow(std::move(event));
+  }
+
+  bool StartSecondaryPressWatch() noexcept {
+    if (m_secondaryPressTimer) return true;
+    try {
+      auto timer = Host::Current()->queue.DispatcherQueue().CreateTimer();
+      timer.Interval(std::chrono::milliseconds(kSecondaryPressPollMs));
+      timer.IsRepeating(true);
+      m_secondaryPressTick = timer.Tick([this](auto const &, auto const &) noexcept { FollowSecondaryPress(); });
+      m_secondaryPressTimer = timer;
+      timer.Start();
+      return true;
+    } catch (...) {
+      m_secondaryPressTimer = nullptr;
+      return false;
+    }
+  }
+
+  void StopSecondaryPressWatch() noexcept {
+    if (!m_secondaryPressTimer) return;
+    auto timer = m_secondaryPressTimer;
+    m_secondaryPressTimer = nullptr;
+    try {
+      timer.Stop();
+      timer.Tick(m_secondaryPressTick);
+    } catch (...) {
+    }
+  }
+
+  void ClearPageLeftBySecondaryPress() noexcept {
+    StopSecondaryPressWatch();
+    m_pageLeftBySecondaryPress = {};
+  }
+
+  void FollowSecondaryPress() noexcept {
+    PageLeft &left = m_pageLeftBySecondaryPress;
+    if (!left.app) return StopSecondaryPressWatch();
+    ULONGLONG now = GetTickCount64();
+    bool secondary = SecondaryButtonDown();
+    if (ButtonOtherThanSecondaryDown() || (left.releasedAt && secondary)) return ClearPageLeftBySecondaryPress();
+    if (!left.releasedAt) {
+      if (!secondary) {
+        left.releasedAt = now;
+      } else if (now - left.pressedAt > kSecondaryHoldLimitMs) {
+        ClearPageLeftBySecondaryPress();
+      }
+      return;
+    }
+    if (now - left.releasedAt > kPageLeftKeptAfterReleaseMs) ClearPageLeftBySecondaryPress();
+  }
+
+  static bool ButtonOtherThanSecondaryDown() noexcept {
+    for (int key : {VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2}) {
+      if (GetAsyncKeyState(key) & 0x8000) return true;
+    }
+    return LeftButtonDown();
   }
 
   static bool LeftButtonDown() noexcept {
     return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000) != 0;
+  }
+
+  static bool SecondaryButtonDown() noexcept {
+    return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON) & 0x8000) != 0;
   }
 
   static std::optional<int64_t> RootTagOf(ManagedWindow const &entry) noexcept {
@@ -1190,7 +1282,13 @@ struct WindowManager {
     if (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE && DialogParts::BringModalForward(hwnd)) return 0;
     if (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) manager->Activated(hwnd, reinterpret_cast<HWND>(lParam));
     if (message == WM_SIZE && wParam != SIZE_MINIMIZED) manager->ArrangeToClient(hwnd, LOWORD(lParam), HIWORD(lParam));
-    if (message == WM_ACTIVATEAPP && wParam == FALSE) manager->EmitApp("resignActive");
+    if (message == WM_ACTIVATEAPP && wParam == FALSE) {
+      if (DialogParts::ActivatesMenuThread(static_cast<DWORD>(lParam))) DialogParts::ModalRegistry::Shared().withheldResign = true;
+      else {
+        DialogParts::ModalRegistry::Shared().withheldResign = false;
+        manager->EmitApp("resignActive");
+      }
+    }
     return DefSubclassProc(hwnd, message, wParam, lParam);
   }
 
@@ -1688,6 +1786,9 @@ struct WindowManager {
   winrt::event_token m_edgeTick{};
   std::vector<std::string> m_order;
   std::string m_activeId;
+  PageLeft m_pageLeftBySecondaryPress;
+  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer m_secondaryPressTimer{nullptr};
+  winrt::event_token m_secondaryPressTick{};
   bool m_quitting{false};
   std::optional<SavedPlacement> m_lastPlacement;
   bool m_placementLoaded{false};

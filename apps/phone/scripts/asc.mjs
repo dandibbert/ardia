@@ -11,6 +11,7 @@ const HELP = `App Store Connect, for the iPhone app's TestFlight builds.
   node apps/phone/scripts/asc.mjs certificates --save <file>
   node apps/phone/scripts/asc.mjs certificates --new-since <file>
   node apps/phone/scripts/asc.mjs certificates --create <request.csr> --out <file.cer>
+  node apps/phone/scripts/asc.mjs register-device --udid <udid> [--name <name>]
   node apps/phone/scripts/asc.mjs public-link --build <number> [--what-to-test <file>] [--privacy-policy <url>]
   node apps/phone/scripts/asc.mjs add-tester --email <address> [--group <name>]
   node apps/phone/scripts/asc.mjs expire --build <number>
@@ -18,7 +19,8 @@ const HELP = `App Store Connect, for the iPhone app's TestFlight builds.
 Reads the API key from ASC_KEY (path to AuthKey_<id>.p8), ASC_KEY_ID and ASC_ISSUER.
 status lists what the key can see: the app record, the App IDs and their capabilities,
 registered devices, certificates, profiles, builds and tester groups. A section the key
-has no access to prints "forbidden". next-build prints the build number after the highest
+has no access to prints "forbidden". A read Apple answers with a server error is asked
+again, up to three more times; a write never is. next-build prints the build number after the highest
 one uploaded. wait blocks until a build finishes processing, and stops with Apple's reasons
 when the delivery was refused. certificates --save records
 the team's certificate ids; --new-since fails when a development certificate was made since
@@ -28,7 +30,9 @@ external tester group (made with a public link if it doesn't exist), sets its Wh
 text, submits it for Beta App Review and prints the link. add-tester invites an email address
 to an external tester group (Public Testers unless --group names another); TestFlight emails
 the invite once the group has an approved build. expire ends testing of an older build for
-good: nobody can install it again and Apple can't undo it. It refuses the newest build.`;
+good: nobody can install it again and Apple can't undo it. It refuses the newest build.
+register-device adds an iPhone to the team's devices, so a development-signed build
+(apps/phone/scripts/release-ios --development) installs on it; an iPhone already there is left as it is.`;
 
 const BUNDLE_PREFIX = "com.ardia.browser.ios";
 const DEVELOPMENT_CERTIFICATES = new Set(["DEVELOPMENT", "IOS_DEVELOPMENT"]);
@@ -73,6 +77,23 @@ async function fail(response) {
   throw new ApiError(response.status, detail);
 }
 
+const RETRY_AFTER_MS = [1000, 3000, 9000];
+
+async function read(url) {
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt === RETRY_AFTER_MS.length;
+    let response;
+    try {
+      response = await fetch(url, { headers: { Authorization: `Bearer ${bearer}` } });
+    } catch (error) {
+      if (last) throw error;
+    }
+    if (response && (last || (response.status < 500 && response.status !== 429))) return response;
+    console.error(`asc: App Store Connect ${response ? `answered ${response.status}` : "didn't answer"}, asking again`);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_AFTER_MS[attempt]));
+  }
+}
+
 async function send(method, path, body) {
   bearer ??= token();
   const response = await fetch(new URL(path, API), {
@@ -95,7 +116,7 @@ async function get(path, params = {}) {
   const included = [];
   let next = url.toString();
   while (next) {
-    const response = await fetch(next, { headers: { Authorization: `Bearer ${bearer}` } });
+    const response = await read(next);
     if (!response.ok) await fail(response);
     const page = await response.json();
     rows.push(...(Array.isArray(page.data) ? page.data : [page.data]));
@@ -252,7 +273,7 @@ async function status() {
   });
 
   await section("Tester groups", async () => {
-    const { rows } = await get(`/v1/apps/${app.id}/betaGroups`, { "fields[betaGroups]": "name,isInternalGroup,hasAccessToAllBuilds,publicLinkEnabled,publicLink" });
+    const { rows } = await get(`/v1/apps/${app.id}/betaGroups`, { "fields[betaGroups]": "name,isInternalGroup,hasAccessToAllBuilds,publicLinkEnabled,publicLink,iosBuildsAvailableForAppleSiliconMac" });
     if (rows.length === 0) console.log("none");
     for (const row of rows) {
       const group = row.attributes;
@@ -262,7 +283,7 @@ async function status() {
       const summary = Object.entries(states).map(([state, count]) => `${count} ${state}`).join(", ") || "none";
       console.log(
         `${group.name} ${group.isInternalGroup ? "internal" : "external"} allBuilds=${group.hasAccessToAllBuilds} ` +
-          `publicLink=${group.publicLinkEnabled ? group.publicLink : group.publicLinkEnabled} testers: ${summary}`,
+          `publicLink=${group.publicLinkEnabled ? group.publicLink : group.publicLinkEnabled} mac=${group.iosBuildsAvailableForAppleSiliconMac} testers: ${summary}`,
       );
     }
   });
@@ -358,7 +379,7 @@ async function uploadedBuildNumbers(appId) {
     const { rows } = await get(`/v1/apps/${appId}/buildUploads`, { limit: "200" });
     return rows.map((row) => row.attributes?.cfBundleVersion);
   } catch (error) {
-    if (error instanceof ApiError) return [];
+    if (error instanceof ApiError && error.status < 500 && error.status !== 429) return [];
     throw error;
   }
 }
@@ -466,7 +487,7 @@ async function publicLink(args) {
     console.log("What to Test set");
   }
 
-  const fields = { "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled,publicLink" };
+  const fields = { "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled,publicLink,iosBuildsAvailableForAppleSiliconMac" };
   const { rows: groups } = await get(`/v1/apps/${app.id}/betaGroups`, fields);
   let group = groups.find((row) => !row.attributes.isInternalGroup && row.attributes.name === PUBLIC_GROUP);
   if (!group) {
@@ -478,6 +499,10 @@ async function publicLink(args) {
       },
     });
     console.log(`created the ${PUBLIC_GROUP} group`);
+  }
+  if (group.attributes.iosBuildsAvailableForAppleSiliconMac !== false) {
+    await patch(`/v1/betaGroups/${group.id}`, { data: { type: "betaGroups", id: group.id, attributes: { iosBuildsAvailableForAppleSiliconMac: false } } });
+    console.log(`${PUBLIC_GROUP} builds are no longer offered on Apple silicon Macs`);
   }
 
   await unlessAlready(
@@ -551,8 +576,24 @@ async function expire(args) {
   printBuilds(await listBuilds(app.id));
 }
 
+async function registerDevice(args) {
+  const udid = option(args, "--udid");
+  if (!udid) {
+    console.error("asc: register-device needs --udid");
+    process.exit(64);
+  }
+  const { rows } = await get("/v1/devices", { "filter[udid]": udid, "fields[devices]": "status,udid", limit: "200" });
+  const known = rows.find((row) => row.attributes.udid === udid);
+  if (known) {
+    console.log(`the iPhone is already registered (${known.attributes.status})`);
+    return;
+  }
+  await post("/v1/devices", { data: { type: "devices", attributes: { name: option(args, "--name") ?? "iPhone", udid, platform: "IOS" } } });
+  console.log("registered the iPhone");
+}
+
 const [command, ...args] = process.argv.slice(2);
-const commands = { status, builds, wait, certificates, "next-build": nextBuild, "public-link": publicLink, "add-tester": addTester, expire };
+const commands = { status, builds, wait, certificates, "next-build": nextBuild, "public-link": publicLink, "add-tester": addTester, "register-device": registerDevice, expire };
 if (!command || command === "-h" || command === "--help" || !commands[command]) {
   console.log(HELP);
   process.exit(command && commands[command] === undefined && command !== "-h" && command !== "--help" ? 64 : 0);

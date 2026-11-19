@@ -11,6 +11,8 @@ import type { Request } from "./pagePrompts";
 
 export const useMenuOpen = () => usePageUi((s) => s.menuOpen);
 
+export const useTranslationConfirmed = () => usePageUi((s) => s.menuTranslation?.confirmed ?? false);
+
 export const useMenuPage = () => usePageUi((s) => s.menuPage);
 export const useTitleFeedback = () => usePageUi((s) => s.titleFeedback);
 export const useFindOpen = () => usePageUi((s) => s.findOpen);
@@ -29,6 +31,7 @@ export function useMenuModel(id: string): MenuModel {
   const tabUrl = useTabs((s) => s.open.find((t) => t.id === id)?.url ?? s.privates.find((t) => t.id === id)?.url ?? "");
   const site = usePageUi((s) => s.menuSite);
   const levels = usePageUi((s) => s.zoomLevels);
+  const translationLanguageName = usePageUi((s) => s.menuTranslation?.languageName ?? null);
   const browserStatus = useDefaultBrowser((s) => s.status);
   const isDefault = browserStatus?.isDefault ?? false;
   return menuModel({
@@ -46,6 +49,7 @@ export function useMenuModel(id: string): MenuModel {
     blockedRequests: state?.blockedRequests ?? 0,
     isDefaultBrowser: isDefault,
     canOfferDefaultBrowser: offersDefaultBrowser(browserStatus),
+    translationLanguageName,
   });
 }
 

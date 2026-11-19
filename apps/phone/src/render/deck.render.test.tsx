@@ -1,6 +1,9 @@
+import { Platform } from "react-native";
 import { TabDeck } from "../components/tabs/TabDeck";
 import { useBrowse } from "../state/browse/store";
-import { renderSurface, textOf, unmount, withTabs } from "../../test/render/harness";
+import { useTabs } from "../state/tabs/store";
+import { launchTabs } from "../state/tabs/tabsState";
+import { renderSurface, someTabs, textOf, unmount, withTabs } from "../../test/render/harness";
 
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
@@ -25,6 +28,16 @@ describe("the deck", () => {
     const titles = root.root.findAll((node) => typeof node.type === "string" && node.props.testID === "deckHeaderTitle");
     expect(titles).toHaveLength(3);
     for (const title of titles) expect(title.props.maxFontSizeMultiplier).toBe(1.35);
+    unmount(root);
+  });
+
+  test("an Incognito card's header reads Incognito on iPhone's Incognito side, as main's SwiftUI deck does, and keeps the page's title on Android, as main's Compose deck does", () => {
+    useTabs.setState({ ...launchTabs([...someTabs(2), ...someTabs(1, true)], 0), incognito: Platform.OS === "ios", listing: 0 });
+    useBrowse.setState({ surface: "deck", sheet: null, deckEntrance: null, frozenOrder: null });
+    const root = renderSurface(<TabDeck />);
+    const titles = root.root.findAll((node) => typeof node.type === "string" && node.props.testID === "deckHeaderTitle").map((node) => node.props.children);
+    expect(titles).toContain(Platform.OS === "ios" ? "Incognito" : "Site 0");
+    expect(titles.filter((title) => title === "Site 0")).toHaveLength(Platform.OS === "ios" ? 0 : 2);
     unmount(root);
   });
 });

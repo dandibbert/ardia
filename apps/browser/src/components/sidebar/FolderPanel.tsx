@@ -6,7 +6,7 @@ import { plural, tabTitle } from "../../state/browser/model";
 import { useTileFolderLabel, useTileFolderMembers } from "../../state/pins/hooks";
 import { SLIDE } from "../tabstrip/tokens";
 import { useGated } from "../ui/motion";
-import { ContextMenuArea, HoverCard as HoverPanel, OutsidePressArea, space, useHover } from "../ui";
+import { ContextMenuArea, HoverCard as HoverPanel, HoverFill, OutsidePressArea, radius, space, useHover } from "../ui";
 import { SectionLabel } from "./SectionLabel";
 import { SidebarListRow, SidebarRowLabel } from "./SidebarRow";
 import { TAB_ROW } from "./tokens";
@@ -113,7 +113,8 @@ function MemberRow({ tabId, windowId }: { tabId: string; windowId: string }) {
             }}
           >
             {({ pressed }) => (
-              <SidebarListRow height={layout.rowHeight} padRight={TAB_ROW.contentLeft} fill={pressed ? theme.tabPressed : active ? theme.pinnedSelectedFill : hovered ? theme.tabHover : undefined}>
+              <SidebarListRow height={layout.rowHeight} padRight={TAB_ROW.contentLeft} fill={active && !pressed ? theme.pinnedSelectedFill : undefined}>
+                <HoverFill shown={pressed || (hovered && !active)} instant={active} color={pressed ? theme.tabPressed : theme.tabHover} radius={radius.tile} />
                 <TabIcon tabId={tabId} url={tab.url} favicon={tab.favicon} icon={tab.customIcon} />
                 <SidebarRowLabel text={tabTitle(tab)} color={active ? theme.textPrimary : theme.textTab} struck={struck} />
               </SidebarListRow>

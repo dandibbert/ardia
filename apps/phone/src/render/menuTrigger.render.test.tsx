@@ -99,6 +99,18 @@ test("with the system's menus the trigger is a native context menu, by tap or lo
   }
 });
 
+test("on Android a long press opens the system's menu at the press through the gesture system, where a pan that takes the touch fails it", () => {
+  if (Platform.OS !== "android") return;
+  const { State } = require("react-native-gesture-handler") as typeof import("react-native-gesture-handler");
+  const { fireGestureHandler, getByGestureTestId } = require("react-native-gesture-handler/jest-utils") as typeof import("react-native-gesture-handler/jest-utils");
+  mockNative.contextMenu = true;
+  const root = trigger("longPress");
+  act(() => fireGestureHandler(getByGestureTestId("menuLongPress"), [{ state: State.BEGAN, x: 40, y: 12 }, { state: State.ACTIVE, x: 40, y: 12 }, { state: State.END, x: 40, y: 12 }]));
+  act(() => jest.runOnlyPendingTimers());
+  expect(mockNative.shownAt).toEqual([[40, 12]]);
+  unmount(root);
+});
+
 test("without them the trigger opens the drawn menu on tap or long press, and a submenu opens as its own page", () => {
   const tapped = trigger("tap");
   expect(contextMenus(tapped)).toHaveLength(0);

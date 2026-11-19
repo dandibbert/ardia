@@ -89,6 +89,7 @@ const tab = (id: string, url: string, lastActive: number): BrowserTab => ({
   origin: "typed",
   receivedKey: null,
   receivedFromDevice: null,
+  pinnedKey: null,
   isPrivate: false,
 });
 

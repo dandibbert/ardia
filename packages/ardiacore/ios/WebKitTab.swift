@@ -13,7 +13,9 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   var initialURL: String?
   var adoptId: String?
   var transferKey: String?
-  var visible = true { didSet { updateHidden(); updateSight() } }
+  var visible = true { didSet { updateHidden(); updateSight(); noteShownChanged() } }
+  var selected = true { didSet { noteShownChanged() } }
+  var wasShown = true
   var autoPictureInPicture = false
   var pageBackgroundColor: NSColor? { didSet { if let color = pageBackgroundColor { webView?.underPageBackgroundColor = color } } }
   let browserId = WebKitHub.shared.nextBrowserId()
@@ -254,6 +256,12 @@ final class WebKitTab: NSView, WKNavigationDelegate, WKUIDelegate {
   func focusPage() {
     guard let view = webView else { return }
     window?.makeFirstResponder(view)
+  }
+
+  func focusPageIfUnfocused() -> Bool {
+    guard let window, window.firstResponder == nil || window.firstResponder === window else { return false }
+    focusPage()
+    return true
   }
 
   func setMuted(_ on: Bool) {

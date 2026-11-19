@@ -9,7 +9,7 @@ public final class PhoneBrowsingSource: LocalBrowsingSource {
     case unreadable(Int32)
   }
 
-  nonisolated public static let schemaVersion: Int32 = 1
+  nonisolated public static let schemaVersion: Int32 = 2
   nonisolated public static let syncedTabLimit = 30
   nonisolated public static let historyRetention: TimeInterval = 90 * 86_400
   nonisolated static let busyTimeoutMilliseconds: Int32 = 5_000

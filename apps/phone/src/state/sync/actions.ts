@@ -13,7 +13,8 @@ import type { ColorChoice } from "../settings/preferences";
 import { setPreference } from "../settings/store";
 import { historyCuts, withoutOwnTabs } from "../tabs/received";
 import { labTrace } from "../../platform/lab";
-import { currentTabs, openNewTab, receiveSentTabs, setIncognito, useTabs } from "../tabs/store";
+import { currentTabs, openNewTab, receiveSentTabs, setIncognito, updateTabById, useTabs } from "../tabs/store";
+import { tabForRemote } from "../tabs/pinnedTabs";
 import { isSyncableUrl, type BrowserTab } from "../tabs/tabModels";
 import { findTab } from "../tabs/tabsState";
 import { moveTargets } from "../tabs/spaces";
@@ -21,7 +22,7 @@ import { showToast, TOAST_LONG_DURATION_MS } from "../toasts/store";
 import { isPinnedOnMac, pinsOnTheirWay } from "./spaces";
 import { noteLocalChange, notePinSent, selectedProfile, selectedProfileId, startSyncSources, syncData, useSync } from "./store";
 import { copy } from "../../lib/platformCopy";
-import { usageCountingWindow } from "../telemetry/telemetry";
+import { countUsage, usageCountingWindow } from "../telemetry/telemetry";
 import {
   CONNECTED_TOAST,
   couldNotSendToast,
@@ -218,17 +219,19 @@ export async function pinToMac(tab: BrowserTab, onSetup: () => void, showInTitle
   announce(pinned ? "pinned" : "failed");
 }
 
-export function openRemote(url: string, title: string, profileSyncId: string | null) {
+export function openRemote(url: string, title: string, profileSyncId: string | null, pinnedKey: string | null = null) {
   if (!/^https?:\/\//i.test(url)) return;
   useBrowse.setState({ sheet: null });
   setIncognito(false);
   if (profileSyncId && syncData().status.isEnabled && profileSyncId !== selectedProfileId()) selectProfile(profileSyncId);
   const profile = profileSyncId ?? selectedProfileId();
-  const existing = currentTabs().open.find((tab) => tab.url === url && tab.profileSyncId === profile);
+  const existing = tabForRemote(currentTabs().open, url, profile, pinnedKey);
   if (existing) {
-    openTab(existing.id);
+    if (existing.how === "sameAddress" && pinnedKey) updateTabById(existing.tab.id, { pinnedKey });
+    if (existing.how === "movedOn") countUsage("pinned_tabs_refound");
+    openTab(existing.tab.id);
     return;
   }
-  const tab = openNewTab({ url, title, origin: "sync", profileSyncId: profile, isPrivate: false });
+  const tab = openNewTab({ url, title, origin: "sync", profileSyncId: profile, isPrivate: false, pinnedKey });
   openTab(tab.id);
 }

@@ -43,6 +43,7 @@ const testGlobals = globalThis as {
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
   acTestTasks?: () => EngineTask[];
+  acTestEngineInfo?: () => CallResult<"engine.info">;
   acTestUserScripts?: { engine: ExtensionEngine };
   acTestSuggest?: (args: { url: string; id: number; profile: string }) => CallResult<"search.suggest"> | undefined;
 };
@@ -282,15 +283,18 @@ export const stagingRemovals = { ok: true };
 export const deletedProfileData: string[] = [];
 export const profileDataLeft = new Map<string, string[]>();
 export const revealedTabs: string[] = [];
+export const nativeTabSwitches: boolean[] = [];
+export const nativeTabPresses: { byStart: Map<number, number>; dropped: number[]; splits: string[][] } = { byStart: new Map(), dropped: [], splits: [] };
 export const discardedOffers: string[] = [];
 export const installedCrx: { path: string; profile: string }[] = [];
 export const crxInstallFailure: { next: string | null } = { next: null };
 export const linkRoute: { next: LinkRoute } = { next: {} };
 export const resolvedPermissions: { id: string; result: string; remember: boolean }[] = [];
 export const extensionAnswers = {
-  actionStates: async (_tabId: string, _ids: string[]): Promise<Record<string, ActionState>> => ({}),
-  sidePanelUrl: async (_tabId: string, _extensionId: string): Promise<string | null> => null,
+  actionStates: async (_tabId: string, _ids: string[], _profile?: string): Promise<Record<string, ActionState>> => ({}),
+  sidePanelUrl: async (_tabId: string, _extensionId: string, _profile?: string): Promise<string | null> => null,
   change: async (_verb: string, _id: string): Promise<void> => {},
+  resolveInstallPrompt: async (_requestId: string, _accepted: boolean, _profile?: string): Promise<null> => null,
 };
 
 const tabStripHost = () => testGlobals.acTestTabStrip!;
@@ -333,6 +337,11 @@ const fakeModules = {
     {
       components: () => [],
       tasks: () => testGlobals.acTestTasks?.() ?? [],
+      info: () => {
+        const info = testGlobals.acTestEngineInfo?.();
+        if (!info) throw Object.assign(new Error("engine.info has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return info;
+      },
       beginTracing: () => false,
       endTracing: () => null,
       isTracing: () => false,
@@ -362,9 +371,13 @@ const fakeModules = {
       prepareTransfer: () => {},
       releaseTransfer: () => {},
       claimLaunchTab: () => {},
-      revealTab: (key: string) => void revealedTabs.push(key),
-      dropTabReveals: (key: string) => void revealedTabs.push(`drop over ${key}`),
-      revealOffered: (adoptId: string, key: string) => void revealedTabs.push(`${adoptId} over ${key}`),
+      revealTab: (key: string, press: number) => void revealedTabs.push(press ? `${key} by press ${press}` : key),
+      dropTabReveals: (key: string, press: number) => void revealedTabs.push(press ? `drop over ${key} by press ${press}` : `drop over ${key}`),
+      claimTabPress: (_key: string, startedAt: number) => nativeTabPresses.byStart.get(startedAt) ?? 0,
+      dropTabPress: (press: number) => void nativeTabPresses.dropped.push(press),
+      setTabsInSplits: (keys: string[]) => void nativeTabPresses.splits.push(keys),
+      setNativeTabSwitch: (enabled: boolean) => void nativeTabSwitches.push(enabled),
+      revealOffered: (adoptId: string, key: string, press: number) => void revealedTabs.push(press ? `${adoptId} over ${key} by press ${press}` : `${adoptId} over ${key}`),
       discardOffered: async (adoptId: string) => (discardedOffers.push(adoptId), true),
     },
   )),
@@ -405,6 +418,8 @@ const fakeModules = {
     clearData: () => ({ cookies: 0, storage: true }),
     zoomLevels: () => ({}),
     setZoom: () => null,
+    preloadPages: () => false,
+    setPreloadPages: () => null,
   }),
   ArdiaPasswords: domain(
     "passwords",
@@ -479,9 +494,9 @@ const fakeModules = {
       installedCrx.push({ path: path, profile });
       return { id: "crx" };
     },
-    resolveInstallPrompt: () => null,
-    actionStates: ({ tabId, ids }) => extensionAnswers.actionStates(tabId, ids),
-    sidePanelUrl: ({ tabId, extensionId }) => extensionAnswers.sidePanelUrl(tabId, extensionId),
+    resolveInstallPrompt: ({ requestId, accepted, profile }) => extensionAnswers.resolveInstallPrompt(requestId, accepted, profile),
+    actionStates: ({ tabId, ids, profile }) => extensionAnswers.actionStates(tabId, ids, profile),
+    sidePanelUrl: ({ tabId, extensionId, profile }) => extensionAnswers.sidePanelUrl(tabId, extensionId, profile),
     watchActions: () => null,
     syncState: () => ({ ready: false, extensions: [], pending: [], settling: [], queued: [], intents: [] }),
     syncApply: () => ({ state: "pending" }),
@@ -539,7 +554,6 @@ const fakeModules = {
     setPeekOtherSiteTabs: () => null,
     setSelectionPopover: () => null,
     setBlockAutoplayEverywhere: () => null,
-    setFairPlayInChromium: () => null,
     setCommandScrollZoom: () => null,
     setLittleArdiaOpensNewTabLinks: () => null,
     setPopupsOpenAsTabs: () => null,
@@ -548,6 +562,7 @@ const fakeModules = {
     setVideoUpscalingTestConditions: () => null,
     videoUpscalingState: () => null,
     takeContentDrift: () => ({ layouts: 0, fits: 0, maxPoints: 0 }),
+    takeFirstPaintHolds: () => ({ held: 0, painted: 0, loaded: 0, pressed: 0, timedOut: 0, heldMs: 0 }),
   }),
   ArdiaWebKit: domain("webKit", {
     endPrivateSession: ({ session }) => (endedWebKitSessions.push(session), null),

@@ -2,7 +2,21 @@ import AppKit
 import ArdiaCore
 
 extension WindowManager {
+  private static var clickMonitor: Any?
   var background: Bool { LaunchConfig.shared.background }
+  var holdsTyping: Bool { typeAhead.isHolding }
+
+  func watchKeyWindow() {
+    for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+      NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged), name: name, object: nil)
+    }
+    NotificationCenter.default.addObserver(self, selector: #selector(appActivated), name: NSApplication.didBecomeActiveNotification, object: nil)
+    Self.clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+      self?.keyWindowForClick(event)
+      return event
+    }
+  }
+
   func keyWindowForClick(_ event: NSEvent) {
     guard NSApp.modalWindow == nil, !background, !event.modifierFlags.contains(.command),
       let window = event.window, id(of: window) != nil, Self.shownOnScreen(window), window.canBecomeKey

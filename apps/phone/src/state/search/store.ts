@@ -12,10 +12,13 @@ import { clipboardOffer } from "../../platform/system";
 import { settled } from "../pages/store";
 import { buildSources, recentSearches, sourcesKey } from "./sources";
 import { spaceTabs } from "../tabs/tabsState";
+import { browseForMeOffered } from "../browseForMe/offer";
 
 export type SearchOrigin = "home" | "start" | "page";
 
 export type SearchEnding = "submitted" | "cancelled";
+
+export type TrayArrival = "rises" | "atRest";
 
 type SearchState = {
   open: boolean;
@@ -29,6 +32,8 @@ type SearchState = {
   session: number;
   fieldVersion: number;
   incognitoOnCancel: boolean | null;
+  arrival: TrayArrival;
+  editsPage: boolean;
 };
 
 export const useSearch = create<SearchState>()(() => ({
@@ -43,6 +48,8 @@ export const useSearch = create<SearchState>()(() => ({
   session: 0,
   fieldVersion: 0,
   incognitoOnCancel: null,
+  arrival: "rises",
+  editsPage: false,
 }));
 
 let remote: { text: string; values: string[] } = { text: "", values: [] };
@@ -64,12 +71,12 @@ export function feedSources() {
 
 function suggestionsFor(text: string, remoteValues: readonly string[]): { rows: TrayRow[]; completion: string } {
   if (!text.trim()) return { rows: rowsFor(text, remoteValues), completion: "" };
-  return suggest(text, remoteValues, context, macTabIndex(selectedProfile(), syncData().view.devices));
+  return suggest(text, remoteValues, context, macTabIndex(selectedProfile(), syncData().view.devices), browseForMeOffered());
 }
 
 function rowsFor(text: string, remoteValues: readonly string[]): TrayRow[] {
   const profile = selectedProfile();
-  if (text.trim()) return suggest(text, remoteValues, context, macTabIndex(profile, syncData().view.devices)).rows;
+  if (text.trim()) return suggest(text, remoteValues, context, macTabIndex(profile, syncData().view.devices), browseForMeOffered()).rows;
   const idle = useTabs.getState().incognito ? [] : idleRows(recentSearches(history().summary()), idleMacTabs(profile, syncData().view.devices));
   return withPasteRow(idle, text, paste);
 }
@@ -93,7 +100,7 @@ export function applySearchEngine() {
   else setSearchEngine(currentPreferences().searchEngineId);
 }
 
-export function presentSearch(origin: SearchOrigin, text = "", incognitoOnCancel: boolean | null = null, page: SuggestContext | null = null) {
+export function presentSearch(origin: SearchOrigin, text = "", incognitoOnCancel: boolean | null = null, page: SuggestContext | null = null, arrival: TrayArrival = "rises") {
   beginInteraction("tray open", INTERACTION_WINDOW_MS.trayOpen);
   inFlight?.abort();
   remote = { text: "", values: [] };
@@ -111,6 +118,8 @@ export function presentSearch(origin: SearchOrigin, text = "", incognitoOnCancel
     session: state.session + 1,
     fieldVersion: 0,
     incognitoOnCancel,
+    arrival,
+    editsPage: page?.currentUrl != null,
   }));
   offerPaste(useSearch.getState().session);
 }

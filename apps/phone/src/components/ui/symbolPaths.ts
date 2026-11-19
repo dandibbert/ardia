@@ -10,6 +10,19 @@ const polyline = (...points: number[]) =>
 
 const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}A${r} ${r} 0 1 1 ${cx + r} ${cy}A${r} ${r} 0 1 1 ${cx - r} ${cy}Z`;
 
+function incognitoEyes(): string {
+  const side = 24;
+  const eye = { width: side * 0.2, height: side * 0.42, gap: side * 0.12, pupil: (side * 0.13) / 2, pupilLift: side * 0.04 };
+  const left = (side - eye.width * 2 - eye.gap) / 2;
+  const top = (side - eye.height) / 2;
+  return [0, 1]
+    .map((index) => {
+      const x = left + index * (eye.width + eye.gap);
+      return roundRect(x, top, eye.width, eye.height, eye.width / 2) + circle(x + eye.width / 2, top + eye.height - eye.pupilLift - eye.pupil, eye.pupil);
+    })
+    .join("");
+}
+
 function roundRect(x: number, y: number, width: number, height: number, r: number): string {
   const c = Math.min(r, width / 2, height / 2);
   return (
@@ -44,9 +57,6 @@ function gear(cx: number, cy: number, outer: number, inner: number, teeth: numbe
   }
   return `${polyline(...points)}Z`;
 }
-
-const ellipse = (cx: number, cy: number, rx: number, ry: number) =>
-  `M${cx - rx} ${cy}A${rx} ${ry} 0 1 1 ${cx + rx} ${cy}A${rx} ${ry} 0 1 1 ${cx - rx} ${cy}Z`;
 
 function cross(cx: number, cy: number, arm: number, half: number): string {
   const points: number[] = [];
@@ -91,7 +101,7 @@ export const SYMBOLS = {
     },
   ],
   ellipsis: [{ d: circle(5.5, 12, 1.75) + circle(12, 12, 1.75) + circle(18.5, 12, 1.75), fill: true }],
-  eyes: [{ d: ellipse(7.6, 12, 3.6, 7) + ellipse(16.4, 12, 3.6, 7) + ellipse(6.9, 13, 1.65, 2.8) + ellipse(15.7, 13, 1.65, 2.8), fill: true, evenOdd: true }],
+  eyes: [{ d: incognitoEyes(), fill: true, evenOdd: true }],
   chevronDown: [{ d: polyline(5.5, 8.5, 12, 15, 18.5, 8.5), stroke: BOLD }],
   minus: [{ d: line(5, 12, 19, 12), stroke: BOLD }],
   link: [{ d: roundRect(3.6, 9.2, 9.8, 5.6, 2.8) + roundRect(10.6, 9.2, 9.8, 5.6, 2.8), stroke: STROKE, rotate: -45 }],
@@ -184,6 +194,11 @@ export const SYMBOLS = {
   magnifyingglass: [
     { d: circle(10.5, 10.5, 6.5), stroke: STROKE },
     { d: line(15.3, 15.3, 20, 20), stroke: 2.2 },
+  ],
+  sparkleMagnifyingglass: [
+    { d: circle(10.5, 10.5, 6.5), stroke: STROKE },
+    { d: line(15.3, 15.3, 20, 20), stroke: 2.2 },
+    { d: sparkle(10.5, 10.5, 3.6), fill: true },
   ],
   globe: [
     {

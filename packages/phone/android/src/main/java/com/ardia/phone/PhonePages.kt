@@ -72,6 +72,10 @@ object PhonePages {
 
     fun hasEngine(): Boolean = shared != null
 
+    private var translations: PhoneTranslation? = null
+
+    fun translation(context: Context): PhoneTranslation = translations ?: PhoneTranslation(context.applicationContext.getSharedPreferences(SITE_PREFERENCES, Context.MODE_PRIVATE)).also { translations = it }
+
     @Synchronized
     fun engine(context: Context): DevelopmentWebViewEngine = shared ?: run {
         if (UpgradeGate.pending(context)) throw CodedException("ERR_IMPORT_PENDING", "The import from the previous Ardia app has not finished", null)
@@ -81,6 +85,7 @@ object PhonePages {
     private fun create(context: Context): DevelopmentWebViewEngine {
         app = context
         sitePreferences = PhoneSitePreferences(context.getSharedPreferences(SITE_PREFERENCES, Context.MODE_PRIVATE))
+        translation(context)
         blocking = PhoneBlocking(context)
         snapshots = PageSnapshots(context, ImageMemory::forget)
         ImageMemory.watch(context)
@@ -379,6 +384,7 @@ object PhonePages {
         watchers[id] = scope.launch {
             launch {
                 page.state.collect {
+                    translations?.remember(it.url, page.isPrivate)
                     visuals.changed(id, PageVisuals.Change.State)
                     send(id, "page.state", "state" to PagePayloads.state(app, it, page.isPrivate))
                 }

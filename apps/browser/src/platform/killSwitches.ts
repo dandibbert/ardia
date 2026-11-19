@@ -68,6 +68,11 @@ export const SWITCHES = {
 } as const satisfies Record<string, SwitchDef>;
 
 export const EXPERIMENTS = {
+  freezeWatchOff: {
+    about: "Turns off the freeze watch: the run-loop observers on the main and JavaScript threads that count stalls for perf_memory (packages/ardiacore ArdiaFreezeWatch.mm, state/telemetry/freezes.ts).",
+    owner: "perf",
+    removeBy: "2027-02-28",
+  },
   serverWindowDragAllOpen: {
     about: "With serverWindowDrag, every view in the titlebar band is also left open to window moves (a probe for the geometry work).",
     owner: "window",
@@ -77,6 +82,11 @@ export const EXPERIMENTS = {
     about: "With serverWindowDrag, every React Native mount rebuilds each window's title-bar drag region, as it used to, instead of only the window whose title bar the pointer is in (packages/shell ServerWindowDrag.swift).",
     owner: "window",
     removeBy: "2026-12-31",
+  },
+  officialPluginsAi: {
+    about: "Lists the AI plugin as coming soon among the official plugins (state/plugins/official.ts), for Settings and onboarding.",
+    owner: "plugins",
+    removeBy: "2027-03-31",
   },
   webkitSignIn: {
     about: "Moving a Chromium page to WebKit first copies the cookies that page's own address gets into the profile's WebKit store, at most 1.5 s (state/engines/engineSignIn.ts).",

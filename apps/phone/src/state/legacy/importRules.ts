@@ -128,6 +128,7 @@ export function importTab(tab: LegacyTabInput, archived: boolean, id: string): B
     origin: originOf(tab.origin),
     receivedKey: tab.receivedKey ?? null,
     receivedFromDevice: tab.receivedFromDevice ?? null,
+    pinnedKey: null,
     isPrivate: false,
   };
 }

@@ -155,7 +155,7 @@ test("on iPhone's design an http page on a port shows the red open lock and the 
   );
   expect(text(node(root, "floatingBarHost"))).toBe("localhost");
   expect(node(root, "floatingBarNotSecure")).toBeDefined();
-  expect(root.root.findAll((found) => found.props.accessibilityLabel === "Address, Not Secure")).not.toHaveLength(0);
+  expect(root.root.findAll((found) => found.props.accessibilityLabel === "Address" && found.props.accessibilityValue?.text === "Not Secure, localhost")).not.toHaveLength(0);
   act(() => storeNavigation(tab.id, navigation({ url: tab.url, isLoading: false, progress: 1, scrollDirection: "down" } as Partial<PageState>)));
   for (let frame = 0; frame < 90; frame++) act(() => jest.advanceTimersByTime(16));
   expect(text(node(root, "hostPillHost"))).toBe("localhost");
@@ -200,6 +200,31 @@ test("the lock sits in the site icon's own slot at the site icon's size, so the 
     for (let frame = 0; frame < 90; frame++) act(() => jest.advanceTimersByTime(16));
     if (insecure) expect(box(node(root, "hostPillNotSecure"))).toMatchObject({ width: hostPillLayout.siteIcon, height: hostPillLayout.siteIcon });
     else expect(faviconSizes(root)).toContain(hostPillLayout.siteIcon);
+    unmount(root);
+  }
+});
+
+test("the bar's icon slot for the four tabs: a normal secure page shows its favicon, a normal insecure one the red lock alone, an Incognito secure one its eyeglasses, and an Incognito insecure one the eyeglasses then the lock; a screen reader hears Incognito, Not Secure, then the host", () => {
+  const { spokenAddress } = require("../components/browsing/FloatingBar") as typeof import("../components/browsing/FloatingBar");
+  const glyphs = (root: Root) => root.root.findAll((found) => typeof found.type !== "string" && (found.props.name === "eyeglassesThin" || found.props.testID === "floatingBarNotSecure" || ("pageUrl" in found.props && typeof found.props.size === "number"))).map((found) => (found.props.name === "eyeglassesThin" ? "eyeglasses" : found.props.testID === "floatingBarNotSecure" ? "lock" : "favicon"));
+  const cases = [
+    { url: "https://secure.example/", isPrivate: false, shows: ["favicon"], spoken: "secure.example" },
+    { url: "http://plain.example/", isPrivate: false, shows: ["lock"], spoken: "Not Secure, plain.example" },
+    { url: "https://secure.example/", isPrivate: true, shows: ["eyeglasses"], spoken: "Incognito, secure.example" },
+    { url: "http://plain.example/", isPrivate: true, shows: ["eyeglasses", "lock"], spoken: "Incognito, Not Secure, plain.example" },
+  ];
+  for (const { url, isPrivate, shows, spoken } of cases) {
+    const tab = { ...withTab({ url, title: "Page" }), isPrivate };
+    const root = renderSurface(
+      <DesignProvider design="redesigned">
+        <BrowsingScreen tab={tab} />
+      </DesignProvider>,
+    );
+    const bar = root.root.findAll((found) => found.props.testID === "floatingBarCentreGlyphs")[0]!;
+    const inBar = glyphs({ root: bar } as unknown as Root);
+    expect([...new Set(inBar)]).toEqual(shows);
+    expect(spokenAddress(barAddress(tab))).toBe(spoken);
+    expect(root.root.findAll((found) => found.props.accessibilityLabel === "Address" && found.props.accessibilityValue?.text === spoken)).not.toHaveLength(0);
     unmount(root);
   }
 });

@@ -61,6 +61,7 @@ export function someTabs(count: number, isPrivate = false): BrowserTab[] {
     origin: "typed",
     receivedKey: null,
     receivedFromDevice: null,
+    pinnedKey: null,
     isPrivate,
   }));
 }

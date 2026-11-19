@@ -9,7 +9,7 @@ import { useIncognito, useSelectedTab } from "../../state/tabs/hooks";
 import { isSyncableUrl, type BrowserTab } from "../../state/tabs/tabModels";
 import { shownTone } from "../../lib/pageTone";
 import { capsule, chromeInk, ChromeSurface, isDarkColor, PressScale, rolesFor, Symbol, useTheme, type SymbolName } from "../ui";
-import { barAddress, type BarAddress } from "../browsing/FloatingBar";
+import { barAddress, spokenAddress, type BarAddress } from "../browsing/FloatingBar";
 import { NotSecureLock } from "../browsing/NotSecureLock";
 import { DUO } from "./duoLayout";
 import { SIDEBAR_GLYPH } from "./tokens";
@@ -81,8 +81,8 @@ function AddressCapsule({ tab, dark, sidebarShown, onToggleSidebar }: { tab: Bro
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={address?.insecure ? "Address, Not Secure" : "Address"}
-        accessibilityValue={{ text: address?.host ?? "" }}
+        accessibilityLabel="Address"
+        accessibilityValue={{ text: spokenAddress(address) }}
         accessibilityHint="Opens search with this page’s address."
         onPress={tab ? editPageQuery : newTab}
         style={styles.hostButton}
@@ -98,11 +98,10 @@ export function HostLabel({ address, dark }: { address: BarAddress | null; dark:
   const roles = rolesFor(dark);
   return (
     <View testID="duoHost" style={styles.host} pointerEvents="none">
+      {address?.isPrivate ? <Symbol name="eyeglasses" size={DUO.hostLock} color={roles.foregroundSecondary} /> : null}
       {address?.insecure ? (
         <NotSecureLock testID="duoHostNotSecure" size={DUO.hostLock} color={ink.notSecure} />
-      ) : address?.isPrivate ? (
-        <Symbol name="eyeglasses" size={DUO.hostLock} color={roles.foregroundSecondary} />
-      ) : address?.pageUrl ? (
+      ) : address?.isPrivate ? null : address?.pageUrl ? (
         <Symbol name="lockFill" size={DUO.hostLock} color={roles.foregroundSecondary} />
       ) : null}
       <Text testID="duoHostText" maxFontSizeMultiplier={DUO.hostMaxTextScale} numberOfLines={1} ellipsizeMode="middle" style={[styles.hostText, styles.hostName, { color: roles.foregroundPrimary }]}>

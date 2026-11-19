@@ -17,6 +17,7 @@ export type MenuInput = {
   blockedRequests: number;
   isDefaultBrowser?: boolean;
   canOfferDefaultBrowser?: boolean;
+  translationLanguageName?: string | null;
 };
 
 export type MenuModel = {
@@ -30,6 +31,7 @@ export type MenuModel = {
   print: boolean;
   pageRows: boolean;
   translate: boolean;
+  translateTitle: string;
   nightShadeOn: boolean;
   zoomPercent: string;
   zoomOut: boolean;
@@ -65,6 +67,7 @@ export function menuModel(input: MenuInput): MenuModel {
     print: web,
     pageRows: input.hasPage,
     translate: web,
+    translateTitle: input.translationLanguageName ? `Translate to ${input.translationLanguageName}` : "Translate",
     nightShadeOn: nightShadeIsOn(input.nightShade, input.systemDark),
     zoomPercent: zoomPercent(input.pageZoom),
     zoomOut: web && input.pageZoom > levels[0]! + 0.001,
@@ -80,6 +83,8 @@ export function menuTitle(title: string, url: string, host: string | null, searc
   if (searchQuery) return searchQuery;
   return title.trim() || host || url;
 }
+
+export const translationAsks = (isPrivate: boolean, confirmed: boolean): boolean => isPrivate || !confirmed;
 
 export function translationUrl(url: string, language: string): string {
   const target = language.slice(0, 2) || "en";

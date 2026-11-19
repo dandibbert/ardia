@@ -4,6 +4,8 @@ import type { PressTarget } from "./pagePrompts";
 
 export type MenuSite = { host: string | null; nightShade: NightShadeMode; blockersEnabled: boolean };
 
+export type MenuTranslation = { languageName: string | null; confirmed: boolean };
+
 export type Press = { tabId: string; target: PressTarget; x: number; y: number };
 
 export type MenuPage = "main" | "siteSettings";
@@ -12,6 +14,7 @@ type PageUi = {
   menuOpen: boolean;
   menuPage: MenuPage;
   menuSite: MenuSite | null;
+  menuTranslation: MenuTranslation | null;
   titleFeedback: string | null;
   findOpen: boolean;
   findQuery: string;
@@ -24,6 +27,7 @@ export const usePageUi = create<PageUi>()(() => ({
   menuOpen: false,
   menuPage: "main",
   menuSite: null,
+  menuTranslation: null,
   titleFeedback: null,
   findOpen: false,
   findQuery: "",

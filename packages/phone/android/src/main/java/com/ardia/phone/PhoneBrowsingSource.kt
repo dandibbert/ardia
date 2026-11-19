@@ -150,7 +150,7 @@ class PhoneBrowsingSource(
         const val SYNCED_TAB_LIMIT = 30
         const val HISTORY_RETENTION_MILLIS = 90L * 24 * 3_600_000
         private const val CHUNK = 500
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
         private const val READ_ATTEMPTS = 3
         private const val BUSY_TIMEOUT_MILLIS = 5_000
 

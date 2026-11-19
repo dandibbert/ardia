@@ -12,8 +12,8 @@ import { renderSurface, unmount, withTabs } from "../../test/render/harness";
 
 const lookModule = require("@ardia/phone-native/src/look") as typeof import("@ardia/phone-native/src/look");
 
-const CHROME = ["deckHeaderMore", "deckBarGrid", "deckSearchTabs", "deckBarPlus"];
-const GLYPHS = ["deckHeaderMoreGlyph", "deckBarGridGlyph", "deckSearchTabsContent", "deckBarPlusGlyph", "deckSwitcher"];
+const CHROME = ["deckHeaderMore", "deckSearchTabs", "deckBarPlus"];
+const GLYPHS = ["deckHeaderMoreGlyph", "deckSearchTabsContent", "deckBarPlusGlyph", "deckSwitcher"];
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -61,19 +61,19 @@ const frames = (count: number) => {
   for (let frame = 0; frame < count; frame++) act(() => jest.advanceTimersByTime(16));
 };
 
-test("where the system glass exists, no view above the deck's four glass surfaces fades, their glass waits hidden through the entrance and materialises over 200 ms once the chrome comes in, and their glyphs carry the chrome's fade", () => {
+test("where the system glass exists, no view above the deck's glass surfaces fades, their glass waits hidden through the entrance and materialises over 200 ms once the chrome comes in, and their glyphs carry the chrome's fade", () => {
   withGlass(true);
   const root = enterDeck();
-  expect(glasses(root)).toHaveLength(4);
+  expect(glasses(root)).toHaveLength(CHROME.length);
   for (const glass of glasses(root)) expect(fadingAncestors(glass)).toEqual([]);
-  expect(glassShown(root)).toEqual([false, false, false, false]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => false));
   for (const glass of glasses(root)) expect(glass.props.shownMs).toBe(200);
   for (const glyph of GLYPHS) expect(opacity(host(root, glyph))).toBe(0);
   expect(host(root, "deckRedesignedChrome").props.pointerEvents).toBe("none");
   expect(host(root, "deckRedesignedChrome").props.accessibilityElementsHidden).toBe(true);
   act(() => jest.advanceTimersByTime(3000));
   for (const glass of glasses(root)) expect(fadingAncestors(glass)).toEqual([]);
-  expect(glassShown(root)).toEqual([true, true, true, true]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => true));
   for (const glyph of GLYPHS) expect(opacity(host(root, glyph))).toBe(1);
   expect(host(root, "deckRedesignedChrome").props.pointerEvents).toBe("box-none");
   expect(host(root, "deckRedesignedChrome").props.accessibilityElementsHidden).toBe(false);
@@ -87,7 +87,7 @@ test("where the system glass exists, the glyphs fade in mid-entrance on the chro
   let shownAt = -1;
   for (let frame = 1; frame <= 60 && (midway < 0 || shownAt < 0); frame++) {
     frames(1);
-    const glyph = opacity(host(root, "deckBarGridGlyph"));
+    const glyph = opacity(host(root, "deckBarPlusGlyph"));
     if (midway < 0 && glyph > 0 && glyph < 1) midway = frame;
     if (shownAt < 0 && glassShown(root).every(Boolean)) shownAt = frame;
   }
@@ -97,21 +97,25 @@ test("where the system glass exists, the glyphs fade in mid-entrance on the chro
   unmount(root);
 });
 
-test("where the system glass exists, the glass hides as soon as a card is tapped open while on iPhone the glyphs fade over the growing card, and the glass stays hidden while the deck is away", () => {
+test("where the system glass exists, the header's glass hides as soon as a card is tapped open and the glass stays hidden while the deck is away; on iPhone the deck's bar stays whole, glass and glyphs, until the page's own bar takes over, while the header's glyphs fade as the card grows", () => {
   withGlass(true);
   const root = enterDeck();
   act(() => jest.advanceTimersByTime(3000));
-  expect(glassShown(root)).toEqual([true, true, true, true]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => true));
   act(() => sendDeckCommand({ kind: "openFocused" }));
-  expect(glassShown(root)).toEqual([false, false, false, false]);
   if (Platform.OS === "ios") {
+    expect(glassShown(root)).toEqual([false, true, true]);
     const chromeFade = root.root.findAll((node) => node.props.testID === "deckChromeFade" && typeof node.type !== "string" && node.props.to !== undefined)[0]!;
-    expect(chromeFade.props.to.opacity).toBe(0);
-    for (const glyph of GLYPHS) expect(chromeFade.findAll((node) => node.props.testID === glyph && typeof node.type === "string")).toHaveLength(1);
-  }
+    expect(chromeFade.props.to.opacity).toBe(1);
+    frames(6);
+    expect(opacity(host(root, "deckHeaderMoreGlyph"))).toBe(0);
+    expect(opacity(host(root, "deckSwitcher"))).toBe(0);
+    expect(opacity(host(root, "deckSearchTabsContent"))).toBe(1);
+    expect(opacity(host(root, "deckBarPlusGlyph"))).toBe(1);
+  } else expect(glassShown(root)).toEqual(CHROME.map(() => false));
   act(() => useBrowse.setState({ surface: "browsing", opening: null }));
   act(() => jest.advanceTimersByTime(3000));
-  expect(glassShown(root)).toEqual([false, false, false, false]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => false));
   unmount(root);
 });
 
@@ -123,9 +127,9 @@ test("where the system glass exists, the deck's chrome glass comes back on the n
   act(() => jest.advanceTimersByTime(3000));
   act(() => useBrowse.setState({ surface: "browsing", opening: null }));
   act(() => useBrowse.setState({ surface: "deck", deckEntrance: currentTabs().selectedId }));
-  expect(glassShown(root)).toEqual([false, false, false, false]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => false));
   act(() => jest.advanceTimersByTime(3000));
-  expect(glassShown(root)).toEqual([true, true, true, true]);
+  expect(glassShown(root)).toEqual(CHROME.map(() => true));
   for (const glass of glasses(root)) expect(fadingAncestors(glass)).toEqual([]);
   unmount(root);
 });

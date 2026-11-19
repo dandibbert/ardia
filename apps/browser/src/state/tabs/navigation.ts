@@ -8,12 +8,13 @@ import { activeTabId, inPinnedContainer } from "../browser/model";
 import { noteBackCloseToOpener } from "../telemetry/usage";
 import { useTabLive } from "../browser/hooks";
 import type { TabLive } from "../browser/types";
-import { internalPageOf, tabDestination } from "../pages/urls";
+import { isAppPage, tabDestination } from "../pages/urls";
 import { pageOf, patchPage, usePage } from "./pageState";
 import { historyOf } from "../history/history";
 import { adoptedPage, IDLE } from "./pageSession";
 import { isPeekTab } from "../peek/peek";
 import { dismissPeek } from "../peek/actions";
+import { liveOf } from "./tabLive";
 
 const store = () => useBrowser.getState();
 
@@ -47,9 +48,8 @@ export function useHistoryAvailability(tabId: string) {
 
 export function goBack(tabId: string): void {
   if (livePageId(tabId) !== tabId) return void withLivePage(tabId, (_, id) => goBack(id));
-  const live = store().live[tabId];
   if (pageOf(tabId).newTabShown) return;
-  if (live?.canGoBack) return void webviews.get(tabId)?.goBack();
+  if (liveOf(tabId).canGoBack) return void webviews.get(tabId)?.goBack();
   if (pageOf(tabId).engineBack) return void goBackAcrossEngines(tabId);
   if (pageOf(tabId).backToNewTab) return showNewTab(tabId);
   if (backClosesTab(store(), tabId)) {
@@ -75,7 +75,7 @@ function showNewTab(tabId: string, keep?: { url: string; title: string }) {
   const tab = store().tabs[tabId];
   if (!tab?.url) return;
   patchPage(tabId, { newTabShown: { url: keep?.url ?? tab.url, title: keep?.title ?? tab.title, favicon: tab.favicon }, status: "" });
-  const internal = internalPageOf(tabDestination(tab)) !== null;
+  const internal = isAppPage(tabDestination(tab));
   const page = internal && tab.page.kind === "loaded" ? IDLE : internal && tab.page.kind === "adopted" ? adoptedPage(tab.page.adopt) : tab.page;
   store().updateTab(tabId, { url: "", title: "", favicon: null, page });
 }
@@ -98,7 +98,7 @@ useBrowser.subscribe((s, prev) => {
     const tab = s.tabs[id];
     const before = prev.tabs[id];
     if (!tab || !before) continue;
-    if (!tabDestination(before) && internalPageOf(tabDestination(tab)) && !pageOf(id).backToNewTab) patchPage(id, { backToNewTab: true });
+    if (!tabDestination(before) && isAppPage(tabDestination(tab)) && !pageOf(id).backToNewTab) patchPage(id, { backToNewTab: true });
   }
 });
 

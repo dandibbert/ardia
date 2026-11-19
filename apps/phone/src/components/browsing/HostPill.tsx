@@ -4,7 +4,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring
 import { haptics } from "../../state/app/haptics";
 import type { BrowserTab } from "../../state/tabs/tabModels";
 import { capsule, chromeInk, ChromeSurface, Favicon, floatingBarLayout, Symbol, tabsMotion, usePresence } from "../ui";
-import { barAddress } from "./FloatingBar";
+import { barAddress, spokenAddress } from "./FloatingBar";
 import { hostPillLayout } from "./hostPillTokens";
 import { NotSecureLock } from "./NotSecureLock";
 import { useBarReturn } from "./barReturn";
@@ -26,12 +26,11 @@ export function HostPill({ tab, dark, shown, anchors = false, contentStyle, onEx
     <ChromeSurface testID="hostPill" shape="capsule" cornerRadius={capsule(hostPillLayout.height)} incognito={tab.isPrivate} dark={dark} barShadow shown={shown && back.centreGlass.shown} shownMs={centreFlips ? back.centreGlass.shownMs : hostPillLayout.glassMs} style={styles.pill}>
       <Animated.View testID="hostPillCentreGlyphs" collapsable={false} style={back.centreGlyphs}>
       <Animated.View testID="hostPillContent" nativeID={ids?.face} collapsable={false} style={[styles.content, contentStyle]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Show Toolbar" accessibilityValue={{ text: address.insecure ? `Not Secure, ${address.host}` : address.host }} onPress={onExpand} onPressIn={haptics.barPress} style={styles.hit}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Show Toolbar" accessibilityValue={{ text: spokenAddress(address) }} onPress={onExpand} onPressIn={haptics.barPress} style={styles.hit}>
+        {address.isPrivate ? <Symbol name="eyeglassesThin" size={hostPillLayout.siteIcon * hostPillLayout.privateSymbolShare} color={ink.secondary} /> : null}
         {address.insecure ? (
           <NotSecureLock testID="hostPillNotSecure" size={hostPillLayout.siteIcon} color={ink.notSecure} />
-        ) : address.isPrivate ? (
-          <Symbol name="eyeglassesThin" size={hostPillLayout.siteIcon * hostPillLayout.privateSymbolShare} color={ink.secondary} />
-        ) : address.pageUrl ? (
+        ) : address.isPrivate ? null : address.pageUrl ? (
           <Favicon iconUrl={address.iconUrl} pageUrl={address.pageUrl} size={hostPillLayout.siteIcon} />
         ) : null}
         <Text testID="hostPillHost" maxFontSizeMultiplier={hostPillLayout.maxTextScale} numberOfLines={1} ellipsizeMode="middle" style={[styles.host, { color: ink.foreground }]}>

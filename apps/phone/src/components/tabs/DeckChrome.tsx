@@ -1,14 +1,21 @@
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { capsule, font, space, Symbol, tabsInk, tabsLayout, useTheme } from "../ui";
+import { capsule, font, space, SystemGlyph, tabsInk, tabsLayout, useTheme } from "../ui";
 
-export function DeckEmpty({ centerY, showsArchive, onArchive, searching = false }: { centerY: number; showsArchive: boolean; onArchive: () => void; searching?: boolean }) {
+export function deckEmptyWords(searching: boolean, incognito: boolean): { title: string; detail: string | null } {
+  if (searching) return { title: "No Matching Tabs", detail: null };
+  if (incognito) return { title: "No Incognito Tabs", detail: "Incognito tabs aren’t saved to your history or the Archive." };
+  return { title: "No Open Tabs", detail: "Tabs you open appear here. Inactive tabs move to the Archive." };
+}
+
+export function DeckEmpty({ centerY, showsArchive, onArchive, searching = false, incognito = false }: { centerY: number; showsArchive: boolean; onArchive: () => void; searching?: boolean; incognito?: boolean }) {
+  const words = deckEmptyWords(searching, incognito);
   const theme = useTheme();
   const { width } = useWindowDimensions();
   return (
     <View style={[styles.empty, { top: centerY - space.huge * 2, left: (width - tabsLayout.emptyWidth) / 2, width: tabsLayout.emptyWidth }]}>
-      <Text style={[font.title3, styles.emptyTitle, { color: theme.headerText }]}>{searching ? "No Matching Tabs" : "No Open Tabs"}</Text>
-      {searching ? null : <Text style={[font.subheadline, styles.centered, { color: theme.secondaryLabel }]}>Tabs you open appear here. Inactive tabs move to the Archive.</Text>}
-      {showsArchive && !searching ? (
+      <Text style={[font.title3, styles.emptyTitle, { color: theme.headerText }]}>{words.title}</Text>
+      {words.detail ? <Text style={[font.subheadline, styles.centered, { color: theme.secondaryLabel }]}>{words.detail}</Text> : null}
+      {showsArchive && !searching && !incognito ? (
         <Pressable accessibilityRole="button" onPress={onArchive} style={styles.archive}>
           <Text style={[font.subheadline, styles.bold, { color: theme.formAccent }]}>Open Archive</Text>
         </Pressable>
@@ -28,7 +35,7 @@ export function IncognitoChip({ count, top, onPress }: { count: number; top: num
         onPress={onPress}
         style={[styles.chip, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(tabsLayout.chipHeight) }]}
       >
-        <Symbol name="eyes" size={16} color={tabsInk.onDark} />
+        <SystemGlyph systemName="eyes" pointSize={tabsLayout.eyesChip} weight="semibold" fitted name="eyes" size={16} color={tabsInk.onDark} />
         <Text style={[font.subheadline, styles.bold, styles.chipText]}>Incognito</Text>
         <Text style={[font.subheadline, styles.bold, { color: tabsInk.onDarkChip }]}>{count}</Text>
       </Pressable>

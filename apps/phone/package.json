@@ -14,7 +14,7 @@
     "dev": "expo start --port 8091",
     "android": "scripts/gradle-locked :app:assembleDebug",
     "typecheck": "tsc -p . && tsc -p tsconfig.test.json && tsc -p tsconfig.render.json",
-    "test": "node --no-warnings --test \"src/**/*.test.ts\" && jest --config jest.config.js --ci && jest --config jest.release.config.js --ci",
+    "test": "node --no-warnings --test \"src/**/*.test.ts\" \"scripts/*.test.mjs\" && jest --config jest.config.js --ci && jest --config jest.release.config.js --ci",
     "test:render": "jest --config jest.config.js --ci && jest --config jest.release.config.js --ci",
     "credits": "node --no-warnings test/credits.ts --write"
   },

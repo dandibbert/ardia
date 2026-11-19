@@ -2,7 +2,7 @@ import { AppState } from "react-native";
 import { lookBudget, systemLook } from "../../platform/look";
 import { create } from "zustand";
 import { createGate, DAILY_KEY, type SharingSource } from "../../lib/telemetryGate";
-import { backdropProps, COUNTED, launchProps, legacyImportOutcome, parseDaily, pendingUsage, type Counted } from "../../lib/telemetrySchema";
+import { backdropProps, COUNTED, launchProps, launchTrayProps, legacyImportOutcome, parseDaily, pendingUsage, type Counted } from "../../lib/telemetrySchema";
 import { canPostTelemetry, deviceFacts, JS_STARTED_AT, launchBackdropShownAt, newTelemetryId, postTelemetry, processStartedAt, setUsageConsent, takePendingCounts } from "../../platform/telemetry";
 import { appearanceTelemetry, offeredInterfaceStyle, offeredScheme } from "../../lib/appearance";
 import { useBoot } from "../app/bootState";
@@ -79,6 +79,15 @@ export async function reportLaunch(firstScreenAt: number) {
   if (timings) gate.capture("perf_launch", timings);
   const backdrop = backdropProps(processStart, launchBackdropShownAt());
   if (backdrop) gate.capture("perf_backdrop", backdrop);
+}
+
+let trayReported = false;
+
+export async function reportLaunchTray(trayUpAt: number) {
+  if (trayReported || isDemoSession() || !gate.isSharing()) return;
+  trayReported = true;
+  const props = launchTrayProps(await processStartedAt(), trayUpAt);
+  if (props) gate.capture("perf_launch_tray", props);
 }
 
 export function usageToday(): { day: string | null; counts: Partial<Record<Counted, number>>; sharing: boolean } {

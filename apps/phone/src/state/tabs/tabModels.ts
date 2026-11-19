@@ -17,10 +17,11 @@ export type BrowserTab = {
   origin: TabOrigin;
   receivedKey: string | null;
   receivedFromDevice: string | null;
+  pinnedKey: string | null;
   isPrivate: boolean;
 };
 
-export type TabPatch = Partial<Pick<BrowserTab, "url" | "title" | "faviconUrl" | "themeColorHex" | "snapshotFileName">>;
+export type TabPatch = Partial<Pick<BrowserTab, "url" | "title" | "faviconUrl" | "themeColorHex" | "snapshotFileName" | "pinnedKey">>;
 
 export type AutoArchiveInterval = "oneHour" | "fourHours" | "twelveHours" | "day" | "threeDays" | "week" | "never";
 

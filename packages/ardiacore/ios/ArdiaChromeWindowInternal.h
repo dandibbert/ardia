@@ -37,6 +37,7 @@ NSMapTable<NSWindow *, ArdiaWindowController *> *Controllers();
 extern BOOL (^gRefusesUnhandledKey)(NSWindow *, NSEvent *);
 
 void ConfigureWindow(NSWindow *window);
+void InsetUtilityTrafficLights(NSWindow *window);
 CGFloat WindowCornerRadius(NSWindow *window);
 extern const void *kLightsCenterKey;
 extern const void *kLightsShownKey;
@@ -46,12 +47,14 @@ NSArray<NSButton *> *TrafficLightButtons(NSWindow *window);
 NSPoint LightsCenter(NSWindow *window, NSValue *center, NSSize size);
 void TranslateTrafficLights(NSWindow *window, CGFloat dx);
 void RetileTrafficLights(NSWindow *window);
+void TuckTrafficLightsOutsideWindow(NSWindow *window);
 bool MoveTrafficLights(NSWindow *window, NSValue *center);
 
 NSMenuItem *ReservedMenuItemForEvent(NSEvent *event);
 bool IsReservedKey(NSEvent *event);
 bool IsSecondSidebarKeyPress(NSEvent *event);
 bool KeepsUnhandledSidebarKeyInPage(NSWindow *window, NSEvent *event);
+bool KeepsReservedKeyInDevTools(NSWindow *window, NSEvent *event);
 
 extern const void *kActedFullScreenKey;
 extern const void *kWindowFullScreenKey;

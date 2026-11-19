@@ -12,6 +12,7 @@ import {
   deckBarBand,
   deckStatusStrip,
   deckBarCenterFromBottom,
+  pageBarGhostOpacity,
   redesignedBarCenterFromBottom,
   deckCardAt,
   deckHeaderLeading,
@@ -90,6 +91,9 @@ test("the deck opens where Compose's DeckOrder does, and keeps focus sensible af
   assert.equal(initialDeckScroll(1), 0);
   assert.equal(openingDeckScroll(4, 5), 3);
   assert.equal(openingDeckScroll(2, 5), 2);
+  assert.equal(openingDeckScroll(4, 5, true), 4);
+  assert.equal(openingDeckScroll(2, 5, true), 2);
+  assert.equal(openingDeckScroll(0, 1, true), 0);
   assert.equal(scrollAfterRemoving(0, 2, 3), 1);
   assert.equal(scrollAfterRemoving(3, 3, 3), 2);
   assert.equal(focusedIndex(-0.4, 3), 0);
@@ -114,6 +118,14 @@ test("a header's icon fades in over the 12 points after it fits, and its content
   assert.equal(deckHeaderLeading(100, 16, 6, 60, 0), 42);
   assert.equal(deckHeaderLeading(100, 16, 6, 60, 0.5), 25.5);
   assert.equal(deckHeaderLeading(100, 16, 6, 300, 1), 0);
+});
+
+test("Android's page bar fades over the growing or shrinking card while the deck's own buttons fade the other way, so no frame has neither", () => {
+  assert.equal(pageBarGhostOpacity(0), 1);
+  assert.equal(pageBarGhostOpacity(1), 0);
+  let least = 1;
+  for (let p = 0; p <= 1.0001; p += 0.01) least = Math.min(least, Math.max(pageBarGhostOpacity(p), deckChromeOpacity(p)));
+  assert.ok(least >= 0.25, `at worst ${least.toFixed(2)} of a bar shows`);
 });
 
 test("the redesigned bars keep iPhone's place over a home indicator or gesture bar and clear Android's 3-button bar", () => {

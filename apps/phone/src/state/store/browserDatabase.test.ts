@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nodeDatabase } from "../../../test/nodeDatabase.ts";
 import { createHistoryLog } from "../history/historyLog.ts";
@@ -35,6 +36,7 @@ const tab = (id: string, extra: Partial<BrowserTab> = {}): BrowserTab => ({
   origin: "typed",
   receivedKey: null,
   receivedFromDevice: null,
+  pinnedKey: null,
   isPrivate: false,
   ...extra,
 });
@@ -50,6 +52,27 @@ test("the schema has Android's tables, and migrating twice is a no-op", () => {
   const tables = db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => r.name);
   assert.deepEqual(tables, ["preferences", "tab_state", "tabs", "visits"]);
   assert.deepEqual(migrate(db), { from: SCHEMA_VERSION, to: SCHEMA_VERSION });
+});
+
+test("a tab keeps the pinned tile it was opened from, and a database from before that column gains it with its tabs intact", () => {
+  const db = fresh();
+  writeTabs(db, [tab("A", { pinnedKey: "music" }), tab("B", { position: 1024 })], []);
+  assert.deepEqual(readOpenTabs(db).map((t) => [t.id, t.pinnedKey]), [["A", "music"], ["B", null]]);
+  const old = nodeDatabase();
+  old.exec(
+    "CREATE TABLE tabs (id TEXT PRIMARY KEY NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL, created INTEGER NOT NULL, lastActive INTEGER NOT NULL, archivedAt INTEGER, position REAL NOT NULL, profileSyncId TEXT, faviconUrl TEXT, themeColorHex TEXT, snapshotFileName TEXT, origin TEXT NOT NULL, receivedKey TEXT, receivedFromDevice TEXT)",
+  );
+  old.exec("INSERT INTO tabs (id, url, title, created, lastActive, position, origin) VALUES ('Z', 'https://z.example/', 'Z', 1, 1, 0, 'typed')");
+  old.exec("PRAGMA user_version = 1");
+  assert.deepEqual(migrate(old), { from: 1, to: SCHEMA_VERSION });
+  assert.deepEqual(readOpenTabs(old).map((t) => [t.id, t.url, t.pinnedKey]), [["Z", "https://z.example/", null]]);
+});
+
+test("the native sync readers accept this schema: a version they don't know stops sync on that phone", () => {
+  const source = (path: string) => readFileSync(new URL(`../../../../../packages/phone/${path}`, import.meta.url), "utf8");
+  const android = /const val SCHEMA_VERSION = (\d+)/.exec(source("android/src/main/java/com/ardia/phone/PhoneBrowsingSource.kt"))?.[1];
+  const iphone = /static let schemaVersion: Int32 = (\d+)/.exec(source("ios/PhoneSync/Sources/PhoneSync/PhoneBrowsingSource.swift"))?.[1];
+  assert.deepEqual([Number(android), Number(iphone)], [SCHEMA_VERSION, SCHEMA_VERSION]);
 });
 
 test("a database from a newer app is refused, not rewritten", () => {

@@ -41,6 +41,7 @@ import { noteSiteControls } from "../../state/telemetry/usage";
 import { HistoryButton, ReloadButton } from "./NavButtons";
 import { FIELD_LOAD, TOOLBAR_MOTION } from "./tokens";
 import { useToolbarRow } from "./useToolbarRow";
+import { PAGE_IDENTITY_TAG } from "../../state/tabs/tabReveal";
 
 type ToolbarTab = Pick<Tab, "id" | "url" | "title" | "windowId" | "zoom">;
 const toolbarTab = (t: Tab | undefined): ToolbarTab | undefined =>
@@ -130,9 +131,11 @@ export function Toolbar({
         <HistoryButton place={at.forward} tabId={tab.id} windowId={tab.windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={focus} />
         <ReloadButton place={at.reload} tab={tab} loading={isLoading} palette={palette} onFocus={focus} />
         <ToolbarExtensions tabId={tab.id} windowId={windowId} palette={palette} top={row.center - row.extensionButton / 2} right={(inSplit ? 8 + 2 * row.button : 8) + geometry.trailing} />
-        {tab.url ? (
-          <ToolbarUrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} loadFill={loadFill} onFocus={focus} style={urlStyle} />
-        ) : null}
+        <View nativeID={PAGE_IDENTITY_TAG} collapsable={false} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {tab.url ? (
+            <ToolbarUrlField tab={tab} palette={palette} windowId={windowId} inSplit={inSplit} loadFill={loadFill} onFocus={focus} style={urlStyle} />
+          ) : null}
+        </View>
         {inSplit && (
           <View style={{ position: "absolute", top: at.top, right: 8 + geometry.trailing, flexDirection: "row", gap: -space.xxs }}>
             <Button variant="icon" toolbar palette={palette} icon="rectangle.split.2x1" look="row" onPress={() => showSplitMenu(tab.id)} tooltip="Split View" />
@@ -228,7 +231,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
           </View>
         </Pressable>
       </ContextMenuArea>
-      <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={toggleSiteControls}>
+      <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={toggleSiteControls} quiet={!buttonsShown}>
         {buttonsShown && (
           <>
             <PageButton tab={tab} palette={palette} windowId={windowId} />
@@ -285,7 +288,7 @@ export const SidebarUrlField = memo(function SidebarUrlField({ tab, palette, win
         </Pressable>
       </ContextMenuArea>
       <ToolbarRowContext.Provider value={TOOLBAR_ROWS.regular}>
-        <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={openSiteControls} accessory={shown.extensions ? accessory : null}>
+        <FieldButtons tab={tab} palette={palette} onFocus={onFocus} popover={popover} toggleSiteControls={openSiteControls} accessory={shown.extensions ? accessory : null} quiet={!shown.page}>
           {shown.page && <PageButton tab={tab} palette={palette} windowId={windowId} />}
           {shown.siteControls && <Button variant="icon" toolbar palette={palette} icon="slider.horizontal.3" look="field" onPress={openSiteControls} active={popover === "siteControls"} tooltip="Site Controls" />}
         </FieldButtons>
@@ -318,6 +321,7 @@ function FieldButtons({
   popover,
   toggleSiteControls,
   accessory,
+  quiet = false,
   children,
 }: {
   tab: ToolbarTab;
@@ -326,6 +330,7 @@ function FieldButtons({
   popover: string | null;
   toggleSiteControls: () => void;
   accessory?: ReactNode;
+  quiet?: boolean;
   children: ReactNode;
 }) {
   const popups = usePage(tab.id, (p) => p.popups.length);
@@ -336,9 +341,9 @@ function FieldButtons({
       {children}
       <Button variant="icon" toolbar palette={palette} icon="link" look="field" onPress={() => void copyPageUrl(tab.id)} tooltip={withShortcut("Copy Link", copyHint)} />
       {capture && <CaptureIndicator camera={capture.camera} microphone={capture.microphone} screen={capture.screen} onPress={toggleSiteControls} />}
-      <ReaderButton tabId={tab.id} palette={palette} onFocus={onFocus} />
-      <TranslateButton tabId={tab.id} palette={palette} onFocus={onFocus} />
-      <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} onFocus={onFocus} />
+      <ReaderButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />
+      <TranslateButton tabId={tab.id} palette={palette} onFocus={onFocus} quiet={quiet} />
+      <ZoomIndicator tabId={tab.id} zoom={tab.zoom} palette={palette} onFocus={onFocus} quiet={quiet} />
       {popups > 0 && (
         <Button variant="icon" toolbar
           palette={palette}

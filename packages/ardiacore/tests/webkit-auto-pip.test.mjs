@@ -74,11 +74,11 @@ test("WebKit tabs follow the user's sight of their window the way Chromium views
   assert.match(sight, /let activeCapture = webView\?\.cameraCaptureState == \.active \|\| webView\?\.microphoneCaptureState == \.active/);
   assert.match(sight, /playing: !playingFrames\.isEmpty \|\| activeCapture/);
   assert.match(tab, /override func viewDidMoveToWindow\(\) \{\n    super\.viewDidMoveToWindow\(\)\n    if window != nil \{ followInterfaceScale\(\) \}\n    watchSight\(\)\n  \}/);
-  assert.match(tab, /var visible = true \{ didSet \{ updateHidden\(\); updateSight\(\) \} \}/);
+  assert.match(tab, /var visible = true \{ didSet \{ updateHidden\(\); updateSight\(\); noteShownChanged\(\) \} \}/);
 });
 
 test("leaving opens picture in picture and returning closes it through the page's own player call", () => {
-  assert.match(sight, /case \.open: setPictureInPicture\(true, automatic: true\) \{ \[weak self\] answer in if answer == \.nothingPlaying \{ self\?\.emit\("autoPictureInPictureKept", \["reason": "nothingPlaying"\]\) \} \}/);
+  assert.match(sight, /case \.open:\s*let stamp = ArdiaConsentStamp\.begin\(\)\s*setPictureInPicture\(true, automatic: true\) \{ \[weak self\] answer in if answer == \.nothingPlaying \{ self\?\.emit\("autoPictureInPictureKept", stamp\.onto\(\["reason": "nothingPlaying"\]\)\) \} \}/);
   assert.match(sight, /case \.close: setPictureInPicture\(false\) \{ _ in \}/);
   assert.match(sight, /autoPictureInPictureRule\.sight\(seen, enabled: autoPictureInPicture, playing: !playingFrames\.isEmpty \|\| activeCapture\)/);
 });

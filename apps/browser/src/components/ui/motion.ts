@@ -37,7 +37,36 @@ export const duration = {
 
 export const period = { spinner: 900, pulse: 1100 } as const;
 
+export type LoopLeg = { to: number; ms: number; easing?: EasingFunction };
+
+export function legsEasing(legs: readonly LoopLeg[]): { duration: number; easing: EasingFunction } {
+  const total = legs.reduce((sum, leg) => sum + leg.ms, 0);
+  const easing = (t: number) => {
+    let at = t * total;
+    let from = 0;
+    for (const [i, leg] of legs.entries()) {
+      if (at < leg.ms || i === legs.length - 1) return from + (leg.to - from) * (leg.easing ?? curve.linear)(leg.ms > 0 ? Math.min(1, at / leg.ms) : 1);
+      at -= leg.ms;
+      from = leg.to;
+    }
+    return from;
+  };
+  return { duration: total, easing };
+}
+
+export function nativeLoop(value: Animated.Value, legs: readonly LoopLeg[], iterations = -1): Animated.CompositeAnimation {
+  const { duration, easing } = legsEasing(legs);
+  value.setValue(0);
+  return Animated.loop(Animated.timing(value, { toValue: 1, duration, easing, useNativeDriver: true, isInteraction: false }), { iterations });
+}
+
 export const buttonMotion = { iconPressScale: 0.96, controlPressScale: 0.985 } as const;
+
+export const hoverFade = {
+  show: { duration: 50, easing: curve.fade },
+  hide: { duration: 200, easing: curve.fade },
+  appear: { duration: duration.fast, easing: curve.fade },
+} as const;
 
 export type Fade = { duration: number; easing: EasingFunction; delay?: number };
 
@@ -104,4 +133,22 @@ export function usePressScaleMotion(enabled = true, pressedScale: number = butto
     onPressIn: enabled ? () => animate(true) : undefined,
     onPressOut: enabled ? () => animate(false) : undefined,
   };
+}
+
+export function useHoverFill(shown: boolean, instant = false, fromMount = false) {
+  const opacity = useRef<Animated.Value | null>(null);
+  if ((shown || fromMount) && !opacity.current) opacity.current = new Animated.Value(shown && instant ? 1 : 0);
+  useEffect(() => {
+    const value = opacity.current;
+    if (!value) return;
+    if (instant || reduceMotion() !== false) {
+      value.stopAnimation();
+      value.setValue(shown ? 1 : 0);
+      return;
+    }
+    const fade = Animated.timing(value, { toValue: shown ? 1 : 0, ...(shown ? hoverFade.show : hoverFade.hide), useNativeDriver: true });
+    fade.start();
+    return () => fade.stop();
+  }, [shown, instant]);
+  return opacity.current;
 }

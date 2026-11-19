@@ -58,7 +58,7 @@ test("with the setting off, or control off, nothing is asked and nothing is grou
 test("a tab already in a group of yours is left alone", () => {
   const mine = S().newTab(windowId, { url: "https://grouped.example/", background: true });
   const groupId = S().createGroup([mine], { name: "Work" });
-  assert.equal(groupAgentTab(mine), false);
+  assert.equal(groupAgentTab(mine, null), false);
   assert.deepEqual(S().groups[groupId].tabIds, [mine]);
   assert.equal(agentGroups().length, 0);
 });

@@ -31,6 +31,7 @@ const testGlobals = globalThis as { acTestUserScripts?: UserScriptsHost };
 
 export const docs = new Map<string, string>();
 export const heldSaves = { on: false, queue: [] as (() => void)[] };
+export const refusedWrites = { on: false, returnsFalse: false, landingFails: false };
 export const bangListServer: { reply: ((etag: string | null) => Promise<BangListReply>) | null } = { reply: null };
 export const appInfo: Partial<SystemInfo> = { appVersion: "1.0" };
 export const interfaceScaleNative = { scale: 1, applied: [] as number[], refuses: false, asked: [] as number[] };
@@ -130,6 +131,14 @@ const windowsModule: Modules["ArdiaAppWindows"] & { requestClose(id: string): Pr
 };
 
 export const pressesWithoutRelease = { count: 0 };
+export const focusHandoffCounts = {
+  pending: {} as Record<string, Record<string, number>>,
+  take() {
+    const taken = this.pending;
+    this.pending = {};
+    return taken;
+  },
+};
 export const pressRepeated: { earlier: { landedOn: string; ms: number } | null } = { earlier: null };
 
 const focus: Modules["ArdiaFocus"] = {
@@ -138,10 +147,13 @@ const focus: Modules["ArdiaFocus"] = {
   saveKeyResponder: () => Promise.resolve(0),
   restoreKeyResponder: () => Promise.resolve(false),
   discardKeyResponder: () => Promise.resolve(),
+  takeEditKeyAcks: () => editKeyAcks.take(),
+  takeInputSourceKeys: () => inputSourceKeys.take(),
   switcherPointerMoved: () => true,
   cancelFocusMove: () => Promise.resolve(),
   claimFocus: () => Promise.resolve(),
   pressesWithoutRelease: () => pressesWithoutRelease.count,
+  takeFocusHandoffCounts: () => focusHandoffCounts.take(),
   pressRepeated: () => Promise.resolve(pressRepeated.earlier),
 };
 
@@ -165,14 +177,18 @@ const dialogs: Modules["ArdiaDialogs"] = {
 
 const documents: Modules["ArdiaDocuments"] = {
   readDocument: (name) => docs.get(name) ?? null,
-  writeDocument: (name, contents) => void docs.set(name, contents),
+  writeDocument: (name, contents) => {
+    if (refusedWrites.on) throw new Error("write refused");
+    if (refusedWrites.returnsFalse) return false as unknown as void;
+    docs.set(name, contents);
+  },
   saveDocument: (name, contents) =>
     new Promise((resolve) => {
       const land = () => (docs.set(name, contents), resolve());
       if (heldSaves.on) heldSaves.queue.push(land);
       else land();
     }),
-  documentSaved: () => Promise.resolve(),
+  documentSaved: () => (refusedWrites.on || refusedWrites.landingFails ? Promise.reject(new Error("save refused")) : Promise.resolve()),
   removeDocument: (name) => void docs.delete(name),
 };
 
@@ -220,7 +236,7 @@ const notifications: Modules["ArdiaNotifications"] = {
   addListener: notificationEvents.addListener,
   notificationPermission: () => Promise.resolve("notDetermined"),
   requestNotificationPermission: () => Promise.resolve(false),
-  postNotification: () => Promise.resolve(null),
+  postNotification: (options) => Promise.resolve({ id: options.id, icon: "none" }),
   removeNotifications: () => Promise.resolve(),
   openNotificationSettings: () => Promise.resolve(),
 };
@@ -241,6 +257,7 @@ const scripting: Modules["ArdiaScripting"] = {
 
 const dev: Modules["ArdiaDev"] = {
   devCrash: () => Promise.resolve(),
+  devBlockMain: (ms) => Promise.resolve(ms),
   devRenderIntroMusic: () => Promise.resolve(null),
   devRunAppleScript: () => Promise.resolve({ ok: false, error: "no AppleScript in tests" }),
   devSnapshotWindow: () => Promise.resolve(false),
@@ -408,6 +425,62 @@ const systemSignalsModule: Modules["ArdiaSystemSignals"] = {
   addListener: systemSignalEvents.addListener,
 };
 
+export const pluginHost = {
+  folders: [] as { name: string; status: "ok" | "missing" | "link" | "notFile" | "tooBig" | "unreadable"; text?: string; folderId?: string; bundled?: boolean; replacesBundled?: boolean; ignoresUserFolder?: boolean }[],
+  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean }[],
+  stops: [] as { name: string; run: number; graceMs: number }[],
+  replies: [] as { name: string; run: number; line: string }[],
+  events: [] as { name: string; run: number; line: string }[],
+  removed: [] as string[],
+  links: [] as { name: string; folderId: string; approved: string; version: string | null; programs: { name: string; path: string; afterUpdate?: string[][] }[]; adopt: boolean }[],
+  unlinks: [] as { name: string; programs: string[]; remove: boolean }[],
+  sweeps: [] as string[][],
+  legacyInstalled: false,
+  linkResult: null as null | { ok: false; reason?: string; stale?: true } | { ok: true; linked: string[]; refused: Record<string, string>; binDir: string; adopted: boolean },
+  startResult: null as null | { ok: false; reason: string },
+  removeGate: null as null | Promise<void>,
+  stopGate: null as null | Promise<void>,
+  startGate: null as null | Promise<void>,
+  listGate: null as null | Promise<void>,
+  listFails: false,
+  nextRun: 0,
+};
+const pluginEvents = nativeEvents();
+export const emitPluginLine = (line: { name: string; run: number; line: string }) => pluginEvents.emit("onLine", line);
+export const emitPluginExit = (exit: { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean }) => pluginEvents.emit("onExit", exit);
+const plugins: Modules["ArdiaPlugins"] = {
+  folder: () => "/config/plugins",
+  list: async () => {
+    await pluginHost.listGate;
+    if (pluginHost.listFails) throw new Error("the plugins folder couldn't be listed");
+    return pluginHost.folders.map((f) => ({ ...f }));
+  },
+  start: async (spec) => {
+    pluginHost.starts.push({ ...spec, run: [...spec.run] });
+    if (pluginHost.startResult) return pluginHost.startResult;
+    const run = ++pluginHost.nextRun;
+    await pluginHost.startGate;
+    return { ok: true, run, pid: 1000 + run };
+  },
+  stop: async (name, run, graceMs) => void (pluginHost.stops.push({ name, run, graceMs }), await pluginHost.stopGate),
+  reply: (name, run, line) => void pluginHost.replies.push({ name, run, line }),
+  event: (name, run, line) => void pluginHost.events.push({ name, run, line }),
+  call: (name, run, line) => void pluginHost.events.push({ name, run, line }),
+  remove: async (name) => (await pluginHost.removeGate, pluginHost.removed.push(name), (pluginHost.folders = pluginHost.folders.filter((f) => f.name !== name)), { ok: true }),
+  linkPrograms: async (spec) => {
+    pluginHost.links.push({ ...spec, programs: spec.programs.map((p) => ({ ...p })) });
+    if (pluginHost.linkResult) return pluginHost.linkResult;
+    return { ok: true, linked: spec.programs.map((p) => p.name), refused: {}, binDir: "/home/.local/bin", adopted: false };
+  },
+  unlinkPrograms: async (name, programs, remove) => (pluginHost.unlinks.push({ name, programs: [...programs], remove }), { ok: true }),
+  sweepPrograms: async (active) => void pluginHost.sweeps.push([...active]),
+  legacyProgramsInstalled: async () => pluginHost.legacyInstalled,
+  revealLog: () => {},
+  revealFolder: () => {},
+  devSnapshotPage: async () => false,
+  addListener: pluginEvents.addListener,
+};
+
 export const shellNativeModules: Modules = {
   ArdiaShell: shell,
   ArdiaAppWindows: windowsModule,
@@ -426,7 +499,7 @@ export const shellNativeModules: Modules = {
   ArdiaKeychain: keychain,
   ArdiaGlassEffect: { isLiquidGlass: () => false },
   ArdiaDockSelection: { iconTheme: () => Promise.resolve(null), iconAccent: () => Promise.resolve(null) },
-  ArdiaInlineCompletion: { complete: () => Promise.resolve(0) },
+  ArdiaInlineCompletion: { complete: () => Promise.resolve(0), copyFieldAs: () => Promise.resolve() },
   ArdiaTranslate: translate,
   ArdiaMagnifyArea: magnifyArea,
   ArdiaFileDrop: fileDrop,
@@ -434,7 +507,26 @@ export const shellNativeModules: Modules = {
   ArdiaUserScripts: userScripts,
   ArdiaConfig: config,
   ArdiaAutomation: automation,
+  ArdiaPlugins: plugins,
   ArdiaSystemSignals: systemSignalsModule,
   ArdiaTelemetryLocal: telemetryLocalModule,
   ArdiaReport: reportModule,
+};
+
+export const inputSourceKeys = {
+  pending: 0,
+  take() {
+    const taken = this.pending;
+    this.pending = 0;
+    return taken;
+  },
+};
+
+export const editKeyAcks = {
+  pending: {} as Record<string, number>,
+  take() {
+    const taken = this.pending;
+    this.pending = {};
+    return taken;
+  },
 };

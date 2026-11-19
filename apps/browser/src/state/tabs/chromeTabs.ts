@@ -11,17 +11,20 @@ import {
 import { useBrowser, type BrowserState } from "../browser/store";
 import { changedIds } from "../browser/changes";
 import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } from "./liveTabs";
+import { recordAppSelection, judgeStripSelection } from "./stripBounce";
 
 type Sync = { phase: "idle" } | { phase: "snapshotting"; early: TabStripTransaction[] } | { phase: "synced"; rev: number };
 let sync: Sync = { phase: "idle" };
 const mirror = new Map<number, StripState>();
 const seen = new Set<string>();
-type Kind = "arrange" | "activate" | "group";
+const KINDS = ["arrange", "activate", "group"] as const;
+type Kind = (typeof KINDS)[number];
 const inflight = new Map<number, { kind: Kind; cmd: number; keys?: string[]; makes?: string; successor?: boolean; moves?: boolean }>();
 const groups: GroupBindings = new Map();
 const tried = new Map<string, { sig: string; since: number }>();
 const changedAt = new Map<number, number>();
 const madeInFront = new Map<number, { browser: number; over: string | null }>();
+let applyingStrip = false;
 
 if (__DEV__) {
   (globalThis as { acChromeTabs?: unknown }).acChromeTabs = {
@@ -32,6 +35,8 @@ if (__DEV__) {
     state: () => ({ lastRev: sync.phase === "synced" ? sync.rev : -1, inflight: Object.fromEntries(inflight), tried: Object.fromEntries(tried), groups: Object.fromEntries(groups) }),
   };
 }
+
+export const chromeTabsBookkeeping = () => ({ groups: groups.size, tried: tried.size, changedAt: changedAt.size });
 
 export function startChromeTabs() {
   if (sync.phase !== "idle") return;
@@ -48,6 +53,8 @@ export function startChromeTabs() {
     scheduleProject();
   });
   useBrowser.subscribe((s, prev) => {
+    if (!applyingStrip) recordAppSelection(prev, s);
+    if (s.groups !== prev.groups) for (const [token, id] of groups) if (!s.groups[id]) groups.delete(token);
     if (s.windows !== prev.windows || s.groups !== prev.groups || placed(s, prev)) scheduleProject();
   });
 }
@@ -76,8 +83,10 @@ function receive(tx: TabStripTransaction) {
     if (strip.closed) {
       mirror.delete(strip.strip);
       madeInFront.delete(strip.strip);
+      changedAt.delete(strip.strip);
+      for (const kind of KINDS) tried.delete(`${strip.strip}:${kind}`);
     } else mirror.set(strip.strip, strip);
-    if (tx.cmd === null || tx.cmd < 0) changedAt.set(strip.strip, tx.rev);
+    if (!strip.closed && (tx.cmd === null || tx.cmd < 0)) changedAt.set(strip.strip, tx.rev);
     if (tx.cmd === null) {
       const waiting = inflight.get(strip.strip);
       const siblings = [...mirror.values()].filter((x) => x.window === strip.window && x.strip !== strip.strip);
@@ -98,7 +107,15 @@ function receive(tx: TabStripTransaction) {
     for (const t of strip.tabs) if (t.key) seen.add(t.key);
   }
   if (seen.size > 2 * Object.keys(s.tabs).length + 64) for (const key of seen) if (!s.tabs[key]) seen.delete(key);
-  if (s !== start) useBrowser.setState(s);
+  if (s !== start) {
+    judgeStripSelection(start, s);
+    applyingStrip = true;
+    try {
+      useBrowser.setState(s);
+    } finally {
+      applyingStrip = false;
+    }
+  }
   scheduleProject();
 }
 

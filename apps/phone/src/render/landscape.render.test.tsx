@@ -68,8 +68,7 @@ test("in landscape the deck's header and bottom bar pad by the wider side inset 
   const sides = header.map(flat).flatMap((style) => [style.paddingHorizontal, style.left, style.right, style.paddingLeft, style.paddingRight]).filter((value) => typeof value === "number");
   expect(sides).toContain(59 + 12);
   if (Platform.OS !== "ios") return unmount(root);
-  const grid = root.root.findAll((node) => typeof node.props.accessibilityLabel === "string" && node.props.accessibilityLabel === "Show as Grid" && typeof node.props.onPress === "function")[0]!;
-  act(() => grid.props.onPress());
+  act(() => deckGrid.setDeckGrid(true));
   act(() => jest.advanceTimersByTime(1000));
   const scroll = hosts(root, "tabGridScroll")[0]!;
   expect(StyleSheet.flatten(scroll.props.contentContainerStyle).paddingHorizontal).toBe(59 + 16);
@@ -148,7 +147,7 @@ test("in landscape a sheet stops at the side insets and fits the shorter window,
   act(() => Dimensions.set({ window: { ...PORTRAIT, ...LANDSCAPE }, screen: { ...PORTRAIT, ...LANDSCAPE } }));
   const after = flat(panel(root));
   expect(after).toMatchObject({ left: 59, right: 59, paddingBottom: 21 });
-  expect(after.maxHeight).toBe(LANDSCAPE.height - INSETS.top - (Platform.OS === "ios" ? 0 : 24));
+  expect(after.maxHeight).toBe(Math.min(LANDSCAPE.height - INSETS.top - (Platform.OS === "ios" ? 0 : 24), LANDSCAPE.height * (Platform.OS === "ios" ? 0.9 : 1)));
   expect(after.maxHeight as number).toBeLessThan(before.maxHeight as number);
   unmount(root);
 });

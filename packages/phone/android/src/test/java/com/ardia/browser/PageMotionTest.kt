@@ -59,6 +59,21 @@ class PageMotionTest {
     }
 
     @Test
+    fun snapToPreservesUpAndSetsAnchorAtRestoredOffset() {
+        val tracker = ScrollDirectionTracker()
+        tracker.offer(600.0, 2_000.0, 800.0)
+        assertEquals(ScrollDirection.Down, tracker.direction)
+
+        tracker.snapTo(1_000.0)
+        assertEquals(ScrollDirection.Up, tracker.direction)
+
+        assertNull(tracker.offer(1_000.0, 2_000.0, 800.0))
+        assertEquals(ScrollDirection.Up, tracker.direction)
+
+        assertEquals(ScrollDirection.Down, tracker.offer(1_030.0, 2_000.0, 800.0))
+    }
+
+    @Test
     fun zoomStepsThroughTheIphoneLevels() {
         assertEquals(1.15, PageZoom.next(1.0)!!, 0.0)
         assertEquals(0.85, PageZoom.previous(1.0)!!, 0.0)

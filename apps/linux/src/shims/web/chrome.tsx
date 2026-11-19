@@ -1,12 +1,13 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { View, type ViewProps, type ViewStyle } from "react-native";
 import { useBrowser } from "../../../../browser/src/state/browser/store";
-import { ThemeContext } from "../../../../browser/src/components/ui/theme";
+import { useScopedTheme } from "../../../../browser/src/components/ui/theme";
 import { ardiaHost, hostModuleMethod, hostSupports, reportHostError } from "../../host";
 import { shellOverPages, useInputRegion } from "../../shellAbove";
 import { GlassInside, GlassOptIn, useGlassSurface, useVisualEffectMark } from "../../shellGlass";
 import { watchPageFocus } from "../../pageFocus";
 import { WINDOW_DRAG_ROUTES, watchWindowDrag, type WindowDragHost } from "../../windowDrag";
+import type { MiddleClickEvent } from "./MouseArea";
 import { edgeGain, fallbackRadius, highlightMask, maskStyle, peakGain, SHADE_OUTSET, shadeMask, shapeMask, type RimCurve, type RimProfile, type ShadeProfile } from "./glassRim";
 
 type Style = ViewStyle & Record<string, unknown>;
@@ -116,7 +117,7 @@ const PLAIN_MATERIAL: MaterialFill = { light: "rgba(246,246,246,0.6)", dark: "rg
 
 export function useSurfaceDark(): boolean {
   const appDark = useBrowser((s) => s.ui.appDark);
-  return useContext(ThemeContext)?.dark ?? appDark;
+  return useScopedTheme()?.dark ?? appDark;
 }
 
 export type VisualEffectProps = ViewProps & { material?: string; blendingMode?: "withinWindow" | "behindWindow"; cornerRadius?: number };
@@ -252,13 +253,24 @@ export function GlassEffect({ cornerRadius = 0, tint, glassStyle = "regular", da
   );
 }
 
-export type ContextMenuAreaProps = ViewProps & { onContextMenu?: () => void; captureDescendants?: boolean };
+export type ContextMenuAreaProps = ViewProps & { onContextMenu?: () => void; onMiddleClick?: (e: MiddleClickEvent) => void; captureDescendants?: boolean };
 
-export function ContextMenuArea({ onContextMenu, captureDescendants: _capture, ...props }: ContextMenuAreaProps) {
-  const WebView = View as unknown as React.ComponentType<ViewProps & { onContextMenu?: (e: MouseEvent) => void }>;
+type WebMenuProps = ViewProps & { onContextMenu?: (e: MouseEvent) => void; onAuxClick?: (e: MouseEvent) => void; onMouseDown?: (e: MouseEvent) => void };
+
+export function ContextMenuArea({ onContextMenu, onMiddleClick, captureDescendants: _capture, ...props }: ContextMenuAreaProps) {
+  const WebView = View as unknown as React.ComponentType<WebMenuProps>;
   return (
     <WebView
       {...props}
+      onMouseDown={(e) => {
+        if (e.button === 1 && onMiddleClick) e.preventDefault();
+      }}
+      onAuxClick={(e) => {
+        if (e.button !== 1 || !onMiddleClick) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onMiddleClick({ shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey });
+      }}
       onContextMenu={(e) => {
         if (!onContextMenu) return;
         e.preventDefault();

@@ -4,6 +4,8 @@ import { withAlpha } from "../../lib/color";
 import { inlineOffer } from "../../lib/inlineOffer";
 import { CompletingField, completingFieldIsNative, type CompletingFieldHandle } from "../../platform/completingField";
 import { useSearchCompletedFor, useSearchCompletion } from "../../state/search/hooks";
+import { useTabs } from "../../state/tabs/store";
+import { countUsage } from "../../state/telemetry/telemetry";
 import { font } from "../ui";
 
 export type TrayInputHandle = { focus(): void; blur(): void; clearsInPlace(): boolean };
@@ -83,9 +85,14 @@ const CompletingInput = forwardRef<TrayInputHandle, Props>(function CompletingIn
         onTyped(next);
       }}
       onSubmit={onSubmit}
+      onFieldScroll={countFieldScroll}
     />
   );
 });
+
+const countFieldScroll = () => {
+  if (!useTabs.getState().incognito) countUsage("address_field_scrolled");
+};
 
 const PlainInput = forwardRef<TrayInputHandle, Props>(function PlainInput({ start, selectsStart, color, placeholderColor, accent, keyboardAppearance, onTyped, onSubmit, style }, ref) {
   const input = useRef<TextInputInstance>(null);

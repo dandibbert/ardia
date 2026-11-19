@@ -14,7 +14,17 @@ struct SyncMeta: Codable, Equatable, Sendable {
   var visitsSyncedThrough: Date?
   var chainSeen = false
 
-  static let defaultDeviceName = "iPhone"
+  static let defaultDeviceName = deviceName(forModel: hardwareModel())
+
+  static func deviceName(forModel model: String) -> String {
+    model.hasPrefix("iPad") ? "iPad" : "iPhone"
+  }
+
+  private static func hardwareModel() -> String {
+    var system = utsname()
+    uname(&system)
+    return withUnsafeBytes(of: system.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+  }
 }
 
 struct SyncJournal: Codable, Equatable, Sendable {

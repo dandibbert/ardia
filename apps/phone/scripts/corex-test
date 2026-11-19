@@ -3,7 +3,7 @@
 # Runs the phone's Kotlin unit tests (:ardia-phone-native, :app and :ardia-design testDebugUnitTest) on corex, in the bots container, in
 # corex-build's build-only clone at a pushed commit, so no Gradle runs on the Mac. --patch FILE (or - for stdin)
 # applies a diff from the main checkout on top of the commit for this run only; the clone is reset when the run
-# ends, as every build resets it. Waits like corex-build for another Gradle run or memory, and holds the clone's lock
+# ends, as every build resets it. Waits like corex-build for another busy Gradle run or memory, and holds the clone's lock
 # so a build and a test never share it. Gradle runs without a daemon and Kotlin in-process. Prints each test class's
 # count and every failure; exits 1 when one fails. --device SERIAL runs :ardia-phone-native's device tests
 # (src/androidTest) on that phone instead, on demand and never in CI: hold the phone's Simlock lease first, as any
@@ -113,8 +113,17 @@ fi
 
 exec 9> "$base/clone.lock"
 flock -w "${ARDIA_BUILD_WAIT:-1800}" 9 || { echo "the build clone stayed busy" >&2; exit 75; }
-others() { pgrep -f 'org.gradle.launcher.daemon|GradleWrapperMain|org.gradle.launcher.GradleMain|KotlinCompileDaemon' || true; }
-spare() { echo $(( (limit - $(cat /sys/fs/cgroup/memory.current) + $(awk '$1 == "inactive_file" || $1 == "slab_reclaimable" { sum += $2 } END { printf "%d", sum }' /sys/fs/cgroup/memory.stat)) / gib )); }
+cpuTicks() { local total=0 pid; for pid in "$@"; do [ -r "/proc/$pid/stat" ] && total=$(( total + $(awk '{ print $14 + $15 }' "/proc/$pid/stat" 2>/dev/null || echo 0) )); done; echo "$total"; }
+others() {
+  local pids before
+  pids="$(pgrep -f 'org.gradle.launcher.daemon|GradleWrapperMain|org.gradle.launcher.GradleMain|KotlinCompileDaemon' || true)"
+  [ -n "$pids" ] || return 0
+  before="$(cpuTicks $pids)"
+  sleep 5
+  [ $(( $(cpuTicks $pids) - before )) -gt 50 ] && echo "$pids"
+  return 0
+}
+spare() { echo $(( (limit - $(cat /sys/fs/cgroup/memory.current) + $(awk '$1 == "inactive_file" || $1 == "slab_reclaimable" { sum += $2 } END { printf "%.0f", sum }' /sys/fs/cgroup/memory.stat)) / gib )); }
 deadline=$(( $(date +%s) + ${ARDIA_BUILD_WAIT:-1800} ))
 while [ -n "$(others)" ] || [ "$(spare)" -lt 6 ]; do
   [ "$(date +%s)" -lt "$deadline" ] || { echo "bots stayed busy; not testing" >&2; exit 75; }

@@ -5,6 +5,9 @@ import { SearchTray } from "../components/search/SearchTray";
 import * as browse from "../state/browse/store";
 import { presentSearch, useSearch } from "../state/search/store";
 import { renderSurface, unmount, withTabs } from "../../test/render/harness";
+import { useTabs } from "../state/tabs/store";
+
+const telemetry = require("../state/telemetry/telemetry") as typeof import("../state/telemetry/telemetry");
 
 const mockField = { native: true, setText: [] as [string, boolean][], focused: 0, blurred: 0 };
 
@@ -162,5 +165,20 @@ test("a drag down that lets the keyboard go blurs the native field too, so the k
   act(() => jest.runOnlyPendingTimers());
   expect(mockField.blurred).toBeGreaterThan(0);
   cancel.mockRestore();
+  unmount(root);
+});
+
+test("a swipe that scrolls the address is counted, and never from an Incognito tab", () => {
+  const counted = jest.spyOn(telemetry, "countUsage").mockImplementation(() => undefined);
+  presentSearch("start", "");
+  const root = renderSurface(<SearchTray />);
+  act(() => field(root)!.props.onFieldScroll());
+  expect(counted).toHaveBeenCalledWith("address_field_scrolled");
+  counted.mockClear();
+  act(() => useTabs.setState({ incognito: true }));
+  act(() => field(root)!.props.onFieldScroll());
+  expect(counted).not.toHaveBeenCalled();
+  act(() => useTabs.setState({ incognito: false }));
+  counted.mockRestore();
   unmount(root);
 });

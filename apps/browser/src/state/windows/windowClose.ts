@@ -9,6 +9,8 @@ import { closeWindowAnimated } from "./closeAnimated";
 import { isEmptyCardTab } from "../omnibox/newTabBarPolicy";
 import { askBeforeQuitting } from "./quitWarning";
 import { startClosingWindow, stopClosingWindow } from "./closingWindows";
+import { noteQuitAskedAfterTabsConfirm } from "../telemetry/quitWarningCounts";
+import { consentToken } from "../telemetry/client";
 
 export { closeHeard };
 
@@ -71,7 +73,8 @@ async function askToClose(windowId: string, ask: CloseAsk, closing?: string[]): 
 const cancel = (suppressWarning = false): WindowCloseDecision => ({ decision: "cancel", suppressWarning });
 
 export async function decideWindowClose(windowId: string, ask: CloseAsk = confirm): Promise<WindowCloseDecision> {
-  const quitWarning = await askBeforeQuitting(windowId, ask);
+  const consent = consentToken();
+  let quitWarning = await askBeforeQuitting(windowId, ask);
   if (quitWarning === "cancelled") return cancel();
   const asked = new Set<string>();
   let suppressWarning = false;
@@ -87,6 +90,10 @@ export async function decideWindowClose(windowId: string, ask: CloseAsk = confir
     suppressWarning ||= answer.suppressWarning;
     if (answer.decision === "cancel") return cancel(suppressWarning);
     for (const id of closing) asked.add(id);
+    if (quitWarning !== "notAsked") continue;
+    quitWarning = await askBeforeQuitting(windowId, ask);
+    if (quitWarning !== "notAsked") noteQuitAskedAfterTabsConfirm(quitWarning === "cancelled", consent);
+    if (quitWarning === "cancelled") return cancel(suppressWarning);
   }
 }
 

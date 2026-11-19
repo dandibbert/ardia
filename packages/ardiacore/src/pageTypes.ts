@@ -52,6 +52,7 @@ export type OpenWindowRequest = {
   point?: { x: number; y: number };
   site?: boolean;
   fromClick?: boolean;
+  shiftClick?: boolean;
   linkWait?: "matched" | "skipped" | "timedOut";
   popup?: boolean;
 };
@@ -114,8 +115,10 @@ export type WebNotification = {
   isMainFrame: boolean;
 };
 
-export type PictureInPictureState = { kind: "video" | "document"; active: boolean; fullScreenSpaces?: boolean; leftApp?: boolean; leftTab?: boolean };
-export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean };
+export type PictureInPictureShown = { kind: "video" | "document"; active: true; fullScreenSpaces: boolean; leftApp?: boolean; leftTab: boolean; epoch: string; closedBy?: "app" | "chrome"; auto?: boolean };
+export type PictureInPictureState = { kind: "video" | "document"; active: boolean; closedBy?: "app" | "chrome"; auto?: boolean } | PictureInPictureShown;
+export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean; epoch: string };
+export type PictureInPictureSkip = { seconds: number; epoch: string };
 export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
 export type MediaFault = { reason: string; muted?: boolean; blockerActive?: boolean };
 export type ControlPress = { clickAt: number; control: number };
@@ -164,14 +167,8 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 
 export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
 export type ScrollState = "down" | "up" | "top";
+export type FocusRestoreOutcome = "focused" | "kept" | "refused" | "gaveUp" | "unknown";
 export type ProtectedMediaRequest = { keySystem: string; main: boolean };
-export type FairPlayReport = {
-  event: "played" | "failed" | "mirrored" | "mirrorResync" | "pip" | "pipReopen" | "choppy" | "nowPlayingCommand";
-  step?: "license" | "playback" | "player";
-  video?: boolean;
-  site?: "youtube";
-  fitted?: boolean;
-};
 
 export type WebViewProps = ViewProps & {
   engine?: PageEngine;
@@ -184,6 +181,7 @@ export type WebViewProps = ViewProps & {
   standalone?: boolean;
   extensionHost?: "popup" | "sidePanel";
   visible?: boolean;
+  selected?: boolean;
   warm?: boolean;
   neighbour?: boolean;
   pageBackgroundColor?: string;
@@ -213,9 +211,9 @@ export type WebViewProps = ViewProps & {
   onNotification?: (notification: WebNotification) => void;
   onNotificationClose?: (id: string) => void;
   onPictureInPicture?: (state: PictureInPictureState) => void;
-  onAutoPictureInPictureKept?: (reason: AutoPictureInPictureHold) => void;
+  onAutoPictureInPictureKept?: (reason: AutoPictureInPictureHold, epoch: string) => void;
   onPictureInPictureDragged?: (drag: PictureInPictureDrag) => void;
-  onPictureInPictureSkip?: (seconds: number) => void;
+  onPictureInPictureSkip?: (skip: PictureInPictureSkip) => void;
   onMediaFault?: (fault: MediaFault) => void;
   onActivateRequest?: (request: ActivateRequest) => void;
   onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;
@@ -223,10 +221,10 @@ export type WebViewProps = ViewProps & {
   onCommand?: (command: PageCommand) => void;
   onPageFocus?: () => void;
   onPagePress?: (refused: boolean) => void;
+  onFocusRestore?: (outcome: FocusRestoreOutcome) => void;
   onSelection?: (selection: PageSelection | null) => void;
   onScroll?: (state: ScrollState) => void;
   onProtectedMedia?: (request: ProtectedMediaRequest) => void;
-  onFairPlay?: (report: FairPlayReport) => void;
   onAutoplayBlocked?: (count: number) => void;
   onReady?: () => void;
   onDiscarded?: (url: string, reason: DiscardReason | null) => void;

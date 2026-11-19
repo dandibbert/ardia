@@ -11,8 +11,8 @@ import type {
   DiscardReason,
   DisplayMediaRequest,
   DownloadNavigation,
-  FairPlayReport,
   FindResult,
+  FocusRestoreOutcome,
   LoadError,
   MediaAccess,
   MediaFault,
@@ -25,6 +25,7 @@ import type {
   PasswordPrompt,
   PictureInPictureState,
   PictureInPictureDrag,
+  PictureInPictureSkip,
   ProtectedMediaRequest,
   ScrollState,
   SecurityInfo,
@@ -56,9 +57,9 @@ type NativeEvents = {
   onNotification: WebNotification;
   onNotificationClose: { id: string };
   onPictureInPicture: PictureInPictureState;
-  onAutoPictureInPictureKept: { appSwitch?: boolean; reason?: string };
+  onAutoPictureInPictureKept: { appSwitch?: boolean; reason?: string; epoch?: string };
   onPictureInPictureDragged: PictureInPictureDrag;
-  onPictureInPictureSkip: { seconds: number };
+  onPictureInPictureSkip: PictureInPictureSkip;
   onMediaFault: MediaFault;
   onActivateRequest: ActivateRequest;
   onDisplayMediaRequest: DisplayMediaRequest;
@@ -66,10 +67,10 @@ type NativeEvents = {
   onCommand: PageCommand;
   onPageFocus: object;
   onPagePress: { refused?: boolean };
+  onFocusRestore: { outcome?: string };
   onSelection: { selection: PageSelection | null };
   onScroll: { state: ScrollState };
   onProtectedMedia: ProtectedMediaRequest;
-  onFairPlay: FairPlayReport;
   onAutoplayBlocked: { count?: number };
   onReady: object;
   onDiscarded: { url: string; reason?: DiscardReason | "" };
@@ -83,6 +84,8 @@ type NativeEvents = {
 export type Handlers = keyof NativeEvents;
 export type PageEvent = { name: string; data: unknown };
 export type NativeProps = Omit<WebViewProps, Handlers> & { pageEvents: string[]; onPageEvent: (e: NativeSyntheticEvent<PageEvent>) => void };
+
+const FOCUS_RESTORE_OUTCOMES: readonly FocusRestoreOutcome[] = ["focused", "kept", "refused", "gaveUp"];
 
 const PAGE_EVENTS = {
   onNavigationChange: "navigation",
@@ -117,10 +120,10 @@ const PAGE_EVENTS = {
   onCommand: "command",
   onPageFocus: "focus",
   onPagePress: "pagePress",
+  onFocusRestore: "focusRestore",
   onSelection: "selection",
   onScroll: "scroll",
   onProtectedMedia: "protectedMedia",
-  onFairPlay: "fairPlay",
   onAutoplayBlocked: "autoplayBlocked",
   onReady: "ready",
   onDiscarded: "discarded",
@@ -158,9 +161,9 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onNotification: (e) => [e],
   onNotificationClose: (e) => [e.id],
   onPictureInPicture: (e) => [e],
-  onAutoPictureInPictureKept: (e) => [e.reason === "nothingPlaying" ? "nothingPlaying" : e.appSwitch ? "appSwitch" : "onScreen"],
-  onPictureInPictureDragged: (e) => [{ offCursor: !!e.offCursor, slowMove: !!e.slowMove }],
-  onPictureInPictureSkip: (e) => [e.seconds],
+  onAutoPictureInPictureKept: (e) => [e.reason === "nothingPlaying" ? "nothingPlaying" : e.appSwitch ? "appSwitch" : "onScreen", typeof e.epoch === "string" ? e.epoch : ""],
+  onPictureInPictureDragged: (e) => [{ offCursor: !!e.offCursor, slowMove: !!e.slowMove, epoch: e.epoch }],
+  onPictureInPictureSkip: (e) => [{ seconds: e.seconds, epoch: e.epoch }],
   onMediaFault: (e) => [e],
   onActivateRequest: (e) => [e],
   onDisplayMediaRequest: (e) => [e],
@@ -168,10 +171,10 @@ const unwrap: { [K in Handlers]: (e: NativeEvents[K]) => Parameters<NonNullable<
   onCommand: (e) => [e],
   onPageFocus: () => [],
   onPagePress: (e) => [e.refused === true],
+  onFocusRestore: (e) => [FOCUS_RESTORE_OUTCOMES.find((o) => o === e.outcome) ?? "unknown"],
   onSelection: (e) => [e.selection],
   onScroll: (e) => [e.state],
   onProtectedMedia: (e) => [e],
-  onFairPlay: (e) => [e],
   onAutoplayBlocked: (e) => [Number.isInteger(e.count) ? Math.min(Math.max(e.count!, 1), 20) : 1],
   onReady: () => [],
   onDiscarded: (e) => [toAppUrl(e.url), e.reason || null],

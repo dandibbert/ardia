@@ -65,7 +65,7 @@ const SHEET_WARM_AFTER_MS = 1_000;
 const SHEET_WARM_MS = 700;
 let sheetWarmed = false;
 
-const WARM_ROWS: BrowserTab[] = [{ id: "archive-warm", url: "https://example.com/", title: "", created: 0, lastActive: 0, archivedAt: 0, position: 0, profileSyncId: null, faviconUrl: null, themeColorHex: null, snapshotFileName: null, origin: "typed", receivedKey: null, receivedFromDevice: null, isPrivate: false }];
+const WARM_ROWS: BrowserTab[] = [{ id: "archive-warm", url: "https://example.com/", title: "", created: 0, lastActive: 0, archivedAt: 0, position: 0, profileSyncId: null, faviconUrl: null, themeColorHex: null, snapshotFileName: null, origin: "typed", receivedKey: null, receivedFromDevice: null, pinnedKey: null, isPrivate: false }];
 
 function WarmArchive() {
   const searchText = useNativeState("");

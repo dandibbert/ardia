@@ -14,6 +14,7 @@ export type DeckGeometry = {
   cardCenterY: number;
   barCenterY: number;
   tabButtonX: number;
+  screenCorner: number;
 };
 
 export const DECK = {
@@ -55,7 +56,7 @@ function reach(peek: number, spacing: number): number {
   return value;
 }
 
-export function deckGeometry(width: number, height: number, safeTop: number, safeBottom: number, safeSide = 0, os: string = "android", design: Design = "original", chromeHeight = 0): DeckGeometry {
+export function deckGeometry(width: number, height: number, safeTop: number, safeBottom: number, safeSide = 0, os: string = "android", design: Design = "original", chromeHeight = 0, screenCorner: number = DECK.displayCornerRadius): DeckGeometry {
   const w = Math.max(width, 1);
   const h = Math.max(height, 1);
   const redesigned = design === "redesigned";
@@ -81,6 +82,7 @@ export function deckGeometry(width: number, height: number, safeTop: number, saf
     cardCenterY: bandTop + band / 2,
     barCenterY: h - barCenter,
     tabButtonX: safeSide + 16 + 17.5,
+    screenCorner,
   };
 }
 
@@ -150,11 +152,15 @@ export function focusedIndex(scroll: number, count: number): number {
   return Math.min(Math.max(swiftRound(scroll), 0), Math.max(count - 1, 0));
 }
 
-export const initialDeckScroll = (count: number) => Math.max(0, count - 2);
+export const initialDeckScroll = (count: number) => {
+  "worklet";
+  return Math.max(0, count - 2);
+};
 
-export const openingDeckScroll = (index: number, count: number) => (index < count - 1 ? index : Math.max(0, Math.min(index - 1, count - 1)));
+export const openingDeckScroll = (index: number, count: number, centred = false) => (centred || index < count - 1 ? index : Math.max(0, Math.min(index - 1, count - 1)));
 
 export const scrollAfterRemoving = (removed: number, scroll: number, remaining: number) => {
+  "worklet";
   if (remaining <= 0) return 0;
   const shifted = removed < scroll ? scroll - 1 : scroll;
   return Math.min(Math.max(shifted, 0), remaining - 1);
@@ -178,8 +184,67 @@ export function deckSlotsNow(ids: readonly string[], from: DeckSlots, shift: num
 }
 
 export function scrollAfterClosing(position: number, remaining: number, onlyTail: boolean): number {
+  "worklet";
   return onlyTail ? Math.min(position, initialDeckScroll(remaining)) : position;
 }
+
+export function deckScrollAfterChange(was: readonly string[], next: readonly string[], scroll: number, searched: boolean): number {
+  "worklet";
+  if (searched) return Math.max(next.length - 1, 0);
+  const focused = was[focusedIndex(scroll, was.length)];
+  const stays = focused ? next.indexOf(focused) : -1;
+  const removedAt = focused ? was.indexOf(focused) : 0;
+  const onlyTail = next.length < was.length && next.every((id, i) => id === was[i]);
+  return scrollAfterClosing(stays >= 0 ? stays : scrollAfterRemoving(removedAt, Math.round(scroll), next.length), next.length, onlyTail);
+}
+
+export type DeckLeave = { at: number; z: number; t0: number; lift: number; away: number; push: number; response: number; fadeMs: number; last: boolean };
+
+export type DeckLeaving = Readonly<Record<string, DeckLeave>>;
+
+export const DECK_FLY = { maxPush: 30, clearance: 40 } as const;
+
+export const deckFlyAway = (g: DeckGeometry, shift: number) => {
+  "worklet";
+  return -(g.cardCenterY + shift + g.cardHeight);
+};
+
+export const deckFlyGoneLift = (leave: DeckLeave, cardHeight: number) => leave.away + cardHeight / 2 - DECK_FLY.clearance;
+
+export function deckFlyPush(velocity: number, from: number, away: number): number {
+  "worklet";
+  const distance = away - from;
+  if (distance >= 0) return 0;
+  return Math.min(Math.max(velocity / distance, 0), DECK_FLY.maxPush) * distance;
+}
+
+export function deckFlyLift(leave: DeckLeave, ms: number): number {
+  "worklet";
+  const t = Math.max(ms, 0) / 1000;
+  const omega = (2 * Math.PI) / leave.response;
+  const from = leave.lift - leave.away;
+  return leave.away + (from + (leave.push + omega * from) * t) * Math.exp(-omega * t);
+}
+
+export function deckLeaveFade(leave: DeckLeave, ms: number): number {
+  "worklet";
+  return leave.fadeMs > 0 ? Math.min(Math.max(ms / leave.fadeMs, 0), 1) : 0;
+}
+
+export function deckLeaveGoneMs(leave: DeckLeave, goneLift: number): number {
+  if (leave.fadeMs > 0) return leave.fadeMs;
+  for (let ms = 0; ms < DECK_FLY_LIMIT_MS; ms += 4) if (deckFlyLift(leave, ms) <= goneLift) return ms;
+  return DECK_FLY_LIMIT_MS;
+}
+
+export function deckLeaveSlotsNow(leaving: DeckLeaving, from: DeckSlots, shift: number, gap: number): Record<string, number> {
+  "worklet";
+  const now: Record<string, number> = {};
+  for (const id of Object.keys(leaving)) now[id] = deckSlot(id, leaving[id]!.at, from, shift, gap);
+  return now;
+}
+
+const DECK_FLY_LIMIT_MS = 2000;
 
 export const lerp = (from: number, to: number, t: number) => {
   "worklet";
@@ -281,6 +346,14 @@ export function mergeDeckOrder(shown: readonly string[], live: readonly string[]
 }
 
 export const DECK_CHROME_FROM = 0.6;
+
+export const PAGE_BAR_GONE_AT = 0.85;
+export const PAGE_BAR_WHOLE_AT = 0.35;
+
+export function pageBarGhostOpacity(positionProgress: number): number {
+  "worklet";
+  return Math.min(1, Math.max(0, (PAGE_BAR_GONE_AT - positionProgress) / (PAGE_BAR_GONE_AT - PAGE_BAR_WHOLE_AT)));
+}
 
 export function deckChromeOpacity(positionProgress: number): number {
   "worklet";

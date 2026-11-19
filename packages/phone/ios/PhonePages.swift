@@ -125,6 +125,20 @@ final class PhonePages {
     ]
   }
 
+  func translation() -> [String: Any?] {
+    let preferences = engine.preferences
+    return ["language": preferences.translateLanguage, "languageName": preferences.translateLanguage.flatMap { PageTranslation.displayName(of: $0) }, "confirmed": preferences.translateConfirmed]
+  }
+
+  func translationURL(for pageURL: String) -> String? {
+    guard let url = URL(string: pageURL) else { return nil }
+    return PageTranslation.url(translating: url, into: engine.preferences.translationTarget)?.absoluteString
+  }
+
+  func confirmTranslation() {
+    engine.preferences.translateConfirmed = true
+  }
+
   func print(_ pageID: String) -> Bool {
     guard let page = page(pageID), let address = page.url?.absoluteString, BrowserURL.isSyncable(address), let webView = page.webView else { return false }
     let info = UIPrintInfo.printInfo()

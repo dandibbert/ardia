@@ -3,7 +3,8 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import { engineProfile, isIncognitoProfile } from "../browser/model";
 import { engineProfiles } from "../profiles/engineProfiles";
-import type { HistoryEntry } from "../browser/types";
+import type { ClosedTab, HistoryEntry } from "../browser/types";
+import { withImportedCleaned } from "../pins/importedCleaned";
 import { isWebPageUrl } from "../../lib/url";
 
 export type HistoryView = { list: HistoryEntry[]; floor: number; ready: boolean };
@@ -14,11 +15,14 @@ export type HistorySlice = {
   removeHistory(profileId: string, urls: string[]): void;
   clearHistory(profileId: string, since?: number, until?: number): void;
   importHistory(profileId: string, entries: Omit<HistoryEntry, "favicon">[]): number;
+  importCleanedTabs(entries: ClosedTab[]): { added: number; already: number };
 };
 
 export const MAX_HISTORY = 100_000;
 export const MAX_VISIT_TIMES = 50;
 export const SUGGESTION_HISTORY = 5000;
+export const SUGGESTION_FREQUENT = 2000;
+export const FREQUENT_VISITS = 4;
 
 export const NO_HISTORY: HistoryEntry[] = [];
 
@@ -33,7 +37,16 @@ const newestPages = new WeakMap<HistoryEntry[], HistoryEntry[]>();
 export function suggestionHistory(list: HistoryEntry[]): HistoryEntry[] {
   if (list.length <= SUGGESTION_HISTORY) return list;
   let newest = newestPages.get(list);
-  if (!newest) newestPages.set(list, (newest = list.slice(0, SUGGESTION_HISTORY)));
+  if (!newest) {
+    newest = list.slice(0, SUGGESTION_HISTORY);
+    let frequent = 0;
+    for (let i = SUGGESTION_HISTORY; i < list.length && frequent < SUGGESTION_FREQUENT; i++) {
+      if (list[i]!.visits < FREQUENT_VISITS) continue;
+      newest.push(list[i]!);
+      frequent++;
+    }
+    newestPages.set(list, newest);
+  }
   return newest;
 }
 
@@ -65,6 +78,12 @@ export const createHistorySlice: StateCreator<BrowserState, [], [], HistorySlice
     const gone = new Set(urls);
     set((s) => withHistoryList(s, engineProfile(s, profileId), historyOf(s, profileId).filter((h) => !gone.has(h.url))));
     void deleteHistoryUrls(engineProfile(get(), profileId), urls).catch(failed("delete"));
+  },
+
+  importCleanedTabs(entries) {
+    const { cleanedTabs, added, already } = withImportedCleaned(get(), entries);
+    if (added) set({ cleanedTabs });
+    return { added, already };
   },
 
   importHistory(profileId, entries) {

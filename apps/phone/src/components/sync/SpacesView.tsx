@@ -230,7 +230,7 @@ function SpacePage({ profile, isShown, onMenu, bottom }: { profile: SyncedProfil
             onToggle={toggle}
             onShowAll={(id) => showAllDeviceTabs(profile.syncId, id)}
             onLongPress={linkMenu}
-            onFolder={(tile, anchor) => onMenu({ items: (tile.folder ?? []).map((tab) => ({ label: remoteTitle(tab.title, tab.url), onPress: () => openRemote(tab.url, tab.title, profile.syncId) })), y: 0, anchor })}
+            onFolder={(tile, anchor) => onMenu({ items: (tile.folder ?? []).map((tab) => ({ label: remoteTitle(tab.title, tab.url), onPress: () => openRemote(tab.url, tab.title, profile.syncId, tab.key) })), y: 0, anchor })}
             tint={theme.secondaryLabel}
           />
         </Appearing>
@@ -283,7 +283,7 @@ function Row({ row, profileId, tint, onToggle, onShowAll, onLongPress, onFolder 
       return (
         <Pressable
           accessibilityRole="button"
-          onPress={() => openRemote(row.url, row.title, profileId)}
+          onPress={() => openRemote(row.url, row.title, profileId, row.pinnedKey)}
           onLongPress={(event) => onLongPress(row.url, row.title, event.nativeEvent.pageY)}
           {...screenReaderActions([{ name: "longpress", run: () => onLongPress(row.url, row.title, 0) }])}
           style={({ pressed }) => [styles.row, { paddingLeft: space.l + INDENT * row.depth }, pressed ? { backgroundColor: theme.rowHighlight } : null]}

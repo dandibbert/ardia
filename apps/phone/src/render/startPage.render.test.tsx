@@ -157,12 +157,12 @@ test("a tile opens its page in the space, and a folder tile opens a menu of its 
   withSpaces([profile("work", "Work", [tile(0), tile(1, [{ key: "f0", title: "Inside", url: "https://inside.example/", icon: null }])])]);
   const root = start();
   act(() => root.root.findAll((node) => node.props.accessibilityLabel === "Pin 0" && typeof node.props.onPress === "function")[0]!.props.onPress());
-  expect(open).toHaveBeenCalledWith("https://pin0.example/", "Pin 0", "work");
+  expect(open).toHaveBeenCalledWith("https://pin0.example/", "Pin 0", "work", "k0");
   act(() => root.root.findAll((node) => node.props.accessibilityLabel === "Pin 1" && typeof node.props.onPress === "function")[0]!.props.onPress());
   const menu = root.root.findAll((node) => node.type === FloatingMenu)[0]!;
   expect(menu.props.items.map((item: { label: string }) => item.label)).toEqual(["Inside"]);
   act(() => menu.props.items[0].onPress());
-  expect(open).toHaveBeenLastCalledWith("https://inside.example/", "Inside", "work");
+  expect(open).toHaveBeenLastCalledWith("https://inside.example/", "Inside", "work", "f0");
   unmount(root);
 });
 
@@ -202,29 +202,29 @@ test("in a private tab a swipe still switches space but is never counted", () =>
   unmount(root);
 });
 
-test("with more than one space the switcher is a button whose menu lists the spaces, the current one checked, and picking one switches, counted as a pick and not a swipe", () => {
+test("with more than one space the name is still a plain header with no chevron and no menu, and adjusting the dots switches space, counted as a pick and not a swipe", () => {
   withSpaces([profile("work", "Work"), profile("home", "Home")]);
   const root = start();
-  const button = root.root.findAll((node) => node.props.accessibilityLabel === "Space, Work" && typeof node.props.onPress === "function")[0]!;
-  act(() => button.props.onPress());
-  const menu = root.root.findAll((node) => node.type === FloatingMenu)[0]!;
-  expect(menu.props.items.map((item: { label: string; checked: boolean }) => [item.label, item.checked])).toEqual([
-    ["Work", true],
-    ["Home", false],
-  ]);
-  act(() => menu.props.items[1].onPress());
+  expect(root.root.findAll((node) => node.props.accessibilityRole === "header" && node.props.accessibilityLabel === "Work")).not.toHaveLength(0);
+  expect(root.root.findAll((node) => node.props.accessibilityLabel === "Space, Work")).toHaveLength(0);
+  expect(root.root.findAll((node) => node.type === FloatingMenu && node.props.items.some((item: { label: string }) => item.label === "Home"))).toHaveLength(0);
+  const dots = host(root, "startPageDots")!;
+  expect(dots.props.accessibilityRole).toBe("adjustable");
+  expect(dots.props.accessibilityValue).toEqual({ text: "Work" });
+  act(() => dots.props.onAccessibilityAction({ nativeEvent: { actionName: "decrement" } }));
+  expect(select).not.toHaveBeenCalled();
+  act(() => dots.props.onAccessibilityAction({ nativeEvent: { actionName: "increment" } }));
   expect(select).toHaveBeenCalledWith("home");
   expect(tick).toHaveBeenCalledTimes(1);
   expect(counted.mock.calls).toEqual([["spaces_picked"]]);
   unmount(root);
 });
 
-test("in a private tab a pick from the switcher still switches space but is never counted", () => {
+test("in a private tab adjusting the dots still switches space but is never counted", () => {
   act(() => useTabs.setState({ incognito: true }));
   withSpaces([profile("work", "Work"), profile("home", "Home")]);
   const root = start();
-  act(() => root.root.findAll((node) => node.props.accessibilityLabel === "Space, Work" && typeof node.props.onPress === "function")[0]!.props.onPress());
-  act(() => root.root.findAll((node) => node.type === FloatingMenu)[0]!.props.items[1].onPress());
+  act(() => host(root, "startPageDots")!.props.onAccessibilityAction({ nativeEvent: { actionName: "increment" } }));
   expect(select).toHaveBeenCalledWith("home");
   expect(counted).not.toHaveBeenCalled();
   unmount(root);
@@ -269,6 +269,20 @@ test("while the search tray is up the spaces fade out and shrink to 0.96, the ba
   expect(content(root).opacity).toBe(1);
   expect(content(root).transform[0]!.scale).toBe(1);
   expect(host(root, "startContent")!.props.pointerEvents).toBe("box-none");
+  unmount(root);
+});
+
+test("on the original start page Android's bar stays in place under the rising tray, as the page's bar does, so no frame has no bar; iPhone fades it", () => {
+  const root = start("original");
+  act(() => presentSearch("home", ""));
+  act(() => jest.advanceTimersByTime(600));
+  const bar = host(root, "startDeckBar")!;
+  expect((getAnimatedStyle(bar) as { opacity: number }).opacity).toBe(Platform.OS === "android" ? 1 : 0);
+  expect(bar.props.pointerEvents).toBe("none");
+  expect(bar.props.accessibilityElementsHidden).toBe(true);
+  act(() => dismissSearch());
+  act(() => jest.advanceTimersByTime(600));
+  expect((getAnimatedStyle(host(root, "startDeckBar")!) as { opacity: number }).opacity).toBe(1);
   unmount(root);
 });
 

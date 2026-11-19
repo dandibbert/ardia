@@ -6,7 +6,7 @@ export const IDLE_MAC_TABS = 3;
 
 export type SpaceRow =
   | { kind: "tiles"; key: string; tiles: PinnedTile[] }
-  | { kind: "tab"; key: string; title: string; url: string; depth: number; icon: string | null }
+  | { kind: "tab"; key: string; title: string; url: string; depth: number; icon: string | null; pinnedKey: string | null }
   | { kind: "group"; key: string; title: string; depth: number; isOpen: boolean; icon: string | null; color: string | null }
   | { kind: "folder"; key: string; title: string; depth: number; isOpen: boolean }
   | { kind: "header"; key: string; title: string; icon: "star" | "laptop" | "desktop" | "phone" }
@@ -20,7 +20,7 @@ export const remoteTitle = (title: string, url: string) => title.trim() || hostO
 function pinnedRows(sections: readonly PinnedSection[], depth: number, open: ReadonlySet<string>, rows: SpaceRow[]) {
   for (const section of sections) {
     if (section.tab) {
-      rows.push({ kind: "tab", key: `pinned:${section.tab.key}:${depth}`, title: remoteTitle(section.tab.title, section.tab.url), url: section.tab.url, depth, icon: section.tab.icon });
+      rows.push({ kind: "tab", key: `pinned:${section.tab.key}:${depth}`, title: remoteTitle(section.tab.title, section.tab.url), url: section.tab.url, depth, icon: section.tab.icon, pinnedKey: section.tab.key });
     } else if (section.group) {
       const key = `group:${section.group.key}`;
       const isOpen = open.has(key);
@@ -33,7 +33,7 @@ function pinnedRows(sections: readonly PinnedSection[], depth: number, open: Rea
 function bookmarkRows(items: readonly BookmarkItem[], depth: number, open: ReadonlySet<string>, rows: SpaceRow[]) {
   for (const item of items) {
     if (item.url) {
-      rows.push({ kind: "tab", key: `bookmark:${item.key}`, title: remoteTitle(item.title, item.url), url: item.url, depth, icon: null });
+      rows.push({ kind: "tab", key: `bookmark:${item.key}`, title: remoteTitle(item.title, item.url), url: item.url, depth, icon: null, pinnedKey: null });
       continue;
     }
     const key = `folder:${item.key}`;
@@ -58,7 +58,7 @@ export function spaceRows(profile: SyncedProfile, openGroups: ReadonlySet<string
     rows.push({ kind: "header", key: `device:${device.deviceId}`, title: device.deviceName, icon });
     const shown = expanded ? device.tabs : device.tabs.slice(0, COLLAPSED_LIMIT);
     shown.forEach((tab, index) =>
-      rows.push({ kind: "tab", key: `remote:${device.deviceId}:${index}`, title: remoteTitle(tab.title, tab.url), url: tab.url, depth: 0, icon: null }),
+      rows.push({ kind: "tab", key: `remote:${device.deviceId}:${index}`, title: remoteTitle(tab.title, tab.url), url: tab.url, depth: 0, icon: null, pinnedKey: null }),
     );
     if (!expanded) rows.push({ kind: "showAll", key: `more:${device.deviceId}`, deviceId: device.deviceId });
   }
@@ -76,6 +76,15 @@ function bookmarkUrls(items: readonly BookmarkItem[], out: string[] = []): strin
 }
 
 export const pinKey = (profileSyncId: string | null, url: string) => `${profileSyncId ?? ""}|${landingKey(url)}`;
+
+export function pinnedKeyAt(tiles: readonly PinnedTile[], url: string): string | null {
+  for (const tile of tiles) {
+    const tabs = tile.folder?.length ? tile.folder : [tile];
+    const found = tabs.find((tab) => tab.url === url);
+    if (found) return found.key;
+  }
+  return null;
+}
 
 export function isPinnedOnMac(profile: SyncedProfile | null, url: string, onTheirWay: readonly string[] = []): boolean {
   if (!profile) return false;

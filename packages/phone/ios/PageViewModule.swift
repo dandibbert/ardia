@@ -183,6 +183,18 @@ public final class PageViewModule: Module {
       MainActor.assumeIsolated { PhonePages.shared.print(pageID) }
     }.runOnQueue(.main)
 
+    AsyncFunction("translation") { () -> [String: Any?] in
+      MainActor.assumeIsolated { PhonePages.shared.translation() }
+    }.runOnQueue(.main)
+
+    AsyncFunction("translationUrl") { (pageURL: String) -> String? in
+      MainActor.assumeIsolated { PhonePages.shared.translationURL(for: pageURL) }
+    }.runOnQueue(.main)
+
+    AsyncFunction("confirmTranslation") {
+      MainActor.assumeIsolated { PhonePages.shared.confirmTranslation() }
+    }.runOnQueue(.main)
+
     AsyncFunction("readableContent") { (pageID: String, promise: Promise) in
       Self.main(promise) { () -> [String: Any?]? in
         let page = try PhonePages.shared.require(pageID)
@@ -398,8 +410,20 @@ public final class PageViewModule: Module {
         view.obscuresSafeTop = follows == true
       }
 
+      Prop("pinsSafeArea") { (view: PageView, pins: Bool?) in
+        view.pinsSafeArea = pins == true
+      }
+
       Prop("swipeNavigation") { (view: PageView, mode: String?) in
         view.swipeNavigation = mode.flatMap(PageGestures.Swipe.init(rawValue:)) ?? .anywhere
+      }
+
+      Prop("closesOnSwipeBack") { (view: PageView, closes: Bool?) in
+        view.closesOnSwipeBack = closes == true
+      }
+
+      Prop("reopensOnSwipeForward") { (view: PageView, reopens: Bool?) in
+        view.reopensOnSwipeForward = reopens == true
       }
 
       Prop("pullToRefresh") { (view: PageView, pulls: Bool?) in

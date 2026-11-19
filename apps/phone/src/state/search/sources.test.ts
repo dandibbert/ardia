@@ -19,6 +19,7 @@ const tab = (id: string, url: string, title: string, isPrivate = false): Browser
   origin: "typed",
   receivedKey: null,
   receivedFromDevice: null,
+  pinnedKey: null,
   isPrivate,
 });
 

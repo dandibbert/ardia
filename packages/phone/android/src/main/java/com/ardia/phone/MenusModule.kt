@@ -14,8 +14,14 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.Menu
+import android.util.TypedValue
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.PopupMenu
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.facebook.react.uimanager.events.NativeGestureUtil
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
@@ -72,7 +78,7 @@ class ActionSheetRecord : Record {
 }
 
 internal object NativeMenuRules {
-    const val ARGUMENT = "ArdiaNativeMenus"
+    const val DRAWN_ARGUMENT = "ArdiaDrawnMenus"
 
     data class Item(val id: String, val title: String, val subtitle: String?, val destructive: Boolean, val disabled: Boolean, val checked: Boolean, val children: List<Row>?)
 
@@ -117,7 +123,20 @@ internal object NativeMenuRules {
         return if (choices.size <= 2) Sheet(choices, emptyList(), cancelTitle) else Sheet(emptyList(), choices, cancelTitle)
     }
 
-    fun asked(arguments: Map<String, Any>): Boolean = arguments[ARGUMENT] == true
+    fun nativeMenus(arguments: Map<String, Any>): Boolean = arguments[DRAWN_ARGUMENT] != true
+
+    fun estimatedHeight(rows: List<Row>, rowPx: Int, dividerPx: Int, paddingPx: Int): Int {
+        val groups = rows.map { it.group }.distinct().size
+        return rows.size * rowPx + (groups - 1).coerceAtLeast(0) * dividerPx + paddingPx * 2
+    }
+
+    fun anchorTop(preferredTop: Int, menuHeight: Int, roomTop: Int, roomBottom: Int): Int =
+        preferredTop.coerceAtMost(roomBottom - menuHeight).coerceAtLeast(roomTop)
+
+    data class Across(val x: Int, val endAligned: Boolean)
+
+    fun across(startX: Int, endX: Int, roomLeft: Int, roomRight: Int): Across =
+        if (startX + endX > roomLeft + roomRight) Across(endX.coerceIn(roomLeft, roomRight), true) else Across(startX.coerceIn(roomLeft, roomRight), false)
 
     fun destructiveColour(dark: Boolean): Int = if (dark) 0xFFFF453A.toInt() else 0xFFFF3B30.toInt()
 }
@@ -146,6 +165,10 @@ internal object NativeMenuStyle {
 }
 
 class NativeContextMenuView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+    private companion object {
+        const val SIDE_INSET_DP = 12
+    }
+
     private val onSelect by EventDispatcher()
     private val onOpen by EventDispatcher()
     private val onClose by EventDispatcher()
@@ -163,17 +186,13 @@ class NativeContextMenuView(context: Context, appContext: AppContext) : ExpoView
 
             override fun onSingleTapUp(event: MotionEvent): Boolean {
                 if (trigger != "tap") return false
-                show(event)
+                show(event, event.x, event.y)
                 return true
             }
-
-            override fun onLongPress(event: MotionEvent) {
-                if (trigger == "tap") return
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                show(event)
-            }
         },
-    )
+    ).apply { setIsLongpressEnabled(false) }
+
+    internal val opensOnItsOwnTimer: Boolean get() = gestures.isLongpressEnabled
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) =
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
@@ -185,19 +204,28 @@ class NativeContextMenuView(context: Context, appContext: AppContext) : ExpoView
         return super.dispatchTouchEvent(event)
     }
 
-    fun showFromCode() = show(null)
+    fun showFromCode(pressX: Double?, pressY: Double?) {
+        val density = resources.displayMetrics.density
+        if (pressX == null || pressY == null) return show(null, null, null)
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        show(null, (pressX * density).toFloat(), (pressY * density).toFloat())
+    }
 
-    private fun show(event: MotionEvent?) {
+    private fun show(event: MotionEvent?, pressX: Float?, pressY: Float?) {
         if (items.isEmpty() || showing != null) return
         if (event != null) {
             NativeGestureUtil.notifyNativeGestureStarted(this, event)
             parent?.requestDisallowInterceptTouchEvent(true)
         }
         val darkMenu = NativeMenuStyle.isDark(context, dark)
-        val popup = PopupMenu(NativeMenuStyle.themed(context, dark), this, Gravity.NO_GRAVITY)
+        val themed = NativeMenuStyle.themed(context, dark)
+        val rows = NativeMenuRules.rows(items)
+        val placed = placedAnchor(themed, rows, pressX, pressY)
+        val anchor = placed?.first
+        val popup = PopupMenu(themed, anchor ?: this, if (placed?.second == true) Gravity.END else Gravity.START)
         val ids = HashMap<Int, String>()
         order = 0
-        fill(popup.menu, NativeMenuRules.rows(items), ids, darkMenu)
+        fill(popup.menu, rows, ids, darkMenu)
         popup.menu.setGroupDividerEnabled(true)
         popup.setOnMenuItemClickListener { item ->
             val id = ids[item.itemId] ?: return@setOnMenuItemClickListener false
@@ -206,11 +234,41 @@ class NativeContextMenuView(context: Context, appContext: AppContext) : ExpoView
         }
         popup.setOnDismissListener {
             showing = null
+            anchor?.let { (it.parent as? ViewGroup)?.removeView(it) }
             onClose(emptyMap())
         }
         showing = popup
         popup.show()
         onOpen(emptyMap())
+    }
+
+    private fun placedAnchor(themed: Context, rows: List<NativeMenuRules.Row>, pressX: Float?, pressY: Float?): Pair<View, Boolean>? {
+        val content = rootView.findViewById<ViewGroup>(android.R.id.content) as? FrameLayout ?: return null
+        val bars = ViewCompat.getRootWindowInsets(this)?.getInsets(WindowInsetsCompat.Type.systemBars()) ?: return null
+        val here = IntArray(2).also(::getLocationInWindow)
+        val origin = IntArray(2).also(content::getLocationInWindow)
+        val density = resources.displayMetrics.density
+        val rowPx = TypedValue().let { value ->
+            if (themed.theme.resolveAttribute(android.R.attr.listPreferredItemHeightSmall, value, true)) value.getDimension(resources.displayMetrics).toInt() else (48 * density).toInt()
+        }
+        val menuHeight = NativeMenuRules.estimatedHeight(rows, rowPx, (9 * density).toInt(), (8 * density).toInt())
+        val preferredTop = if (pressY != null) here[1] + pressY.toInt() else here[1] + height
+        val top = NativeMenuRules.anchorTop(preferredTop, menuHeight, bars.top, rootView.height - bars.bottom - (8 * density).toInt())
+        val sideInset = (SIDE_INSET_DP * density).toInt()
+        val across = if (pressX != null) {
+            val x = here[0] + pressX.toInt()
+            NativeMenuRules.across(x, x, bars.left + sideInset, rootView.width - bars.right - sideInset)
+        } else {
+            NativeMenuRules.across(here[0], here[0] + width, bars.left + sideInset, rootView.width - bars.right - sideInset)
+        }
+        val left = (if (across.endAligned) across.x - 1 else across.x) - origin[0]
+        val anchor = View(context)
+        content.addView(anchor, FrameLayout.LayoutParams(1, 1).apply {
+            leftMargin = left
+            topMargin = top - origin[1] - 1
+        })
+        anchor.layout(left, top - origin[1] - 1, left + 1, top - origin[1])
+        return anchor to across.endAligned
     }
 
     private fun fill(menu: Menu, rows: List<NativeMenuRules.Row>, ids: HashMap<Int, String>, dark: Boolean) {
@@ -252,14 +310,14 @@ class NativeContextMenuView(context: Context, appContext: AppContext) : ExpoView
 }
 
 class MenusModule : Module() {
-    private fun nativeMenusAsked(): Boolean = NativeMenuRules.asked(LaunchExtras.arguments(LaunchExtras.of(appContext.currentActivity?.intent)))
+    private fun nativeMenusShown(): Boolean = NativeMenuRules.nativeMenus(LaunchExtras.arguments(LaunchExtras.of(appContext.currentActivity?.intent)))
 
     override fun definition() = ModuleDefinition {
         Name("ArdiaPhoneMenus")
 
         Constants {
-            val asked = nativeMenusAsked()
-            mapOf("hasContextMenu" to asked, "hasActionSheet" to asked)
+            val shown = nativeMenusShown()
+            mapOf("hasContextMenu" to shown, "hasActionSheet" to shown)
         }
 
         AsyncFunction("actionSheet") { options: ActionSheetRecord, promise: Promise ->
@@ -315,7 +373,7 @@ class MenusModule : Module() {
 
             Prop("appearance") { view: NativeContextMenuView, value: MenuAppearanceRecord? -> view.dark = value?.dark }
 
-            AsyncFunction("show") { view: NativeContextMenuView -> view.showFromCode() }.runOnQueue(Queues.MAIN)
+            AsyncFunction("show") { view: NativeContextMenuView, pressX: Double?, pressY: Double? -> view.showFromCode(pressX, pressY) }.runOnQueue(Queues.MAIN)
         }
     }
 }

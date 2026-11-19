@@ -19,6 +19,7 @@ nonisolated extension Motion {
   static let stageShadowIn = ArdiaDesign.MotionCurve.easeOut(duration: 0.15)
   static let stageFoldLag: Double = 1.0 / 60
   static let stageHandOff = ArdiaDesign.MotionCurve.easeOut(duration: 0.1)
+  static let stageRevealHold: Double = 0.25
   static let stageRevealFieldDelay: Double = 0.06
   static let stageRevealRowsDelay: Double = 0.09
   static let stageRevealCurve = ArdiaDesign.MotionCurve.easeOut(duration: 0.12)

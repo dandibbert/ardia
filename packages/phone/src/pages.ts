@@ -37,6 +37,8 @@ export type OffscreenCapture = { fileName: string; path: string; title: string |
 
 export type SitePermissionKind = "camera" | "microphone" | "location";
 
+export type PageTranslationState = { language: string | null; languageName: string | null; confirmed: boolean };
+
 export type SitePermissionGrant = { origin: string; host: string; permissions: SitePermissionKind[]; grantedAt: number };
 
 type PagesNative = {
@@ -68,6 +70,9 @@ type PagesNative = {
   download(pageId: string, url: string): Promise<void>;
   readableContent(pageId: string): Promise<ReadableContent | null>;
   print?(pageId: string): Promise<boolean>;
+  translation?(): Promise<PageTranslationState>;
+  translationUrl?(pageUrl: string): Promise<string | null>;
+  confirmTranslation?(): Promise<void>;
   presentSystemFind?(pageId: string, text: string | null): Promise<boolean>;
   snapshot(pageId: string, options: { maxWidth?: number; quality?: number; coveredInsets?: [number, number] }): Promise<PageSnapshot | null>;
   loadHtml(pageId: string, html: string, baseUrl: string): Promise<void>;
@@ -154,6 +159,9 @@ export const pages = {
     native().revokeSitePermission?.(origin, permission ?? null) ?? Promise.resolve(false),
   print: (pageId: string): Promise<boolean> => native().print?.(pageId) ?? Promise.resolve(false),
   canPrint: (): boolean => typeof native().print === "function",
+  translation: (): Promise<PageTranslationState | null> => native().translation?.() ?? Promise.resolve(null),
+  translationUrl: (pageUrl: string): Promise<string | null> => native().translationUrl?.(pageUrl) ?? Promise.resolve(null),
+  confirmTranslation: (): Promise<void> => native().confirmTranslation?.() ?? Promise.resolve(),
   hasSystemFind: (): boolean => typeof native().presentSystemFind === "function",
   presentSystemFind: (pageId: string, text?: string): Promise<boolean> => native().presentSystemFind?.(pageId, text ?? null) ?? Promise.resolve(false),
   snapshot: (pageId: string, options: { maxWidth?: number; quality?: number; coveredInsets?: PageToneInsets } = {}) =>

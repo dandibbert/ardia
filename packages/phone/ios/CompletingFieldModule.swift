@@ -7,6 +7,7 @@ final class CompletingFieldView: ExpoView {
   let onSubmit = EventDispatcher()
   let onFocusChange = EventDispatcher()
   let onSuffixChange = EventDispatcher()
+  let onFieldScroll = EventDispatcher()
 
   var textProp = ""
   var textCountProp = 0
@@ -53,6 +54,7 @@ final class CompletingFieldView: ExpoView {
       self.onFocusChange(["focused": focused])
     }
     field.onSuffixChange = { [weak self] suffix in self?.onSuffixChange(["suffix": suffix]) }
+    field.onTextScrolled = { [weak self] in self?.onFieldScroll([:]) }
     addSubview(field)
   }
 
@@ -141,7 +143,7 @@ public final class CompletingFieldModule: Module {
     Name("ArdiaPhoneCompletingField")
 
     View(CompletingFieldView.self) {
-      Events("onTypedChange", "onSubmit", "onFocusChange", "onSuffixChange")
+      Events("onTypedChange", "onSubmit", "onFocusChange", "onSuffixChange", "onFieldScroll")
 
       Prop("text") { (view: CompletingFieldView, text: String?) in
         view.textProp = text ?? ""

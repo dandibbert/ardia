@@ -1,10 +1,10 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, type ViewStyle } from "react-native";
+import { AccessibilityInfo, Animated, View, type ViewStyle } from "react-native";
 import { webviews } from "../../state/tabs/webviewHandles";
 import { withLivePage } from "../../state/tabs/livePage";
 import { newTab } from "../../state/tabs/actions";
 import type { Tab } from "../../state/browser/types";
-import { Button, curve, MouseArea, reduceMotion, reduceMotionKnown, springs, Symbol, type ButtonHit } from "../ui";
+import { Button, curve, MouseArea, nativeLoop, reduceMotion, reduceMotionKnown, springs, Symbol, type ButtonHit } from "../ui";
 
 export type NavPlace = { style?: ViewStyle; hit?: ButtonHit };
 import type { ClickModifiers } from "../../lib/keys";
@@ -25,7 +25,7 @@ function ReloadSymbol({ name }: { name: "arrow.clockwise" | "xmark" }) {
   return <Symbol name={name} size={GLYPH} weight="regular" color={useContext(ReloadGlyphColor)} style={SYMBOL_FRAME} />;
 }
 
-const ReloadGlyph = memo(function ReloadGlyph({ loading, color, press }: { loading: boolean; color: string; press: Animated.Value }) {
+const ReloadGlyph = memo(function ReloadGlyph({ loading, color }: { loading: boolean; color: string }) {
   const stateMotion = useRef(new Animated.Value(loading ? 1 : 0)).current;
   const returnMotion = useRef(new Animated.Value(0)).current;
   const breatheMotion = useRef(new Animated.Value(0)).current;
@@ -73,10 +73,10 @@ const ReloadGlyph = memo(function ReloadGlyph({ loading, color, press }: { loadi
   useEffect(() => {
     if (!loading || !motionReady || motionReduced) return;
     const halfCycle = RELOAD_BUTTON_MOTION.breatheCycle / 2;
-    const breathe = Animated.loop(Animated.sequence([
-      Animated.timing(breatheMotion, { toValue: 1, duration: halfCycle, easing: curve.pulse, useNativeDriver: true }),
-      Animated.timing(breatheMotion, { toValue: 0, duration: halfCycle, easing: curve.pulse, useNativeDriver: true }),
-    ]));
+    const breathe = nativeLoop(breatheMotion, [
+      { to: 1, ms: halfCycle, easing: curve.pulse },
+      { to: 0, ms: halfCycle, easing: curve.pulse },
+    ]);
     breathe.start();
     return () => {
       breathe.stop();
@@ -98,7 +98,7 @@ const ReloadGlyph = memo(function ReloadGlyph({ loading, color, press }: { loadi
       transform: [{ scale: breatheMotion.interpolate({ inputRange: [0, 1], outputRange: [...RELOAD_BUTTON_MOTION.breatheScale] }) }],
     };
     return (
-      <Animated.View style={[ICON_CENTER, { transform: [{ scale: press }] }]}>
+      <View style={ICON_CENTER}>
         <Animated.View pointerEvents="none" style={[ICON_LAYER, reload]}>
           <ReloadSymbol name="arrow.clockwise" />
         </Animated.View>
@@ -107,9 +107,9 @@ const ReloadGlyph = memo(function ReloadGlyph({ loading, color, press }: { loadi
             <ReloadSymbol name="xmark" />
           </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </View>
     );
-  }, [press, stateMotion, returnMotion, breatheMotion]);
+  }, [stateMotion, returnMotion, breatheMotion]);
   return <ReloadGlyphColor.Provider value={color}>{layers}</ReloadGlyphColor.Provider>;
 });
 
@@ -128,13 +128,6 @@ export const ReloadButton = memo(function ReloadButton({
 }) {
   const web = () => webviews.get(tab.id);
   const reloadHint = useShortcutHint("reload");
-  const pressMotion = useRef(new Animated.Value(1)).current;
-  const animateReloadPress = () => {
-    if (reduceMotion() !== false) return;
-    pressMotion.stopAnimation();
-    pressMotion.setValue(RELOAD_BUTTON_MOTION.pressScale);
-    Animated.spring(pressMotion, { toValue: 1, ...springs.bouncy, useNativeDriver: true }).start();
-  };
   return (
     <Button variant="icon" toolbar
       style={place?.style}
@@ -146,7 +139,6 @@ export const ReloadButton = memo(function ReloadButton({
         onFocus();
         if (loading) return void web()?.stopLoading();
         if (m.metaKey) return void newTab(tab.windowId, { url: tab.url, background: true, openerId: tab.id });
-        animateReloadPress();
         void withLivePage(tab.id, (page) => (m.shiftKey ? page.forceReload() : page.reload()));
       }}
       onContextMenu={() => {
@@ -155,7 +147,7 @@ export const ReloadButton = memo(function ReloadButton({
       }}
       tooltip={loading ? "Stop Loading This Page" : withShortcut("Refresh", reloadHint)}
     >
-      <ReloadGlyph loading={loading} color={tab.url ? palette.icon : palette.iconDisabled} press={pressMotion} />
+      <ReloadGlyph loading={loading} color={tab.url ? palette.icon : palette.iconDisabled} />
     </Button>
   );
 });

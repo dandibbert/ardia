@@ -17,7 +17,7 @@ export type MenuItem = {
 
 export type MenuAppearance = LookColors & { dark?: boolean };
 
-export type ContextMenuHandle = { show(): Promise<void> };
+export type ContextMenuHandle = { show(pressX?: number, pressY?: number): Promise<void> };
 
 export type ContextMenuProps = ViewProps & {
   ref?: Ref<ContextMenuHandle>;

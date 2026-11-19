@@ -5,7 +5,7 @@ import { haptics } from "../../state/app/haptics";
 import type { ScreenColumn } from "../../state/app/screenLayout";
 import type { BrowserTab } from "../../state/tabs/tabModels";
 import { capsule, chromeInk, ChromeSurface, Favicon, floatingBarLayout, PressScale, Symbol, tabsMotion, useReduceMotion, type ColorRoles } from "../ui";
-import { barAddress, FloatingPlusButton, FloatingTabsButton, type BarAddress } from "../browsing/FloatingBar";
+import { barAddress, FloatingPlusButton, FloatingTabsButton, spokenAddress, type BarAddress } from "../browsing/FloatingBar";
 import { NotSecureLock } from "../browsing/NotSecureLock";
 import { columnLayout } from "./columnTokens";
 import { SideColumn } from "./SideColumn";
@@ -59,7 +59,7 @@ export function BrowsingColumn({ column, width, tab, order, roles, dark, hidden,
 function ColumnSiteButton({ address, isPrivate, dark, onPress }: { address: BarAddress; isPrivate: boolean; dark: boolean; onPress: () => void }) {
   const ink = dark ? chromeInk.dark : chromeInk.light;
   return (
-    <PressScale label={address.insecure ? "Address, Not Secure" : "Address"} value={address.host} hint="Opens search with this page’s address." onPress={onPress} onPressIn={haptics.barPress} style={styles.circle}>
+    <PressScale label="Address" value={spokenAddress(address)} hint="Opens search with this page’s address." onPress={onPress} onPressIn={haptics.barPress} style={styles.circle}>
       <ChromeSurface testID="columnSite" shape="circle" cornerRadius={capsule(floatingBarLayout.control)} incognito={isPrivate} dark={dark} barShadow style={styles.circle}>
         <View testID="columnSiteMark" pointerEvents="none">
           {address.isPrivate ? (
@@ -72,11 +72,17 @@ function ColumnSiteButton({ address, isPrivate, dark, onPress }: { address: BarA
             <Symbol name="magnifyingglass" size={columnLayout.searchSymbol} color={ink.foreground} />
           )}
         </View>
+        {address.isPrivate && address.insecure ? (
+          <View style={styles.lockBadge} pointerEvents="none">
+            <NotSecureLock testID="columnSiteNotSecure" size={columnLayout.lockBadge} color={ink.notSecure} />
+          </View>
+        ) : null}
       </ChromeSurface>
     </PressScale>
   );
 }
 
 const styles = StyleSheet.create({
+  lockBadge: { position: "absolute", right: columnLayout.lockBadgeInset, bottom: columnLayout.lockBadgeInset },
   circle: { width: floatingBarLayout.control, height: floatingBarLayout.control, alignItems: "center", justifyContent: "center" },
 });

@@ -37,7 +37,7 @@ import { copyLink } from "../../state/browse/tabMenus";
 import { openSettings } from "../../state/settings/nav";
 import { openRemote, selectProfile, syncNow } from "../../state/sync/actions";
 import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync/hooks";
-import { COLLAPSED_LIMIT, remoteTitle } from "../../state/sync/spaces";
+import { COLLAPSED_LIMIT, pinnedKeyAt, remoteTitle } from "../../state/sync/spaces";
 import { showAllDeviceTabs, toggleSpaceRow, useSpaceOpenFor } from "../../state/sync/spaceOpen";
 import { syncBanner, type BannerIcon } from "../../state/sync/syncRules";
 import { countUsage } from "../../state/telemetry/telemetry";
@@ -155,7 +155,7 @@ function SpacePage({ profile, dotsBelow }: { profile: SyncedProfile; dotsBelow: 
   const expanded = useMemo(() => new Set(remembered.expanded), [remembered.expanded]);
   const devices = profile.deviceTabs.filter((device) => device.tabs.length > 0);
   const pinnedEmpty = profile.pinned.tiles.length === 0 && profile.pinned.sections.length === 0;
-  const go = (url: string, title: string) => openRemote(url, title, profile.syncId);
+  const go = (url: string, title: string, pinnedKey: string | null = null) => openRemote(url, title, profile.syncId, pinnedKey);
   return (
     <List modifiers={modifierList(listStyle("plain"), scrollContentBackground("hidden"), minListRowHeight(L.rowHeight), refreshable(() => syncNow().then(() => undefined)), dotsBelow ? contentMargins({ edges: "bottom", length: L.dotsHeight + L.tight }) : null)}>
       {profile.pinned.tiles.length ? <PinnedTileRows tiles={profile.pinned.tiles} open={go} /> : null}
@@ -187,19 +187,19 @@ function SpacePage({ profile, dotsBelow }: { profile: SyncedProfile; dotsBelow: 
   );
 }
 
-function PinnedTileRows({ tiles, open }: { tiles: PinnedTile[]; open: (url: string, title: string) => void }) {
+function PinnedTileRows({ tiles, open }: { tiles: PinnedTile[]; open: (url: string, title: string, pinnedKey: string | null) => void }) {
   return (
     <PinnedTiles
       tiles={tiles.map((tile) => ({ key: tile.key, title: tile.title, url: tile.url, icon: tile.icon, folder: tile.folder?.map((tab) => ({ key: tab.key, title: tab.title, url: tab.url })) ?? null }))}
-      onOpen={({ url, title }) => open(url, title)}
+      onOpen={({ url, title }) => open(url, title, pinnedKeyAt(tiles, url))}
       modifiers={[listRowBackground("transparent"), listRowSeparator("hidden"), listRowInsets({ top: L.tight, leading: L.rowInset, bottom: L.small, trailing: L.rowInset })]}
     />
   );
 }
 
-function PinnedSectionRow({ profileId, section, openGroups, open }: { profileId: string; section: PinnedSection; openGroups: ReadonlySet<string>; open: (url: string, title: string) => void }) {
+function PinnedSectionRow({ profileId, section, openGroups, open }: { profileId: string; section: PinnedSection; openGroups: ReadonlySet<string>; open: (url: string, title: string, pinnedKey: string | null) => void }) {
   const dark = useTheme().dark;
-  if (section.tab) return <RemoteRow title={section.tab.title} url={section.tab.url} symbol={section.tab.icon} open={open} />;
+  if (section.tab) return <RemoteRow title={section.tab.title} url={section.tab.url} symbol={section.tab.icon} pinnedKey={section.tab.key} open={open} />;
   const group = section.group;
   if (!group) return null;
   const key = `group:${group.key}`;
@@ -218,11 +218,11 @@ function PinnedSectionRow({ profileId, section, openGroups, open }: { profileId:
   );
 }
 
-function RemoteRow({ title, url, symbol, open }: { title: string; url: string; symbol: string | null; open: (url: string, title: string) => void }) {
+function RemoteRow({ title, url, symbol, pinnedKey = null, open }: { title: string; url: string; symbol: string | null; pinnedKey?: string | null; open: (url: string, title: string, pinnedKey: string | null) => void }) {
   const { fontScale } = useWindowDimensions();
   const iconSide = L.icon * fontScale;
   const shownTitle = remoteTitle(title, url);
-  const go = () => open(url, title);
+  const go = () => open(url, title, pinnedKey);
   return (
     <ContextMenu modifiers={SPACE_ROW}>
       <ContextMenu.Trigger>

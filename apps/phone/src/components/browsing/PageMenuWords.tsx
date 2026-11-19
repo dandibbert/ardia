@@ -1,5 +1,5 @@
 import { Children, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { copy } from "../../lib/platformCopy";
 import {
@@ -31,7 +31,7 @@ import { useMenuTitle, useTitleFeedback } from "../../state/page/hooks";
 import { openLibrary, type LibrarySection } from "../../state/library/store";
 import { useIsPinned, useSendTargets } from "../../state/sync/hooks";
 import { useTab } from "../../state/tabs/hooks";
-import { capsule, ChromeSurface, font, menuLayout, pageMenuInk, pageMenuLayout, pageMenuMotion, PressScale, space, Symbol, Toggle, useTheme, type MenuItem, type SymbolName } from "../ui";
+import { capsule, ChromeSurface, font, menuLayout, pageMenuInk, pageMenuLayout, pageMenuMotion, PressScale, SheetScrollView, space, Symbol, Toggle, useTheme, type MenuItem, type SymbolName } from "../ui";
 import { MenuTrigger } from "../ui/MenuTrigger";
 import { syncOffered } from "../../state/sync/offer";
 
@@ -50,7 +50,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
   const large = useAccessibilityText();
   const devices = useSendTargets(tabId);
   return (
-    <ScrollView testID="pageMenuWords" contentContainerStyle={[styles.column, large ? styles.largeBottom : null]} bounces={false}>
+    <SheetScrollView testID="pageMenuWords" contentContainerStyle={[styles.column, large ? styles.largeBottom : null]} bounces={false}>
       <View style={styles.bar}>
         <NavigationCapsule tabId={tabId} model={model} large={large} />
         <View style={styles.actions}>
@@ -76,7 +76,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
           {model.pageRows ? <ToggleRow title="Night Shade" value={model.nightShadeOn} enabled={model.isWebPage} onChange={setNightShadeOn} /> : null}
           {model.pageRows ? <ZoomRow model={model} large={large} /> : null}
           {model.pageRows ? <ToggleRow title="Desktop Site" value={model.desktopSite} enabled={model.isWebPage} onChange={setDesktopSite} /> : null}
-          {model.pageRows ? <Row title="Translate" enabled={model.translate} onPress={onTranslate} /> : null}
+          {model.pageRows ? <Row title={model.translateTitle} enabled={model.translate} onPress={onTranslate} /> : null}
           {model.pageRows ? (
             <ToggleRow title="Block Ads and Trackers" value={model.blockersEnabled} enabled={model.isWebPage} detail={model.blockedCount} onChange={setBlockersOn} />
           ) : null}
@@ -88,7 +88,7 @@ export function PageMenuWords({ tabId, model, onTranslate }: { tabId: string; mo
           </Group>
         ) : null}
       </View>
-    </ScrollView>
+    </SheetScrollView>
   );
 }
 

@@ -18,7 +18,7 @@ import { recencyOrder, type BrowserTab } from "../../state/tabs/tabModels";
 import { countUsage } from "../../state/telemetry/telemetry";
 import { capsule, ChromeSurface, ConfirmDialog, Favicon, font, rolesFor, startInk, startLayout, Symbol, tabsInk, tabsLayout, useTheme, type Confirmation, type MenuItem } from "../ui";
 import { confirmInSheet, MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
-import { barAddress } from "../browsing/FloatingBar";
+import { barAddress, spokenAddress } from "../browsing/FloatingBar";
 import { spaceMenuSymbol, SpaceTitle } from "../search/StartSpaces";
 import { DUO } from "./duoLayout";
 import { HostLabel, SidebarGlyph } from "./DuoToolbar";
@@ -141,8 +141,8 @@ function AddressField({ dark, onClose }: { dark: boolean; onClose: () => void })
     <ChromeSurface testID="duoSidebarAddress" shape="capsule" cornerRadius={capsule(DUO.sidebarFieldHeight)} dark={dark} style={styles.field}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={address?.insecure ? "Address, Not Secure" : "Address"}
-        accessibilityValue={{ text: address?.host ?? "" }}
+        accessibilityLabel="Address"
+        accessibilityValue={{ text: spokenAddress(address) }}
         accessibilityHint="Opens search with this page’s address."
         onPress={edit}
         style={styles.fieldHit}
@@ -294,9 +294,9 @@ function TabRow({ tab, dark, selected, onOpen, onCloseTab }: { tab: BrowserTab; 
 function SidebarTiles({ tiles, profileId, dark, onClose }: { tiles: PinnedTile[]; profileId: string; dark: boolean; onClose: () => void }) {
   const rows: PinnedTile[][] = [];
   for (let at = 0; at < tiles.length; at += DUO.sidebarTilesPerRow) rows.push(tiles.slice(at, at + DUO.sidebarTilesPerRow));
-  const open = (url: string, title: string) => {
+  const open = (tab: { url: string; title: string; key: string }) => {
     onClose();
-    openRemote(url, title, profileId);
+    openRemote(tab.url, tab.title, profileId, tab.key);
   };
   return (
     <View testID="duoSidebarTiles" style={styles.tiles}>
@@ -312,7 +312,7 @@ function SidebarTiles({ tiles, profileId, dark, onClose }: { tiles: PinnedTile[]
   );
 }
 
-function SidebarTile({ tile, dark, onOpen }: { tile: PinnedTile; dark: boolean; onOpen: (url: string, title: string) => void }) {
+function SidebarTile({ tile, dark, onOpen }: { tile: PinnedTile; dark: boolean; onOpen: (tab: { url: string; title: string; key: string }) => void }) {
   const folder = tile.folder?.length ? tile.folder : null;
   const label = remoteTitle(tile.title, tile.url);
   const face = (onPress: () => void) => (
@@ -324,9 +324,9 @@ function SidebarTile({ tile, dark, onOpen }: { tile: PinnedTile; dark: boolean; 
       </ChromeSurface>
     </Pressable>
   );
-  if (!folder) return face(() => onOpen(tile.url, tile.title));
+  if (!folder) return face(() => onOpen(tile));
   return (
-    <MenuTrigger items={folder.map((tab) => ({ label: remoteTitle(tab.title, tab.url), onPress: () => onOpen(tab.url, tab.title) }))} trigger="tap" haptic={menuOpenedHaptic} dark={dark} place={{ width: tabsLayout.menuWidth }} style={styles.tileSlot}>
+    <MenuTrigger items={folder.map((tab) => ({ label: remoteTitle(tab.title, tab.url), onPress: () => onOpen(tab) }))} trigger="tap" haptic={menuOpenedHaptic} dark={dark} place={{ width: tabsLayout.menuWidth }} style={styles.tileSlot}>
       {({ onPress }) => face(onPress ?? (() => undefined))}
     </MenuTrigger>
   );

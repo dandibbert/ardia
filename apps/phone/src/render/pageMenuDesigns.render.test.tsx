@@ -8,7 +8,7 @@ import { DesignProvider } from "../components/ui";
 import type { Design } from "../lib/design";
 import { openPageMenu } from "../state/page/actions";
 import { usePageUi } from "../state/page/store";
-import { usePages } from "../state/pages/store";
+import { registerPageHandle, usePages } from "../state/pages/store";
 import { useSettingsNav } from "../state/settings/nav";
 import { useBrowse } from "../state/browse/store";
 import { useLibrary } from "../state/library/store";
@@ -229,3 +229,68 @@ test("at accessibility text sizes the redesign's title moves under the navigatio
   expect(hosts(root, (id) => id.startsWith("pageMenuAction:"))).toHaveLength(3);
   unmount(root);
 });
+
+function withTranslation(start: { languageName: string | null; confirmed: boolean }) {
+  const state = { language: start.languageName ? "de" : null, ...start };
+  jest.spyOn(pages, "translation").mockImplementation(async () => ({ ...state }));
+  const confirmed = jest.spyOn(pages, "confirmTranslation").mockImplementation(async () => {
+    state.confirmed = true;
+  });
+  const asked = jest.spyOn(pages, "translationUrl").mockImplementation(async (url: string) => `https://translate.google.com/translate?sl=auto&tl=${state.language ?? "en"}&u=${encodeURIComponent(url)}`);
+  const loaded: string[] = [];
+  registerPageHandle("t0", { loadUrl: async (url: string) => void loaded.push(url) } as never);
+  return { confirmed, asked, loaded };
+}
+
+for (const design of ["redesigned", "original"] as const) {
+  test(`${design}: Translate asks about Google the first time, and the answer stands: the next one goes straight there, as main's does`, async () => {
+    const { confirmed, loaded } = withTranslation({ languageName: null, confirmed: false });
+    const first = await openMenu(design);
+    await pressButton(first, "Translate");
+    expect(textOf(first)).toContain("Translate with Google?");
+    expect(loaded).toHaveLength(0);
+    const answer = first.root.findAll((node) => node.props.accessibilityRole === "button" && typeof node.props.onPress === "function" && textOf({ root: node } as ReactTestRenderer) === "Translate").pop()!;
+    await act(async () => {
+      answer.props.onPress();
+    });
+    expect(confirmed).toHaveBeenCalledTimes(1);
+    expect(loaded).toEqual(["https://translate.google.com/translate?sl=auto&tl=en&u=https%3A%2F%2Fsite0.example%2F"]);
+    expect(counted).toHaveBeenCalledWith("pages_translated");
+    expect(usePageUi.getState().menuOpen).toBe(false);
+    unmount(first);
+    const second = await openMenu(design);
+    await pressButton(second, "Translate");
+    expect(textOf(second)).not.toContain("Translate with Google?");
+    expect(loaded).toHaveLength(2);
+    unmount(second);
+    registerPageHandle("t0", null);
+  });
+
+  test(`${design}: the row names the remembered language and opens the page in it`, async () => {
+    const { loaded } = withTranslation({ languageName: "German", confirmed: true });
+    const root = await openMenu(design);
+    expect(textOf(root)).toContain("Translate to German");
+    await pressButton(root, "Translate to German");
+    expect(loaded).toEqual(["https://translate.google.com/translate?sl=auto&tl=de&u=https%3A%2F%2Fsite0.example%2F"]);
+    unmount(root);
+    registerPageHandle("t0", null);
+  });
+
+  test(`${design}: an Incognito tab always asks, and its answer is not kept`, async () => {
+    const { confirmed, loaded } = withTranslation({ languageName: "German", confirmed: true });
+    useTabs.setState((state) => ({ ...state, open: [], privates: [{ ...state.open[0]!, isPrivate: true }], incognito: true }));
+    const root = await openMenu(design);
+    await pressButton(root, "Translate to German");
+    expect(textOf(root)).toContain("Translate with Google?");
+    expect(loaded).toHaveLength(0);
+    const answer = root.root.findAll((node) => node.props.accessibilityRole === "button" && typeof node.props.onPress === "function" && textOf({ root: node } as ReactTestRenderer) === "Translate").pop()!;
+    await act(async () => {
+      answer.props.onPress();
+    });
+    expect(loaded).toHaveLength(1);
+    expect(confirmed).not.toHaveBeenCalled();
+    expect(counted).not.toHaveBeenCalledWith("pages_translated");
+    unmount(root);
+    registerPageHandle("t0", null);
+  });
+}

@@ -54,13 +54,15 @@ export async function openPageMenu() {
   usePageUi.setState({ menuOpen: true, menuPage: "main", titleFeedback: null, menuSite: null });
   const url = usePages.getState().navigation[tab.id]?.url ?? tab.url;
   const host = hostOf(url);
-  const [shade, blockers, capabilities] = await Promise.all([
+  const [shade, blockers, capabilities, translation] = await Promise.all([
     settled(() => pages.nightShade(host, tab.isPrivate), null),
     settled(() => blocking.isEnabledForSite(url, tab.isPrivate), true),
     settled(async () => pages.capabilities(), null),
+    settled(() => pages.translation(), null),
   ]);
   usePageUi.setState({
     menuSite: { host, nightShade: shade?.mode ?? "disabled", blockersEnabled: blockers },
+    menuTranslation: translation ? { languageName: translation.languageName, confirmed: translation.confirmed } : pageUi().menuTranslation,
     zoomLevels: capabilities?.pageZoomLevels ?? pageUi().zoomLevels,
   });
 }
@@ -240,7 +242,17 @@ export function translatePage() {
   const tab = selectedTab();
   if (!tab || !isSyncableUrl(tab.url)) return;
   closePageMenu();
-  void pageHandle(tab.id)?.loadUrl(translationUrl(tab.url, preferredLanguage()));
+  const { id, url, isPrivate } = tab;
+  const translation = pageUi().menuTranslation;
+  if (!isPrivate && translation && !translation.confirmed) usePageUi.setState({ menuTranslation: { ...translation, confirmed: true } });
+  void (async () => {
+    const remembered = await settled(() => pages.translationUrl(url), null);
+    if (!isPrivate) {
+      countUsage("pages_translated");
+      await settled(() => pages.confirmTranslation(), undefined);
+    }
+    await pageHandle(id)?.loadUrl(remembered ?? translationUrl(url, preferredLanguage()));
+  })();
 }
 
 export function setNightShadeOn(on: boolean) {

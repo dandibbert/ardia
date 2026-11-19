@@ -6,7 +6,7 @@ export type VisitTransition = "typed" | "link" | "backForward" | "formSubmit" | 
 export type Visit = { id: number; url: string; title: string; visitedAt: number; profileSyncId: string | null; transition: VisitTransition };
 
 const TAB_COLUMNS =
-  "id, url, title, created, lastActive, archivedAt, position, profileSyncId, faviconUrl, themeColorHex, snapshotFileName, origin, receivedKey, receivedFromDevice";
+  "id, url, title, created, lastActive, archivedAt, position, profileSyncId, faviconUrl, themeColorHex, snapshotFileName, origin, receivedKey, receivedFromDevice, pinnedKey";
 
 const VISIT_COLUMNS = "id, url, title, visitedAt, profileSyncId, transition";
 
@@ -31,6 +31,7 @@ const tabValues = (tab: BrowserTab): SqlValue[] => [
   tab.origin,
   tab.receivedKey,
   tab.receivedFromDevice,
+  tab.pinnedKey,
 ];
 
 const escapeLike = (text: string) => `%${text.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
@@ -62,7 +63,7 @@ export function writeTabs(db: SqlDatabase, put: readonly BrowserTab[], remove: r
   const stored = put.filter((tab) => !tab.isPrivate);
   if (!stored.length && !remove.length) return;
   db.transaction(() => {
-    for (const tab of stored) db.run(`INSERT OR REPLACE INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
+    for (const tab of stored) db.run(`INSERT OR REPLACE INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
     for (const id of remove) {
       db.run("DELETE FROM tabs WHERE id = ?", [id]);
       db.run("DELETE FROM tab_state WHERE id = ?", [id]);
@@ -146,7 +147,7 @@ export class ImportMismatch extends Error {}
 
 export function writeImport(db: SqlDatabase, rows: ImportRows, markerKey: string, marker: string) {
   db.transaction(() => {
-    for (const tab of rows.tabs) db.run(`INSERT INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
+    for (const tab of rows.tabs) db.run(`INSERT INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
     for (const state of rows.states) db.run("INSERT OR REPLACE INTO tab_state (id, data) VALUES (?, ?)", [state.id, state.data]);
     let id = maxVisitId(db);
     for (const visit of rows.visits) {
@@ -196,7 +197,7 @@ export function bringOpenTabToFront(db: SqlDatabase, id: string) {
 }
 
 export const insertNewTab = (db: SqlDatabase, tab: BrowserTab) =>
-  db.run(`INSERT INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
+  db.run(`INSERT INTO tabs (${TAB_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, tabValues(tab));
 
 export const countTabStates = (db: SqlDatabase, ids: readonly string[]) => {
   let n = 0;

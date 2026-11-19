@@ -96,20 +96,24 @@ test("the start page's plus keeps its tap, and its long press is the system menu
   unmount(privately);
 });
 
-test("the space switcher is a tap menu of the spaces in fixed order, checked and with main's symbols, and picking one switches", () => {
+test("the space's name opens no menu of the spaces, with one space or several", () => {
   withSpaces([profile("work", "Work", [], "briefcase"), profile("home", "Home")]);
-  const select = jest.spyOn(syncActions, "selectProfile").mockImplementation(() => undefined);
   const root = start();
-  const switcher = menuAround(root, "Space, Work")!;
-  expect(switcher.props.trigger).toBe("tap");
-  expect(switcher.props.fixedOrder).toBe(true);
-  expect(items(switcher)).toEqual([
-    { id: "0", title: "Work", systemImage: "briefcase", checked: true },
-    { id: "1", title: "Home", systemImage: "h.circle.fill" },
-  ]);
-  choose(switcher, "Home");
-  expect(select).toHaveBeenCalledWith("home");
+  expect(menuAround(root, "Space, Work")).toBeUndefined();
+  expect(contextMenus(root).filter((menu) => titles(items(menu)).includes("Home"))).toHaveLength(0);
+  expect(root.root.findAll((node) => node.props.accessibilityRole === "header" && node.props.accessibilityLabel === "Work")).not.toHaveLength(0);
   unmount(root);
+});
+
+test("a space's name stands alone when it has no icon of its own, with no initial in a circle beside it, and its icon shows when it has one", () => {
+  withSpaces([profile("home", "Home")]);
+  const plain = start();
+  expect(plain.root.findAll((node) => node.props.testID === "startSpaceGlyph")).toHaveLength(0);
+  unmount(plain);
+  withSpaces([profile("garden", "Garden", [], "🌱")]);
+  const marked = start();
+  expect(marked.root.findAll((node) => node.props.testID === "startSpaceGlyph" && typeof node.type === "string")).toHaveLength(1);
+  unmount(marked);
 });
 
 test("a folder tile's tap opens a menu of its tabs, a link tile's long press offers Copy Link and Share, and a tile that isn't a web link has none", () => {
@@ -129,7 +133,7 @@ test("a folder tile's tap opens a menu of its tabs, a link tile's long press off
   expect(folder.props.trigger).toBe("tap");
   expect(titles(items(folder))).toEqual(["Inside"]);
   choose(folder, "Inside");
-  expect(open).toHaveBeenCalledWith("https://inside.example/", "Inside", "work");
+  expect(open).toHaveBeenCalledWith("https://inside.example/", "Inside", "work", "f0");
   expect(menuAround(root, "Pin 2")).toBeUndefined();
   expect(mockNative.sheets).toHaveLength(0);
   unmount(root);

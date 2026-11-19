@@ -79,6 +79,7 @@ final class SearchStageView: ExpoView {
   private var releaseTask: Task<Void, Never>?
   private var settleTask: Task<Void, Never>?
   private var revealDeadline: Task<Void, Never>?
+  private var revealHold: Task<Void, Never>?
   private var revealLink: CADisplayLink?
   private var rise: UIViewPropertyAnimator?
 
@@ -130,6 +131,7 @@ final class SearchStageView: ExpoView {
     landingTask?.cancel()
     releaseTask?.cancel()
     settleTask?.cancel()
+    revealHold?.cancel()
     stopWaitingForContent()
     cancelPendingFlight()
     dropMorph()
@@ -456,6 +458,8 @@ final class SearchStageView: ExpoView {
   }
 
   private func endEmergence() {
+    revealHold?.cancel()
+    revealHold = nil
     if let panel { emergence?.end(on: panel) }
     emergence = nil
     if !revealsContents { revealsContents = true }
@@ -514,12 +518,13 @@ final class SearchStageView: ExpoView {
     place()
   }
 
-  private func revealContentsNextTurn() {
-    guard !revealsContents else { return }
-    DispatchQueue.main.async { [weak self] in
-      guard let self, !self.revealsContents else { return }
-      self.revealsContents = true
-      self.revealIfReady()
+  private func revealContentsAfterUnfold() {
+    guard !revealsContents, revealHold == nil else { return }
+    revealHold = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(Motion.stageRevealHold))
+      guard let self, !Task.isCancelled, !revealsContents else { return }
+      revealsContents = true
+      revealIfReady()
     }
   }
 
@@ -581,6 +586,6 @@ final class SearchStageView: ExpoView {
     emergence.place(on: panel, in: self, card: card, isOpen: isUp)
     guard isUp else { return }
     emergence.whenSettled { [weak self] in self?.endEmergence() }
-    revealContentsNextTurn()
+    revealContentsAfterUnfold()
   }
 }

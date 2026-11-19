@@ -62,9 +62,17 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface ArdiaWebView (Reveals)
-+ (void)revealTab:(NSString *)transferKey;
-+ (void)dropTabReveals:(NSString *)transferKey;
-+ (void)revealOffered:(NSString *)adoptId over:(NSString *)transferKey;
++ (void)revealTab:(NSString *)transferKey press:(NSUInteger)press;
++ (void)dropTabReveals:(NSString *)transferKey press:(NSUInteger)press to:(NSString *)incomingKey;
++ (void)dropTabPress:(NSUInteger)press;
++ (void)setNativeTabSwitch:(BOOL)enabled;
++ (NSUInteger)claimTabPress:(NSString *)transferKey stamp:(double)stamp;
++ (void)setTabsInSplits:(NSArray<NSString *> *)transferKeys;
++ (void)setJavaScriptThread:(void (^)(void (^block)(void)))run;
++ (void)endRevealsAheadOfSwitch;
++ (BOOL)revealForPress:(NSEvent *)event;
++ (void)dropNativeRevealsInWindow:(nullable NSWindow *)window;
++ (void)revealOffered:(NSString *)adoptId over:(NSString *)transferKey press:(NSUInteger)press;
 + (BOOL)discardOffered:(NSString *)adoptId;
 @end
 
@@ -72,7 +80,17 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)installPageKeyWatch;
 + (void)keepOutgoingFocusFrom:(NSResponder *)responder NS_SWIFT_NAME(keepOutgoingFocus(from:));
 + (void)endOutgoingFocusFrom:(NSResponder *)responder NS_SWIFT_NAME(endOutgoingFocus(from:));
++ (BOOL)focusVisiblePageIn:(NSWindow *)window NS_SWIFT_NAME(focusVisiblePage(in:));
 - (void)focusPage;
+- (BOOL)focusPageIfUnfocused;
+@end
+
+@interface ArdiaWebView (RevealGap)
++ (BOOL)revealGapIn:(nullable NSWindow *)window NS_SWIFT_NAME(revealGap(in:));
++ (BOOL)refusesInputAheadOfSwitch:(nullable id)target NS_SWIFT_NAME(refusesInputAheadOfSwitch(_:));
++ (void)setAppWideKeys:(nullable BOOL (^)(NSEvent *event))perform;
++ (void)installRevealGuards;
++ (NSUInteger)guardedAccessibilityCalls;
 @end
 
 @interface ArdiaWebView (NeighbourPages)
@@ -105,7 +123,6 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setDisplayMediaPicker:(BOOL)enabled;
 + (void)setSelectionPopoverEnabled:(BOOL)enabled NS_SWIFT_NAME(setSelectionPopoverEnabled(_:));
 + (void)setBlockAutoplayEverywhere:(BOOL)enabled NS_SWIFT_NAME(setBlockAutoplayEverywhere(_:));
-+ (void)setFairPlayInChromium:(BOOL)enabled NS_SWIFT_NAME(setFairPlayInChromium(_:));
 - (void)resolveDisplayMedia:(NSString *)requestId sourceId:(nullable NSString *)sourceId audio:(BOOL)audio
     NS_SWIFT_NAME(resolveDisplayMedia(_:sourceId:audio:));
 @end
@@ -135,6 +152,10 @@ NS_ASSUME_NONNULL_BEGIN
                                   control:(NSInteger)target
                                completion:(void (^)(BOOL ok))completion NS_SWIFT_NAME(requestPictureInPicture(clickAt:control:_:));
 - (void)exitPictureInPicture;
+@end
+
+@interface ArdiaWebView (FirstPaint)
++ (NSDictionary<NSString *, NSNumber *> *)takeFirstPaintHolds;
 @end
 
 @interface ArdiaWebView (PictureInPictureDev)

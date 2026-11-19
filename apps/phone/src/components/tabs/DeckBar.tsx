@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ComponentProps } from "react";
+import { haptics } from "../../state/app/haptics";
 import { StyleSheet, View, type ViewInstance } from "react-native";
 import { noteDeckBarTop, watchDeckBar } from "../../state/toasts/store";
 import type { FrostVariant } from "@ardia/phone-native";
@@ -46,7 +47,7 @@ export function DeckBar({ leading, plusLabel, frost, onPlus, onPlusMenu, onSetti
     <View ref={row} style={styles.row} onLayout={measure}>
       <View style={styles.side}>
         {leading ? (
-          <PressScale label={leading.label} onPress={leading.onPress} style={styles.hit}>
+          <PressScale label={leading.label} onPress={leading.onPress} onPressIn={haptics.barPress} style={styles.hit}>
             <Plate {...frost} shape="circle" cornerRadius={circleRadius} fill={theme.deckControl} style={[styles.circle, edge]}>
               <View pointerEvents="none">
                 <Symbol name={leading.icon} size={sideSize(leading.icon)} color={theme.secondaryLabel} />
@@ -60,6 +61,7 @@ export function DeckBar({ leading, plusLabel, frost, onPlus, onPlusMenu, onSetti
         hint="Touch and hold for more options."
         onPress={onPlus}
         onLongPress={onPlusMenu}
+        onPressIn={haptics.barPress}
         style={{ width: plus.width, height: plus.height }}
       >
         <Plate {...frost} shape="capsule" cornerRadius={capsule(plus.height)} fill={theme.deckControl} style={[styles.plus, edge]}>
@@ -69,7 +71,7 @@ export function DeckBar({ leading, plusLabel, frost, onPlus, onPlusMenu, onSetti
         </Plate>
       </PressScale>
       <View style={[styles.side, styles.end]}>
-        <PressScale label="Settings" onPress={onSettings} style={styles.hit}>
+        <PressScale label="Settings" onPress={onSettings} onPressIn={haptics.barPress} style={styles.hit}>
           <Plate {...frost} shape="circle" cornerRadius={circleRadius} fill={theme.deckControl} style={[styles.circle, edge]}>
             <View pointerEvents="none">
               <Symbol name="gearshape" size={sideSize("gearshape")} color={theme.secondaryLabel} />

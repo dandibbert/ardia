@@ -9,7 +9,7 @@ import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { prepareArchive } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, Symbol, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
+import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, SystemGlyph, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
 import { MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
 import { SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
 import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButtons";
@@ -123,7 +123,7 @@ function IncognitoPill({ count, onPress }: { count: number; onPress: () => void 
       style={styles.pillHit}
     >
       <View pointerEvents="none" style={[styles.pill, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(deckChromeLayout.pillHeight) }]}>
-        <Symbol name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
+        <SystemGlyph systemName="eyes" pointSize={deckChromeLayout.pillEyes} weight="semibold" fitted name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
         <Text style={[font.subheadline, styles.count]}>{count}</Text>
       </View>
     </Pressable>

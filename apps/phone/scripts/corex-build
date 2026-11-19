@@ -4,7 +4,8 @@
 # ~/Developer/ardia-phone-apks/<name>.apk with its stamp <name>.txt. ~/Developer/ardia-android-build/src is a build-only
 # clone: fetched, detached at the commit and reset to it every time, never edited or committed from; all work happens
 # in the main checkout. The scripts come from the branch head, so an older commit builds with today's build-apk.
-# Waits (up to ARDIA_BUILD_WAIT seconds, default 1800) while another Gradle build runs in the container or less than
+# Waits (up to ARDIA_BUILD_WAIT seconds, default 1800) while another Gradle build is busy in the container (more than
+# half a second of CPU in 5 s: an idle daemon left by another project only counts against memory) or less than
 # 8 GB of its memory is free. Gradle runs without a daemon and Kotlin in-process, so nothing of ours stays resident.
 # pnpm is the version apps/phone/package.json pins, first on the path, since bundle-export runs it too, and TMPDIR
 # sits beside the clone, so the export's offline install finds pnpm's store on the same filesystem.
@@ -13,7 +14,7 @@
 # nothing is added to the shared SDK. Keeps the newest 8 APKs. --compose-key is refused: the upgrade pair is built on the Mac.
 set -euo pipefail
 if [ $# -lt 2 ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   [ $# -ge 1 ] && [ "$1" != "--help" ] && [ "$1" != "-h" ] && exit 64
   exit 0
 fi
@@ -39,8 +40,17 @@ if [ "$limit" = "max" ] || [ "$limit" -lt $((14 * gib)) ]; then
   exit 64
 fi
 
-others() { pgrep -f 'org.gradle.launcher.daemon|GradleWrapperMain|org.gradle.launcher.GradleMain|KotlinCompileDaemon' || true; }
-spare() { echo $(( (limit - $(cat /sys/fs/cgroup/memory.current) + $(awk '$1 == "inactive_file" || $1 == "slab_reclaimable" { sum += $2 } END { printf "%d", sum }' /sys/fs/cgroup/memory.stat)) / gib )); }
+cpuTicks() { local total=0 pid; for pid in "$@"; do [ -r "/proc/$pid/stat" ] && total=$(( total + $(awk '{ print $14 + $15 }' "/proc/$pid/stat" 2>/dev/null || echo 0) )); done; echo "$total"; }
+others() {
+  local pids before
+  pids="$(pgrep -f 'org.gradle.launcher.daemon|GradleWrapperMain|org.gradle.launcher.GradleMain|KotlinCompileDaemon' || true)"
+  [ -n "$pids" ] || return 0
+  before="$(cpuTicks $pids)"
+  sleep 5
+  [ $(( $(cpuTicks $pids) - before )) -gt 50 ] && echo "$pids"
+  return 0
+}
+spare() { echo $(( (limit - $(cat /sys/fs/cgroup/memory.current) + $(awk '$1 == "inactive_file" || $1 == "slab_reclaimable" { sum += $2 } END { printf "%.0f", sum }' /sys/fs/cgroup/memory.stat)) / gib )); }
 deadline=$(( $(date +%s) + ${ARDIA_BUILD_WAIT:-1800} ))
 while true; do
   busy="$(others)"

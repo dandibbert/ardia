@@ -2,7 +2,7 @@
 # Build the Expo iPhone app for App Store Connect and send it to TestFlight.
 #
 #   apps/phone/scripts/release-ios <build number> [--version <release version>] [--commit REV] [--no-upload]
-#                                  [--unsigned] [--default-browser] [--out <dir>]
+#                                  [--development] [--unsigned] [--default-browser] [--out <dir>]
 #   apps/phone/scripts/release-ios -h | --help
 #
 # The Expo counterpart of main's scripts/release-ios.sh, which archives the SwiftUI app. Same app record, same
@@ -26,6 +26,9 @@
 # --unsigned archives without signing and stops after the checks: proof without the Apple account.
 # --no-upload signs the archive and stops: nothing reaches App Store Connect, whose app-store export opens an
 # upload record and takes the build number even when it only writes an .ipa. Otherwise it exports and uploads.
+# --development signs the archive and exports a development-signed .ipa instead, for the iPhones registered on
+# the team (asc.mjs register-device), to install over a cable with xcrun devicectl device install app; it never
+# uploads and opens no upload record.
 # Signing and upload take ASC_KEY (path to the .p8), ASC_KEY_ID and ASC_ISSUER, or the account Xcode is signed
 # in to. Output and logs go to dist/ios-expo/<release version>-<build>, or --out.
 set -euo pipefail
@@ -43,11 +46,12 @@ help() {
   exit 0
 }
 
-build="" release_version="" rev=HEAD upload=1 unsigned=0 default_browser=NO out=""
+build="" release_version="" rev=HEAD upload=1 development=0 unsigned=0 default_browser=NO out=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) help ;;
     --no-upload) upload=0; shift ;;
+    --development) development=1; upload=0; shift ;;
     --unsigned) unsigned=1; upload=0; shift ;;
     --default-browser) default_browser=YES; shift ;;
     --out) [ $# -ge 2 ] || die "--out needs a directory"; out="$2"; shift 2 ;;
@@ -58,6 +62,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [[ "$build" =~ ^[1-9][0-9]*$ ]] || die "the build number must be a positive integer (apps/phone/scripts/release-ios --help)"
+[ "$development" = 0 ] || [ "$unsigned" = 0 ] || die "--development signs the build: it can't go with --unsigned"
 
 if [ -z "$release_version" ]; then
   release_version="$(mac_marketing_version)"
@@ -184,12 +189,24 @@ if [ "$unsigned" = 0 ]; then
 fi
 echo "checks passed: $(du -sk "$app" | awk '{printf "%.1f MB", $1 / 1024}') installed, JS $commit, release $release_version, build $build"
 
+options="$out/ExportOptions.plist"
+if [ "$development" = 1 ]; then
+  cp "$root/apps/phone/ios/Config/ExportOptions-TestFlight.plist" "$options"
+  /usr/libexec/PlistBuddy -c "Set :method debugging" -c "Set :destination export" -c "Delete :uploadSymbols" "$options"
+  run_logged export xcodebuild -exportArchive \
+    -archivePath "$archive" -exportOptionsPlist "$options" -exportPath "$out/export" \
+    -allowProvisioningUpdates ${auth[@]+"${auth[@]}"}
+  ipa="$(find "$out/export" -maxdepth 1 -name '*.ipa' | head -1)"
+  [ -n "$ipa" ] || die "the export wrote no .ipa"
+  echo "Development-signed for the team's registered devices, nothing sent to App Store Connect: $ipa"
+  exit 0
+fi
+
 if [ "$upload" = 0 ]; then
   if [ "$unsigned" = 1 ]; then echo "Unsigned archive, nothing sent to App Store Connect: $archive"; else echo "Signed archive, nothing sent to App Store Connect: $archive"; fi
   exit 0
 fi
 
-options="$out/ExportOptions.plist"
 cp "$root/apps/phone/ios/Config/ExportOptions-TestFlight.plist" "$options"
 run_logged upload xcodebuild -exportArchive \
   -archivePath "$archive" -exportOptionsPlist "$options" -exportPath "$out/export" \

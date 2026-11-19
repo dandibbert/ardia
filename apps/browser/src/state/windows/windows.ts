@@ -2,7 +2,6 @@ import type { StateCreator } from "zustand";
 import type { BrowserState } from "../browser/store";
 import {
   findLast,
-  IDLE_LIVE,
   incognitoProfileId,
   inPinnedContainer,
   isIncognitoProfile,
@@ -28,6 +27,7 @@ import { activated, apply, removeTabs, withNewTab } from "../tabs/tabs";
 import type { AdoptId, BrowserWindow, ClosedWindow, Frame, ParkedPins, Tab, WindowKind } from "../browser/types";
 import { emptyWindow, smallWindow, withWindow } from "./newWindow";
 import { withWindowFrame, withWindowMaximized } from "./windowPlacement";
+import { withFullScreen } from "./fullScreenDisplay";
 import { newTabHome } from "../tabs/newTabHome";
 import { noteAutoHideTabsChosen, noteTornOffWindowKeptAutoHide } from "../telemetry/autoHideTabsChoices";
 import { lastClosedEntry, lastClosedTab, restoreTab, restoreWindow, withoutRecentlyClosed } from "./reopenClosed";
@@ -63,9 +63,9 @@ export type WindowsSlice = {
 
   createWindow(options?: CreateWindowOptions): string;
   closeWindow(id: string, options?: CloseWindowOptions): void;
-  setWindowFrame(id: string, frame: Frame, restored?: Frame): void;
+  setWindowFrame(id: string, frame: Frame, restored?: Frame, fitted?: boolean): void;
   setWindowMaximized(id: string, on: boolean): void;
-  setWindowFullScreen(id: string, on: boolean): void;
+  setWindowFullScreen(id: string, on: boolean, display?: string): void;
   toggleSidebar(windowId: string): void;
   switchProfile(windowId: string, profileId: string): void;
   moveTabsToWindow(tabIds: string[], windowId: string | null, options?: MoveOptions): string | undefined;
@@ -100,14 +100,12 @@ export function moveTabsInto(s: BrowserState, ids: string[], targetId: string): 
   const joinable = new Set(moving.filter((t) => !groupOf(s, t.id) && !inPinnedContainer(s, t.id)).map((t) => t.id));
   let next = removeTabs(s, moving.map((t) => t.id), false);
   const tabs = { ...next.tabs };
-  const live = { ...next.live };
   for (const tab of moving) {
     const t = tab;
     const loaded = hasLoadedPage(tab);
     tabs[t.id] = { ...t, windowId: targetId, page: loaded ? loadedPage(navigationTo(t.url)) : hasPage(tab) ? IDLE : tab.page };
-    live[t.id] = IDLE_LIVE;
   }
-  next = { ...next, tabs, live };
+  next = { ...next, tabs };
   for (const profileId of new Set(moving.map((t) => t.profileId))) {
     next = placeMovedTabs(next, targetId, moving.filter((t) => t.profileId === profileId).map((t) => t.id), joinable);
   }
@@ -160,7 +158,6 @@ function intoProfile(s: BrowserState, tabId: string, profileId: string): Browser
     ...next,
     tabs,
     pinChoices,
-    live: { ...next.live, [tabId]: IDLE_LIVE },
     windows: { ...next.windows, [w.id]: { ...base, tabIds: orderSections(tabIds, tabs, next.groups) } },
     windowOrder: next.windowOrder.includes(w.id) ? next.windowOrder : s.windowOrder,
   };
@@ -239,20 +236,19 @@ export const createWindowsSlice: StateCreator<BrowserState, [], [], WindowsSlice
     });
   },
 
-  setWindowFrame(id, frame, restored) {
-    set((s) => withWindowFrame(s, id, frame, restored));
+  setWindowFrame(id, frame, restored, fitted) {
+    set((s) => withWindowFrame(s, id, frame, restored, fitted));
   },
 
   setWindowMaximized(id, on) {
     set((s) => withWindowMaximized(s, id, on));
   },
 
-  setWindowFullScreen(id, on) {
+  setWindowFullScreen(id, on, display) {
     set((s) => {
       const w = s.windows[id];
-      if (!w || !!w.fullScreen === on) return {};
-      const { fullScreen: _, ...rest } = w;
-      return { windows: { ...s.windows, [id]: on ? { ...rest, fullScreen: Date.now() } : rest } };
+      const next = w && withFullScreen(w, on, display);
+      return next ? { windows: { ...s.windows, [id]: next } } : {};
     });
   },
 

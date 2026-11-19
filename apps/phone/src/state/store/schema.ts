@@ -2,7 +2,7 @@ import type { SqlDatabase } from "../../lib/sqlDatabase.ts";
 
 export const DATABASE_FILE = "browser.db";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Record<number, string[]> = {
   0: [
@@ -19,6 +19,7 @@ const MIGRATIONS: Record<number, string[]> = {
     "CREATE INDEX visits_profile_visitedAt ON visits(profileSyncId, visitedAt)",
     "CREATE TABLE preferences (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
   ],
+  1: ["ALTER TABLE tabs ADD COLUMN pinnedKey TEXT"],
 };
 
 export type MigrationResult = { from: number; to: number } | { refused: number };

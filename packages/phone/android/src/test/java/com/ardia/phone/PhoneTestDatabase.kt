@@ -28,7 +28,7 @@ internal object PhoneTestDatabase {
         return statements
     }
 
-    fun create(file: File, version: Int = 1, seed: (Connection) -> Unit = {}): File {
+    fun create(file: File, version: Int = PhoneBrowsingSource.SCHEMA_VERSION, seed: (Connection) -> Unit = {}): File {
         file.parentFile?.mkdirs()
         DriverManager.getConnection("jdbc:sqlite:${file.path}").use { connection ->
             connection.createStatement().use { statement ->

@@ -94,6 +94,7 @@ enum CommandTable {
     case reportProblem
     case keyboardShortcuts
     case copyDiagnostics
+    case copyLastFreeze
     case toolTour
     case videoTour
     case releaseNotes
@@ -214,6 +215,7 @@ enum CommandTable {
     "reportProblem": "Report a Problem…",
     "keyboardShortcuts": "Keyboard Shortcuts",
     "copyDiagnostics": "Copy Diagnostics",
+    "copyLastFreeze": "Copy Last Freeze",
     "toolTour": "Tool Tour",
     "videoTour": "Video Tour",
     "releaseNotes": "Release Notes",
@@ -275,8 +277,8 @@ enum CommandTable {
     "viewSource": [("u", [.option, .command])],
     "back": [("[", [.command]), ("\u{F702}", [.command])],
     "forward": [("]", [.command]), ("\u{F703}", [.command])],
-    "nextTab": [("]", [.shift, .command]), ("}", [.command]), ("\u{F72D}", [.control]), ("\u{F701}", [.option, .command])],
-    "previousTab": [("[", [.shift, .command]), ("{", [.command]), ("\u{F72C}", [.control]), ("\u{F700}", [.option, .command])],
+    "nextTab": [("]", [.shift, .command]), ("}", [.command]), ("\u{9}", [.control]), ("\u{F72D}", [.control]), ("\u{F701}", [.option, .command])],
+    "previousTab": [("[", [.shift, .command]), ("{", [.command]), ("\u{9}", [.control, .shift]), ("\u{F72C}", [.control]), ("\u{F700}", [.option, .command])],
     "selectTab:1": [("1", [.command])],
     "selectTab:2": [("2", [.command])],
     "selectTab:3": [("3", [.command])],
@@ -303,8 +305,6 @@ enum CommandTable {
     "cleanUpTabs": [("k", [.option, .command])],
     "searchTabs": [("a", [.shift, .command])],
     "returnToPinnedUrl": [("\u{D}", [.command])],
-    "tabSwitcher:forward": [("\u{9}", [.control])],
-    "tabSwitcher:backward": [("\u{9}", [.control, .shift])],
     "share": [("s", [.option, .command])],
     "reportProblem": [("i", [.option, .shift, .command])],
     "openFile": [("o", [.command])],
@@ -325,7 +325,7 @@ enum CommandTable {
     "std:cut:": [("x", [.command])],
     "std:copy:": [("c", [.command])],
     "std:paste:": [("v", [.command])],
-    "std:pasteAndMatchStyle:": [("v", [.shift, .command])],
+    "std:pasteAndMatchStyle:": [("v", [.shift, .command]), ("v", [.option, .shift, .command])],
     "std:selectAll:": [("a", [.command])],
     "std:showGuessPanel:": [(":", [.command])],
     "std:checkSpelling:": [(";", [.command])],

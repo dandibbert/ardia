@@ -11,7 +11,8 @@
       "edgeToEdgeEnabled": true
     },
     "ios": {
-      "bundleIdentifier": "com.ardia.browser.ios"
+      "bundleIdentifier": "com.ardia.browser.ios",
+      "supportsTablet": true
     },
     "experiments": {
       "tsconfigPaths": false

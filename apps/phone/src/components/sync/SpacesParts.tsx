@@ -59,7 +59,7 @@ function TileButton({
       ref={anchor}
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={() => (folder ? onFolder(tile, anchor) : openRemote(tile.url, tile.title, profileId))}
+      onPress={() => (folder ? onFolder(tile, anchor) : openRemote(tile.url, tile.title, profileId, tile.key))}
       onLongPress={folder ? undefined : (event) => onLink(tile.url, tile.title, event.nativeEvent.pageY)}
       {...(folder ? {} : screenReaderActions([{ name: "longpress", run: () => onLink(tile.url, tile.title, 0) }]))}
       style={styles.tile}

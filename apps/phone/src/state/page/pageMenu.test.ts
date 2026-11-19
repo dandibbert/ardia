@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blockersToast, menuModel, menuTitle, nightShadeIsOn, searchQuery, translationUrl, zoomPercent, type MenuInput } from "./pageMenu.ts";
+import { blockersToast, menuModel, menuTitle, nightShadeIsOn, searchQuery, translationAsks, translationUrl, zoomPercent, type MenuInput } from "./pageMenu.ts";
 import {
   backLayer,
   clampReaderStep,
@@ -72,6 +72,16 @@ test("Print needs a live web page, as main's menu enables it", () => {
   assert.equal(menuModel(input()).print, true);
   assert.equal(menuModel(input({ url: "about:blank" })).print, false);
   assert.equal(menuModel(input({ url: "http://example.com/" })).print, true);
+});
+
+test("Translate names the remembered language, and asks about Google until answered once; a private tab always asks", () => {
+  assert.equal(menuModel(input()).translateTitle, "Translate");
+  assert.equal(menuModel(input({ translationLanguageName: null })).translateTitle, "Translate");
+  assert.equal(menuModel(input({ translationLanguageName: "German" })).translateTitle, "Translate to German");
+  assert.equal(translationAsks(false, false), true);
+  assert.equal(translationAsks(false, true), false);
+  assert.equal(translationAsks(true, true), true);
+  assert.equal(translationAsks(true, false), true);
 });
 
 test("night shade, zoom text, translation and blocker toasts read as on Android", () => {

@@ -13,8 +13,20 @@ open class CompletingTextField: UITextField {
   static let composingLanguages = ["ja", "zh", "ko"]
   private var reportedSuffix = ""
 
+  public var onTextScrolled: (() -> Void)?
+  private lazy var scrollPan = UIPanGestureRecognizer(target: self, action: #selector(scrollText(_:)))
+  private var scrollStart: CGFloat = 0
+  private var scrollGlide: UIViewPropertyAnimator?
+  private weak var selectionDisplay: UITextSelectionDisplayInteraction?
+  static let selectionGripReach: CGFloat = 22
+  static let scrollGlideSeconds: TimeInterval = 0.5
+
   override open func didMoveToWindow() {
     super.didMoveToWindow()
+    if scrollPan.view == nil {
+      scrollPan.maximumNumberOfTouches = 1
+      addGestureRecognizer(scrollPan)
+    }
     guard wantsFocus, window != nil else { return }
     DispatchQueue.main.async { [weak self] in
       guard let self, self.wantsFocus, self.window != nil, !self.isFirstResponder else { return }
@@ -45,6 +57,87 @@ open class CompletingTextField: UITextField {
         still?.removeFromSuperview()
         still = nil
       }
+    }
+  }
+
+  private var textScroller: UIScrollView? { Self.scrollers(in: self).first }
+
+  private func scrollRange(of scroller: UIScrollView) -> CGFloat {
+    max(0, scroller.contentSize.width - scroller.bounds.width)
+  }
+
+  private func isOnSelectionGrip(_ point: CGPoint) -> Bool {
+    guard let selection = selectedTextRange else { return false }
+    return [selection.start, selection.end].contains { grip in
+      convert(caretRect(for: grip), from: textInputView).insetBy(dx: -Self.selectionGripReach, dy: -Self.selectionGripReach).contains(point)
+    }
+  }
+
+  private static func selectionDisplay(in view: UIView) -> UITextSelectionDisplayInteraction? {
+    for interaction in view.interactions {
+      if let display = interaction as? UITextSelectionDisplayInteraction { return display }
+    }
+    for child in view.subviews {
+      if let display = selectionDisplay(in: child) { return display }
+    }
+    return nil
+  }
+
+  private func scroll(_ scroller: UIScrollView, to offset: CGFloat) {
+    scroller.contentOffset.x = offset
+    selectionDisplay?.setNeedsSelectionUpdate()
+  }
+
+  private func stopScrollGlide() {
+    guard let glide = scrollGlide else { return }
+    glide.stopAnimation(true)
+    scrollGlide = nil
+    selectionDisplay?.setNeedsSelectionUpdate()
+  }
+
+  override open func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+    guard recognizer === scrollPan else { return super.gestureRecognizerShouldBegin(recognizer) }
+    guard isFirstResponder, still == nil, markedTextRange == nil, let scroller = textScroller, scrollRange(of: scroller) > 0.5 else { return false }
+    let velocity = scrollPan.velocity(in: self)
+    guard abs(velocity.x) > abs(velocity.y) else { return false }
+    let travel = scrollPan.translation(in: self)
+    let now = scrollPan.location(in: self)
+    return !isOnSelectionGrip(CGPoint(x: now.x - travel.x, y: now.y - travel.y))
+  }
+
+  override open func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    stopScrollGlide()
+    super.touchesBegan(touches, with: event)
+  }
+
+  @objc private func scrollText(_ pan: UIPanGestureRecognizer) {
+    guard let scroller = textScroller else { return }
+    let range = scrollRange(of: scroller)
+    switch pan.state {
+    case .began:
+      stopScrollGlide()
+      scrollStart = scroller.contentOffset.x
+      selectionDisplay = Self.selectionDisplay(in: self)
+    case .changed:
+      scroll(scroller, to: min(max(scrollStart - pan.translation(in: self).x, 0), range))
+    case .ended:
+      let speed = -pan.velocity(in: self).x
+      let rate = UIScrollView.DecelerationRate.normal.rawValue
+      let from = scroller.contentOffset.x
+      let rest = min(max(from + speed / 1000 * rate / (1 - rate), 0), range)
+      if abs(rest - from) > 0.5 {
+        let glide = UIViewPropertyAnimator(duration: Self.scrollGlideSeconds, timingParameters: UISpringTimingParameters(dampingRatio: 1, initialVelocity: CGVector(dx: speed / (rest - from), dy: 0)))
+        glide.addAnimations { [weak self] in self?.scroll(scroller, to: rest) }
+        glide.addCompletion { [weak self] _ in
+          self?.scrollGlide = nil
+          self?.selectionDisplay?.setNeedsSelectionUpdate()
+        }
+        scrollGlide = glide
+        glide.startAnimation()
+      }
+      onTextScrolled?()
+    default:
+      break
     }
   }
 

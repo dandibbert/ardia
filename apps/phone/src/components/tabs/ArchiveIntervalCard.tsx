@@ -5,7 +5,7 @@ import { dismissArchiveCard, hideArchiveCardSoon } from "../../state/browse/arch
 import { setArchiveInterval } from "../../state/settings/actions";
 import { usePreferences } from "../../state/settings/hooks";
 import { AUTO_ARCHIVE_INTERVALS, autoArchiveTitle, type AutoArchiveInterval } from "../../state/tabs/tabModels";
-import { archiveCardLayout, capsule, ChromeSurface, deckChromeLayout, deckChromeMotion, FloatingMenu, screenReaderActions, font, ink, radius, shadowRadius, space, Symbol, tabsLayout, tabsMotion, useTheme, useReduceMotion, type MenuItem } from "../ui";
+import { archiveCardLayout, capsule, ChromeSurface, deckChromeLayout, deckChromeMotion, FloatingMenu, screenReaderActions, font, ink, radius, shadowRadius, space, Symbol, tabsLayout, tabsMotion, useTheme, useReduceMotion, type MenuItem, SystemGlyph } from "../ui";
 import { MenuTrigger } from "../ui/MenuTrigger";
 
 import { ArchiveTile } from "./ArchiveTile";
@@ -94,12 +94,12 @@ export function ArchiveCapsule({ centerY, safeSide }: { centerY: number; safeSid
             {({ onPress }) => (
               <Pressable accessibilityRole="button" accessibilityLabel={`Archive inactive tabs, ${title}`} onPress={onPress} style={styles.capsulePicker}>
                 <Text style={[styles.capsuleChoice, { color: theme.formAccent }]}>{title}</Text>
-                <Symbol name="chevronUpChevronDown" size={deckChromeLayout.archiveChevron} color={theme.formAccent} />
+                <SystemGlyph testID="archiveCapsuleChevrons" systemName="chevron.up.chevron.down" pointSize={11} weight="semibold" fitted name="chevronUpChevronDown" size={deckChromeLayout.archiveChevron} color={theme.formAccent} />
               </Pressable>
             )}
           </MenuTrigger>
           <Pressable testID="archiveCapsuleDismiss" accessibilityRole="button" accessibilityLabel="Dismiss" onPress={() => dismissArchiveCard()} style={styles.capsuleDismiss}>
-            <Symbol name="xmark" size={deckChromeLayout.archiveDismissGlyph} color={theme.secondaryLabel} />
+            <SystemGlyph testID="archiveCapsuleDismissGlyph" systemName="xmark" pointSize={13} weight="semibold" name="xmark" size={deckChromeLayout.archiveDismissGlyph} color={theme.secondaryLabel} />
           </Pressable>
         </View>
       </ChromeSurface>

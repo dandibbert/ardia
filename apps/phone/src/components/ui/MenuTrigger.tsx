@@ -1,9 +1,12 @@
 import { actionSheet, ContextMenuView, nativeMenusAvailable, settingsUI, type ContextMenuHandle, type MenuItem as NativeMenuItem } from "@ardia/phone-native";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, View, type StyleProp, type ViewInstance, type ViewStyle } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Platform, StyleSheet, View, type StyleProp, type ViewInstance, type ViewStyle } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 import { sfName } from "../../lib/sfSymbols";
 import type { Confirmation } from "./Dialog";
 import { FloatingMenu, isSubmenu, Menu, type MenuAction, type MenuItem, type MenuSubmenu } from "./Menu";
+import { tabsMotion } from "./motion";
 import { Portal } from "./Overlay";
 import { useTheme } from "./theme";
 
@@ -85,10 +88,32 @@ function NativeTrigger({ items, trigger = "longPress", fixedOrder, onOpen, onClo
   }, [onOpen]);
   const native = useRef<ContextMenuHandle>(null);
   const show = useCallback(() => void native.current?.show(), []);
-  const handlers: MenuHandlers = Platform.OS !== "android" || disabled ? {} : trigger === "tap" ? { onPress: show } : { onLongPress: show };
+  const showAt = useCallback((x: number, y: number) => void native.current?.show(x, y), []);
+  const android = Platform.OS === "android";
+  const handlers: MenuHandlers = !android || disabled ? {} : trigger === "tap" ? { onPress: show } : { onLongPress: show };
+  const press = useMemo(
+    () =>
+      Gesture.LongPress()
+        .withTestId(testID ? `${testID}LongPress` : "menuLongPress")
+        .enabled(android && trigger === "longPress" && !disabled)
+        .minDuration(tabsMotion.longPress)
+        .onStart((event) => {
+          runOnJS(showAt)(event.x, event.y);
+        }),
+    [android, trigger, disabled, testID, showAt],
+  );
+  const content = children(handlers);
   return (
     <ContextMenuView ref={native} testID={testID} style={style} collapsable={false} items={disabled ? [] : menu.items} trigger={trigger} fixedOrder={fixedOrder} onSelect={select} onOpen={opened} onClose={onClose} appearance={{ dark: dark ?? theme.dark }}>
-      {children(handlers)}
+      {android && trigger === "longPress" ? (
+        <GestureDetector gesture={press}>
+          <View style={styles.pressArea} collapsable={false}>
+            {content}
+          </View>
+        </GestureDetector>
+      ) : (
+        content
+      )}
     </ContextMenuView>
   );
 }
@@ -143,3 +168,5 @@ export function confirmInSheet(confirmation: Confirmation, drawn: () => void) {
     if (chosen === "confirm") confirmation.run();
   });
 }
+
+const styles = StyleSheet.create({ pressArea: { flexGrow: 1, alignSelf: "stretch" } });

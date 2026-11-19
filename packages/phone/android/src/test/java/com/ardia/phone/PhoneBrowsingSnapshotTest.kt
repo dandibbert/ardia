@@ -19,7 +19,7 @@ class PhoneBrowsingSnapshotTest {
 
     @Test
     fun aDatabaseFromANewerAppFailsTheReadInsteadOfGuessingItsTables() {
-        val file = PhoneTestDatabase.create(File(Files.createTempDirectory("phone-newer").toFile(), "browser.db"), version = 2) { db ->
+        val file = PhoneTestDatabase.create(File(Files.createTempDirectory("phone-newer").toFile(), "browser.db"), version = PhoneBrowsingSource.SCHEMA_VERSION + 1) { db ->
             db.tab("a", "https://a.example/", now)
         }
         val source = PhoneBrowsingSource(JdbcRows(file), inbox(), clock = { now })

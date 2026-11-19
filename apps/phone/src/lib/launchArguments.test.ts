@@ -23,6 +23,14 @@ test("text is trimmed and empty text is none, but a query and an overlay keep th
   assert.equal(parsed.browseOverlay, " ot");
 });
 
+test("-BrowseResearch opens Browse for Me on its trimmed query and -ArdiaVoiceHeard shows voice search having heard its words, outside demo mode too, and nothing when empty", () => {
+  assert.equal(parseLaunchArguments({ BrowseResearch: "  mount everest height  " }).browseResearch, "mount everest height");
+  assert.equal(parseLaunchArguments({ BrowseResearch: "   " }).browseResearch, null);
+  assert.equal(NO_LAUNCH_ARGUMENTS.browseResearch, null);
+  assert.equal(parseLaunchArguments({ ArdiaVoiceHeard: " otter facts " }).voiceHeard, "otter facts");
+  assert.equal(NO_LAUNCH_ARGUMENTS.voiceHeard, null);
+});
+
 test("numbers, whole numbers and steps parse as Compose's do", () => {
   const parsed = parseLaunchArguments({ BrowseDelay: "2.5", BrowseTab: "3.9", BrowseDeckOpen: 2, BrowseSteps: "1, -1,x,2", BrowseStepGap: "0.75" });
   assert.equal(parsed.browseDelayMs, 2500);
@@ -71,9 +79,4 @@ test("the lab's demo seed scale is read only in a demo session, and never below 
   assert.equal(parseLaunchArguments({ ArdiaDemo: "YES", ArdiaDemoScale: "1000" }).demoScale, 1000);
   assert.equal(parseLaunchArguments({ ArdiaDemoScale: "1000" }).demoScale, 0);
   assert.equal(parseLaunchArguments({ ArdiaDemo: "YES", ArdiaDemoScale: "-5" }).demoScale, 0);
-});
-
-test("the lab's drawn-size deck pictures are off unless asked for", () => {
-  assert.equal(NO_LAUNCH_ARGUMENTS.tabFaceResize, false);
-  assert.equal(parseLaunchArguments({ ArdiaTabFaceResize: "1" }).tabFaceResize, true);
 });

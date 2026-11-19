@@ -1,7 +1,7 @@
 import { fieldTiming } from "../../platform/fieldTiming";
 import { timeEngineEvents } from "../../platform/performance";
 import { onSystemWake } from "../../platform/systemSignals";
-import { capture, isSharing } from "./client";
+import { capture, consentToken, isSharing } from "./client";
 
 type Bridge = Record<string, unknown>;
 type LongTask = { label: string; start: number; ms: number };
@@ -19,6 +19,7 @@ const longTasks: LongTask[] = [];
 let stallsSent = 0;
 let lastBeatUptime = 0;
 let lastWakeUptime: number | null = null;
+let consentAtBeat: ReturnType<typeof consentToken> = null;
 let statsAtBeat: RuntimeStats | null = null;
 let beat: ReturnType<typeof setInterval> | undefined;
 
@@ -103,6 +104,8 @@ function onBeat() {
   const awake = uptime();
   const from = now - (awake - lastBeatUptime) + BEAT_MS;
   const before = statsAtBeat;
+  const consent = consentAtBeat;
+  consentAtBeat = consentToken();
   lastBeatUptime = awake;
   statsAtBeat = runtimeStats();
   if (now - from < STALL_MS || stallsSent >= MAX_STALLS_PER_SESSION || !isSharing()) return;
@@ -111,7 +114,7 @@ function onBeat() {
   if (!report) return;
   if (lastWakeUptime !== null) report.since_wake_s = Math.round((awake - lastWakeUptime) / 1000);
   stallsSent++;
-  capture("js_stall", report);
+  capture("js_stall", report, consent);
 }
 
 export function startJsStalls() {
@@ -119,6 +122,7 @@ export function startJsStalls() {
   timeEngineEvents((name, run) => timed(`engine ${name}`, run));
   if (beat) return;
   lastBeatUptime = uptime();
+  consentAtBeat = consentToken();
   statsAtBeat = runtimeStats();
   onSystemWake(() => {
     lastWakeUptime = uptime();

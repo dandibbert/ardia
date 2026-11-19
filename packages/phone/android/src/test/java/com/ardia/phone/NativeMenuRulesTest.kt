@@ -59,9 +59,38 @@ class NativeMenuRulesTest {
     }
 
     @Test
-    fun androidsOwnMenusAreOnlyAskedForByTheLabArgument() {
-        assertTrue(NativeMenuRules.asked(mapOf("ArdiaNativeMenus" to true)))
-        assertFalse(NativeMenuRules.asked(emptyMap()))
-        assertFalse(NativeMenuRules.asked(LaunchExtras.arguments(mapOf("ArdiaNativeMenus" to true), allowed = false)))
+    fun aMenusHeightCountsItsRowsGroupDividersAndPadding() {
+        val rows = NativeMenuRules.rows(
+            listOf(
+                MenuItemShape("0", "Copy Link"),
+                MenuItemShape("g1", "Spaces", inline = true, children = listOf(MenuItemShape("1", "Work"), MenuItemShape("2", "Home"))),
+                MenuItemShape("3", "Close Tab", destructive = true),
+            ),
+        )
+        assertEquals("5 rows (a header and four actions), 2 dividers between 3 groups, padding top and bottom", 5 * 132 + 2 * 25 + 2 * 22, NativeMenuRules.estimatedHeight(rows, 132, 25, 22))
+    }
+
+    @Test
+    fun aMenuThatWouldRunUnderTheNavigationBarOpensHigherAndNeverAboveTheStatusBar() {
+        assertEquals("room below: the menu opens at the press", 1200, NativeMenuRules.anchorTop(1200, 700, 80, 2248))
+        assertEquals("the F4's deck card: Close Tab ended under the 3-button bar at 2270", 2248 - 700, NativeMenuRules.anchorTop(1700, 700, 80, 2248))
+        assertEquals("taller than the room: it starts under the status bar", 80, NativeMenuRules.anchorTop(1700, 2400, 80, 2248))
+    }
+
+    @Test
+    fun aMenuKeepsTheBarsSideInsetFromTheScreenEdgeAndOpensTowardTheMiddle() {
+        val left = 33
+        val right = 1080 - 33
+        assertEquals("the deck's More, at the right edge: the menu's right edge sits on the inset", NativeMenuRules.Across(right, true), NativeMenuRules.across(986, 1080, left, right))
+        assertEquals("a long press in the left half opens rightward from the press", NativeMenuRules.Across(430, false), NativeMenuRules.across(430, 430, left, right))
+        assertEquals("a long press near the right edge opens leftward from the inset", NativeMenuRules.Across(right, true), NativeMenuRules.across(1070, 1070, left, right))
+        assertEquals("a trigger at the left edge keeps the inset too", NativeMenuRules.Across(left, false), NativeMenuRules.across(0, 120, left, right))
+    }
+
+    @Test
+    fun androidsOwnMenusAreTheDefaultAndOnlyTheLabArgumentBringsBackTheDrawnOnes() {
+        assertTrue(NativeMenuRules.nativeMenus(emptyMap()))
+        assertFalse(NativeMenuRules.nativeMenus(mapOf("ArdiaDrawnMenus" to true)))
+        assertTrue("a store build ignores launch arguments", NativeMenuRules.nativeMenus(LaunchExtras.arguments(mapOf("ArdiaDrawnMenus" to true), allowed = false)))
     }
 }

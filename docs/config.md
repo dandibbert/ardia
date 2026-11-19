@@ -24,8 +24,10 @@ the same rule a macOS test instance follows. The schemas go to `<data dir>/confi
   config.json          settings and the theme choice
   hooks.json           automation hooks (docs/automation.md)
   themes/<name>.json   colour overrides
+  plugins/<name>/      plugins (docs/plugins.md)
   config.schema.json   written by the app
   theme.schema.json    written by the app
+  plugin.schema.json   written by the app
 ```
 
 Ardia never creates the folder. `ardia config init` does, or the user does.
@@ -49,7 +51,7 @@ Ardia never creates the folder. `ardia config init` does, or the user does.
   left out, so a new setting never becomes file-writable by accident. Left out, because they grant control, send
   data somewhere or change which engine handles a site: `cliControl`, `allowJavaScriptFromAppleEvents`,
   `extensionSearchEngines`, `defaultProfileId`, `customSearchUrl`, `newTabUrl`, `customSearchEngines`, `pageEngine`,
-  `websiteEngines`, `protectedVideoInWebKit`, `fairPlayInChromium`. `searchEngine` must name an engine that already exists (built in, or
+  `websiteEngines`, `protectedVideoInWebKit`. `searchEngine` must name an engine that already exists (built in, or
   one the user added in Settings).
 - `interfaceScale` (0.8 to 1.5 in steps of 0.05, default 1; this Mac only, not synced) is Settings › Appearance ›
   Interface size: it scales the whole app's UI, not web pages, and applies live.
@@ -297,7 +299,7 @@ and in Ardia's context menus. A name macOS doesn't have draws nothing.
 
 ## Schemas
 
-The app writes `config.schema.json` and `theme.schema.json` (JSON Schema 2020-12) to `<data dir>/config-schema/` at
+The app writes `config.schema.json`, `theme.schema.json` and `plugin.schema.json` (JSON Schema 2020-12) to `<data dir>/config-schema/` at
 every launch, and into the config folder whenever it exists, rewriting only when the content changed (temp file and
 rename, replacing a symlinked schema rather than writing through it). They are generated from the allowlisted
 `SETTING_SPECS` entries (each spec carries its schema; a test checks schema and validator agree on samples and

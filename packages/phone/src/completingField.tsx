@@ -42,13 +42,14 @@ export type CompletingFieldProps = ViewProps &
     onSubmit?: (displayed: string) => void;
     onFocusChange?: (focused: boolean) => void;
     onSuffixChange?: (suffix: string) => void;
+    onFieldScroll?: () => void;
   };
 
 export type NativeColor = ColorValue | number;
 
 type NativeProps = Omit<
   CompletingFieldProps,
-  "onTypedChange" | "onSubmit" | "onFocusChange" | "onSuffixChange" | "accessibilityLabel" | "highlightColor" | "color" | "placeholderTextColor" | "cursorColor" | "selectionColor"
+  "onTypedChange" | "onSubmit" | "onFocusChange" | "onSuffixChange" | "onFieldScroll" | "accessibilityLabel" | "highlightColor" | "color" | "placeholderTextColor" | "cursorColor" | "selectionColor"
 > & {
   cursorColor?: NativeColor;
   selectionColor?: NativeColor;
@@ -62,6 +63,7 @@ type NativeProps = Omit<
   onSubmit?: (event: NativeSyntheticEvent<{ displayed: string; submit?: number }>) => void;
   onFocusChange?: (event: NativeSyntheticEvent<{ focused: boolean }>) => void;
   onSuffixChange?: (event: NativeSyntheticEvent<{ suffix: string }>) => void;
+  onFieldScroll?: () => void;
 };
 
 const hasNative = requireOptionalNativeModule("ArdiaPhoneCompletingField") !== null;
@@ -80,7 +82,7 @@ export function nativeFieldColor(value: ColorValue | undefined): NativeColor | u
 const fallbackWeights = { regular: "400", medium: "500", semibold: "600", bold: "700" } as const;
 
 export const CompletingField = forwardRef<CompletingFieldHandle, CompletingFieldProps>(function CompletingField(props, ref) {
-  const { onTypedChange, onSubmit, onFocusChange, onSuffixChange, text, offer, highlightColor, selectsAllOnFocus, holdsScroll, color, fontSize, fontWeight, style, accessibilityLabel, ...rest } = props;
+  const { onTypedChange, onSubmit, onFocusChange, onSuffixChange, onFieldScroll, text, offer, highlightColor, selectsAllOnFocus, holdsScroll, color, fontSize, fontWeight, style, accessibilityLabel, ...rest } = props;
   const native = useRef<CompletingFieldHandle>(null);
   const eventCount = useRef(0);
   const input = useRef<TextInputInstance>(null);
@@ -127,6 +129,7 @@ export const CompletingField = forwardRef<CompletingFieldHandle, CompletingField
       },
       onFocusChange: (event) => onFocusChange?.(event.nativeEvent.focused),
       onSuffixChange: (event) => onSuffixChange?.(event.nativeEvent.suffix),
+      onFieldScroll: Platform.OS === "ios" && onFieldScroll ? () => onFieldScroll() : undefined,
     });
   }
   return createElement(TextInput, {

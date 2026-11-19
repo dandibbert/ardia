@@ -276,9 +276,13 @@ test("Arc's layout keeps the address bar in a hidden sidebar (no toolbar on the 
   reloadSwitches();
 });
 
-test("the dock is fullscreen, docked, peeking, hiding or away, and only a still, undocked sidebar watches the left edge", () => {
+test("the dock is fullscreen, docked, peeking, hiding or away, and a still sidebar that isn't docked watches the left edge, also over a full-screen page (#1041)", () => {
   const st = (o) => dm.dockState({ open: false, fullscreen: false, moving: false, peekLive: false, ...o });
-  assert.equal(st({ fullscreen: true, open: true, peekLive: true }), "fullscreen");
+  assert.equal(st({ fullscreen: true, open: true }), "fullscreen");
+  assert.equal(st({ fullscreen: true }), "fullscreen");
+  assert.equal(st({ fullscreen: true, open: true, peekLive: true }), "peeking");
+  assert.equal(st({ fullscreen: true, peekLive: true, peekLeaving: true }), "leaving");
+  assert.equal(st({ open: true, peekLive: true }), "docked");
   assert.equal(st({ open: true, moving: true }), "docked");
   assert.equal(st({ peekLive: true }), "peeking");
   assert.equal(st({ peekLive: true, moving: true }), "peeking");
@@ -293,7 +297,8 @@ test("the dock is fullscreen, docked, peeking, hiding or away, and only a still,
   assert.equal(dm.watchesEdge("peeking", true), false);
   assert.equal(dm.watchesEdge("hiding", true), false);
   assert.equal(dm.watchesEdge("docked", false), false);
-  assert.equal(dm.watchesEdge("fullscreen", false), false);
+  assert.equal(dm.watchesEdge("fullscreen", false), true);
+  assert.equal(dm.watchesEdge("fullscreen", true), false);
 });
 
 test("while the peek slides away only the window's edge brings it back, not the column it is leaving (#1192)", () => {
@@ -366,4 +371,18 @@ test("the dock jumps when it can't animate or Arc docks from an open peek, Arc h
   assert.equal(mv({ arc: true, open: false, peekOut: true }), "arcHide");
   assert.equal(mv({ open: false }), "slide");
   assert.equal(mv({ peekOut: true }), "slide");
+});
+
+test("a peek's light moves that stay wholly off the window at one height aren't sent; the first visible one and the rest place are", () => {
+  const hidden = dm.sidebarLightsCenter(false, 240, 240, 0, [25, 24]);
+  const right = dm.sidebarLightsCenter(true, 240, 240, 0, [25, 24]);
+  assert.equal(dm.lightsOffWindow(hidden), true);
+  assert.equal(dm.lightsOffWindow(right), true);
+  assert.equal(dm.lightsOffWindow(dm.sidebarLightsCenter(true, 240, 0, 0, [25, 24])), false);
+  assert.equal(dm.stillOffWindow(undefined, [-168, 33]), false);
+  assert.equal(dm.stillOffWindow([-168, 33], [-120, 33]), true);
+  assert.equal(dm.stillOffWindow([-120, 33], [-40, 33]), false);
+  assert.equal(dm.stillOffWindow([-168, 33], [-165, 24]), false);
+  assert.equal(dm.stillOffWindow([-60, 33, "right"], [-30, 33, "right"]), true);
+  assert.equal(dm.stillOffWindow([-30, 33, "right"], [10, 33, "right"]), false);
 });

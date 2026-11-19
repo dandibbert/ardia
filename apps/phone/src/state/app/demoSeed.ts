@@ -54,6 +54,7 @@ export function demoSeed(now: number, newId: () => string, scale = 0): ImportRow
     origin: "typed",
     receivedKey: null,
     receivedFromDevice: null,
+    pinnedKey: null,
     isPrivate: false,
   });
   const archived = DEMO_ARCHIVED.map((page, index) => tab(page, (index + 1) * POSITION_STEP, ago(page.minutesAgo) - ARCHIVED_IDLE_MS, ago(page.minutesAgo)));

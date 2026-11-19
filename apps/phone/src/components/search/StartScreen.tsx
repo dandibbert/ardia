@@ -6,7 +6,7 @@ import { newIncognitoTab, newRegularTab, newTab, openArchive, openSpaces, reopen
 import { useSyncEnabled } from "../../state/sync/hooks";
 import { useSearchOpen } from "../../state/search/hooks";
 import { useCanReopen, useHasTabs, useIncognito } from "../../state/tabs/hooks";
-import { ArdiaLogo, browseLayout, deckCenterFromBottom, FrostSource, LookBackdrop, LookBackdropBase, Menu, moveTo, tabsCurve, tabsLayout, trayMotion, type MenuItem, useDesign, useReduceMotion } from "../ui";
+import { ArdiaLogo, browseLayout, deckCenterFromBottom, FrostSource, iPhoneOr, LookBackdrop, LookBackdropBase, Menu, moveTo, tabsCurve, tabsLayout, trayMotion, type MenuItem, useDesign, useReduceMotion } from "../ui";
 import { openSettings } from "../../state/settings/hooks";
 import { DeckBar } from "../tabs/DeckBar";
 import { StartPage } from "./StartPage";
@@ -35,7 +35,7 @@ function OriginalStart() {
       : moveTo(trayUp ? 0 : 1, trayMotion.rise);
   }, [trayUp, reduceMotion]);
   const logoStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: reduceMotion ? 1 : 0.92 + 0.08 * shown.value }] }), [reduceMotion]);
-  const barStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
+  const barStyle = useAnimatedStyle(() => ({ opacity: BAR_STAYS_UNDER_TRAY ? 1 : shown.value }));
   const leading = hasTabs
     ? { icon: "squareOnSquare" as const, label: "Tabs", onPress: showDeck }
     : syncs
@@ -62,6 +62,7 @@ function OriginalStart() {
         </Animated.View>
       </View>
       <Animated.View
+        testID="startDeckBar"
         pointerEvents={trayUp ? "none" : "box-none"} collapsable={false}
         importantForAccessibility={trayUp ? "no-hide-descendants" : "auto"}
         accessibilityElementsHidden={trayUp}
@@ -89,6 +90,7 @@ function OriginalStart() {
 }
 
 const START_FROST = "start";
+const BAR_STAYS_UNDER_TRAY = iPhoneOr(false, true);
 
 const styles = StyleSheet.create({
   logo: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
