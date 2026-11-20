@@ -103,6 +103,8 @@ void NoteEvent(int browserId, NSString *name, NSDictionary *payload) {
   NSMutableDictionary *brief = [NSMutableDictionary dictionary];
   for (NSString *key in payload) {
     id value = payload[key];
+    if ([value isKindOfClass:NSString.class] && [value rangeOfString:@"^otpauth(-migration)?:" options:NSRegularExpressionSearch | NSCaseInsensitiveSearch].location == 0)
+      value = [value substringToIndex:[value rangeOfString:@":"].location + 1];
     brief[key] = [value isKindOfClass:NSString.class] && [value length] > 200 ? [value substringToIndex:200] : value;
   }
   [list addObject:@{@"name" : name, @"payload" : brief, @"t" : @(round(CACurrentMediaTime() * 1000))}];
@@ -161,6 +163,7 @@ void AcceptDrops(NSView *root, BOOL accept) {
   if ((self = [super initWithFrame:frameRect])) {
     _profile = @"";
     _visible = YES;
+    _selected = YES;
     _tabIndex = -1;
     self.wantsLayer = YES;
     __weak ArdiaWebView *weakSelf = self;
@@ -230,6 +233,12 @@ void AcceptDrops(NSView *root, BOOL accept) {
 - (void)setAdoptId:(NSString *)adoptId {
   _adoptId = [adoptId copy];
   if (self.window) [self ensureTab];
+}
+
+- (void)setSelected:(BOOL)selected {
+  if (_selected == selected) return;
+  _selected = selected;
+  if (selected && _visible && !_standalone) [self requestFocusRestore];
 }
 
 - (void)setNeighbour:(BOOL)neighbour {
@@ -328,6 +337,10 @@ void ArdiaWebViewsSetFieldTiming(BOOL on) {
 
 + (NSArray<NSDictionary<NSString *, id> *> *)devEventsForBrowser:(int)browserId {
   return RecentEvents()[@(browserId)] ?: @[];
+}
+
++ (void)devNoteEvent:(NSString *)name payload:(NSDictionary *)payload browser:(int)browserId {
+  NoteEvent(browserId, name, payload);
 }
 
 static BOOL gReportsCommits = NO;

@@ -3,7 +3,9 @@ import { Animated, Pressable, View } from "react-native";
 import { errorText, manualRefresh, statusText } from "../../state/live/engine";
 import { folderRows, type FolderRow } from "../../state/live/rows";
 import { updateFolder, useLive } from "../../state/live/store";
-import type { LiveItem } from "../../state/live/types";
+import type { FolderStatus, LiveItem } from "../../state/live/types";
+import { blockedLink } from "../../state/live/github";
+import { newTab } from "../../state/tabs/actions";
 import { usePageProfileId, useTab } from "../../state/browser/hooks";
 import { useLiveActiveTab, useLiveStrays } from "../../state/sidebar/hooks";
 import { openSettings } from "../../state/settings/settingsWindows";
@@ -63,7 +65,7 @@ export const LiveFolderBlock = memo(function LiveFolderBlock({ folderId, windowI
 
   const entries: FoldEntry[] = rows.length
     ? rows.map((row) => ({ key: row.key, node: <FolderRowView row={row} folderId={folderId} windowId={windowId} /> }))
-    : [{ key: "note", node: <FolderNote folderId={folderId} /> }];
+    : [{ key: "note", node: <FolderNote folderId={folderId} windowId={windowId} /> }];
   for (const id of strays) entries.push({ key: `stray:${id}`, node: <TabRow tabId={id} /> });
   if (completed) entries.push({ key: "completed", node: <CompletedFooter folderId={folderId} windowId={windowId} /> });
   const keep = !activeTab
@@ -101,12 +103,18 @@ function FolderRowView({ row, folderId, windowId }: { row: FolderRow; folderId: 
   }
 }
 
-function FolderNote({ folderId }: { folderId: string }) {
+function fixError(windowId: string, error: FolderStatus["error"]) {
+  const link = error ? blockedLink(error.message) : null;
+  if (link) newTab(windowId, { url: link });
+  else openSettings("automations");
+}
+
+function FolderNote({ folderId, windowId }: { folderId: string; windowId: string }) {
   const status = useLive((s) => s.status[folderId]);
   const kind = useLive((s) => s.folders[folderId]?.kind);
   const hidden = useLive((s) => s.hidden[folderId]?.length ?? 0);
   if (!status || status.state === "initializing" || (status.state === "updating" && !status.lastFetch)) return <NoteRow text="Loading…" spinner />;
-  if (status.error) return <NoteRow text={errorText(status.error.kind, status.error.source)} onPress={() => openSettings("automations")} icon="exclamationmark.triangle.fill" />;
+  if (status.error) return <NoteRow text={errorText(status.error.kind, status.error.source)} onPress={() => fixError(windowId, status.error)} icon="exclamationmark.triangle.fill" />;
   if (hidden) return <NoteRow text={`${hidden} hidden until you refresh`} onPress={() => void manualRefresh(folderId)} />;
   return <NoteRow text={kind === "pullRequests" ? "No open pull requests" : "No recent documents"} />;
 }
@@ -149,7 +157,7 @@ function FolderHeader({ folderId, windowId, collapsed }: { folderId: string; win
               <FolderOrIcon icon={folder.icon} open={!collapsed} color={folder.color} />
               <SidebarRowLabel text={folder.name} weight="medium" color={tokens.groupTitle} />
               {status?.error ? (
-                <Pressable onPress={() => openSettings("automations")} tooltip={errorText(status.error.kind, status.error.source)} style={{ marginRight: space.xxs }}>
+                <Pressable onPress={() => fixError(windowId, status.error)} tooltip={errorText(status.error.kind, status.error.source)} style={{ marginRight: space.xxs }}>
                   <Symbol name="exclamationmark.triangle.fill" size={10} color={colors.pending} style={{ width: 18, height: 18 }} />
                 </Pressable>
               ) : null}

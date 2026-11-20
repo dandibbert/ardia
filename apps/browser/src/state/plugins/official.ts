@@ -4,13 +4,14 @@ import { PLATFORM_TERMS } from "../../lib/platformTerms";
 import { experimentOn } from "../../platform/killSwitches";
 import { openSettings } from "../settings/settingsWindows";
 import { waitForInstall, type InstallResult } from "./installWaiters";
-import { requestPluginConsent } from "./lifecycle";
+import { releaseOrphanedConsent } from "./consentSurface";
+import { ALREADY_ASKING, requestPluginConsent } from "./lifecycle";
 import { relinkPrograms } from "./programs";
 import { activeManifest, currentPlugins, isAlwaysOn, isInstalled, usePlugins, type PluginListing, type PluginsStore } from "./store";
 
 export type OfficialPluginState = "available" | "installed" | "comingSoon" | "unsupported";
-export type OfficialPlugin = { name: string; title: string; blurb: string; icon: string; version: string | null; state: OfficialPluginState };
-type Entry = Omit<OfficialPlugin, "state" | "version">;
+export type OfficialPlugin = { name: string; title: string; blurb: string; icon: string; version: string | null; switchable: boolean; state: OfficialPluginState };
+type Entry = Omit<OfficialPlugin, "state" | "version" | "switchable">;
 type ComingSoon = Entry & { experiment: "officialPluginsAi" };
 
 export const OFFICIAL_CATALOGUE: readonly Entry[] = [
@@ -40,13 +41,13 @@ export function officialPlugins(
   const out: OfficialPlugin[] = entries.map((entry) => {
     const listing = officialListing(s, entry.name);
     const m = listing?.manifest;
-    const shown = { name: entry.name, title: m?.title ?? entry.title, blurb: m?.description || entry.blurb, icon: m?.icon ?? m?.page?.icon ?? (entry.icon || "puzzlepiece"), version: m?.version ?? null };
+    const shown = { name: entry.name, title: m?.title ?? entry.title, blurb: m?.description || entry.blurb, icon: m?.icon ?? m?.page?.icon ?? (entry.icon || "puzzlepiece"), version: m?.version ?? null, switchable: !!listing && !isAlwaysOn(listing) };
     if (!supported || !listing) return { ...shown, state: "unsupported" };
     return { ...shown, state: installedOf(s, listing) ? "installed" : "available" };
   });
   for (const soon of COMING_SOON) {
     if (!showComingSoon(soon.experiment) || out.some((o) => o.name === soon.name)) continue;
-    out.push({ name: soon.name, title: soon.title, blurb: soon.blurb, icon: soon.icon, version: null, state: supported ? "comingSoon" : "unsupported" });
+    out.push({ name: soon.name, title: soon.title, blurb: soon.blurb, icon: soon.icon, version: null, switchable: false, state: supported ? "comingSoon" : "unsupported" });
   }
   return out;
 }
@@ -91,6 +92,8 @@ export function installOfficialPlugin(name: string, options: { showSheet?: boole
     return linked(name);
   }
   if (!listing.manifest || !listing.hash) return Promise.resolve({ ok: false, reason: listing.problems[0] ?? "It can't load." });
+  releaseOrphanedConsent();
+  if (currentPlugins().consent) return Promise.resolve({ ok: false, reason: ALREADY_ASKING });
   if (!requestPluginConsent(name)) return Promise.resolve({ ok: false, reason: "Can't install it right now." });
   const done = waitForInstall(name);
   if (options.showSheet !== false) openSettings("plugins", null, name);

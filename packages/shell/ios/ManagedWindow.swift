@@ -16,6 +16,7 @@ final class ManagedWindow {
   var contentShown = false
   var closingFromJS = false
   var closeAskedAt: TimeInterval?
+  var summoned = false
   private var contentObserver: NSObjectProtocol?
   private var contentSizer: NSObjectProtocol?
 

@@ -160,6 +160,7 @@ export const HistoryButton = memo(function HistoryButton({
   palette,
   place,
   onFocus,
+  closesTab = false,
 }: {
   tabId: string;
   windowId: string;
@@ -168,6 +169,7 @@ export const HistoryButton = memo(function HistoryButton({
   palette: ToolbarPalette;
   place?: NavPlace;
   onFocus: () => void;
+  closesTab?: boolean;
 }) {
   const handoffMotion = useRef(new Animated.Value(0)).current;
   const pressOffsetMotion = useRef(new Animated.Value(0)).current;
@@ -238,7 +240,7 @@ export const HistoryButton = memo(function HistoryButton({
         onPressOut={() => animatePressOffset(false)}
         onLongPress={openMenu}
         onContextMenu={openMenu}
-        tooltip={withShortcut(direction < 0 ? "Go Back" : "Go Forward", historyHint)}
+        tooltip={withShortcut(direction > 0 ? "Go Forward" : closesTab ? "Close Tab and Go Back" : "Go Back", historyHint)}
       >
         <Animated.View style={[ICON_CENTER, { transform: [{ translateX: pressOffsetMotion }] }]}>
           <Animated.View pointerEvents="none" style={[ICON_LAYER, { opacity: handoffFadeOut, transform: [{ translateX: handoffOutX }] }]}>

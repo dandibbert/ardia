@@ -9,14 +9,15 @@ import { useSelectedProfile, useSyncStatus, useSyncView } from "../../state/sync
 import { useCanReopen, useIncognito } from "../../state/tabs/hooks";
 import { prepareArchive } from "../../state/tabs/store";
 import { countUsage } from "../../state/telemetry/telemetry";
-import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, SystemGlyph, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
-import { MenuTrigger, spaceSystemImage } from "../ui/MenuTrigger";
+import { browseLayout, capsule, deckChromeInk, deckChromeLayout, deckChromeMotion, font, IncognitoSpecs, menuLook, tabsInk, tabsLayout, useTheme, type MenuItem } from "../ui";
+import { MenuTrigger, nativeMenus, spaceSystemImage } from "../ui/MenuTrigger";
 import { SpaceTitle, spaceMenuSymbol } from "../search/StartSpaces";
 import { FadingGlyphs, GlassCircleButton, type ChromeFade } from "./ChromeButtons";
 
 type Props = {
   safeTop: number;
   safeSide: number;
+  sideInset: number;
   privateCount: number;
   hasTabs: boolean;
   onCloseIncognito: () => void;
@@ -30,20 +31,21 @@ export const deckHeaderBottom = () => deckChromeLayout.headerCenter + deckChrome
 
 export const deckArchiveBottom = () => deckChromeLayout.archiveCenter + deckChromeLayout.archiveHeight / 2;
 
-export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll }: { syncEnabled: boolean; canReopen: boolean; hasTabs: boolean; onCloseAll: () => void }): MenuItem[] {
-  return [
-    { label: "Archive", onPress: openArchive },
-    ...(syncEnabled ? [{ label: "Spaces From Your Mac", onPress: openSpaces }] : []),
-    "divider",
-    { label: "New Incognito Tab", onPress: newIncognitoTab },
-    ...(canReopen ? [{ label: "Reopen Closed Tab", onPress: reopenLastClosed }] : []),
-    ...(hasTabs ? [{ label: "Close All Tabs", destructive: true, onPress: onCloseAll }] : []),
-    "divider",
-    { label: "Settings", onPress: () => openSettings() },
-  ];
+const menuGroupsRuled = () => nativeMenus() || menuLook.dividerLine > 0;
+
+function joinMenuGroups(groups: readonly MenuItem[][], ruled: boolean = menuGroupsRuled()): MenuItem[] {
+  return groups.filter((group) => group.length > 0).flatMap((group, index): MenuItem[] => (index > 0 && ruled ? ["divider", ...group] : group));
 }
 
-export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
+export function deckMoreMenuItems({ syncEnabled, canReopen, hasTabs, onCloseAll }: { syncEnabled: boolean; canReopen: boolean; hasTabs: boolean; onCloseAll: () => void }): MenuItem[] {
+  return joinMenuGroups([
+    [{ label: "Archive", onPress: openArchive }, ...(syncEnabled ? [{ label: "Spaces From Your Mac", onPress: openSpaces }] : [])],
+    [{ label: "New Incognito Tab", onPress: newIncognitoTab }, ...(canReopen ? [{ label: "Reopen Closed Tab", onPress: reopenLastClosed }] : []), ...(hasTabs ? [{ label: "Close All Tabs", destructive: true, onPress: onCloseAll }] : [])],
+    [{ label: "Settings", onPress: () => openSettings() }],
+  ]);
+}
+
+export function DeckHeader({ safeTop, safeSide, sideInset, privateCount, hasTabs, onCloseIncognito, onCloseAll, menusShown = true, showsMore = true, onMenu, glassShown, glassShownMs, glyphFade }: Props) {
   const theme = useTheme();
   const status = useSyncStatus();
   const view = useSyncView();
@@ -52,7 +54,7 @@ export function DeckHeader({ safeTop, safeSide, privateCount, hasTabs, onCloseIn
   const incognito = useIncognito();
   const spaces = status.isEnabled ? view.profiles : [];
   const current = shown ?? spaces[0] ?? null;
-  const side = safeSide + deckChromeLayout.headerSide;
+  const side = safeSide + sideInset;
   const below = safeTop + deckHeaderBottom() + deckChromeLayout.menuGap;
   const opened = () => onMenu?.(true);
   const closed = () => onMenu?.(false);
@@ -123,7 +125,7 @@ function IncognitoPill({ count, onPress }: { count: number; onPress: () => void 
       style={styles.pillHit}
     >
       <View pointerEvents="none" style={[styles.pill, { backgroundColor: tabsInk.incognitoCard, borderRadius: capsule(deckChromeLayout.pillHeight) }]}>
-        <SystemGlyph systemName="eyes" pointSize={deckChromeLayout.pillEyes} weight="semibold" fitted name="eyes" size={deckChromeLayout.pillGlyph} color={deckChromeInk.pill} />
+        <IncognitoSpecs size={deckChromeLayout.pillSpecs} color={deckChromeInk.pill} />
         <Text style={[font.subheadline, styles.count]}>{count}</Text>
       </View>
     </Pressable>

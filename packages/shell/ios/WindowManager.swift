@@ -81,7 +81,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   func open(id: String, _ options: OpenWindowOptions, focus: Bool) {
     if let existing = window(id) {
       managed[id]?.display = options.display
-      if focus { existing.makeKeyAndOrderFront(nil) }
+      if focus { SummonedWindow.makeKeyAndFront(existing, summoned: managed[id]?.summoned == true) }
       return
     }
     let behind = options.behind
@@ -145,7 +145,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if let lights = lightsCenters[id] { ChromeWindows.setTrafficLightsCenter(lights.center, trailing: lights.trailing, in: window) }
     window.title = title
     Self.identify(window, id: id, kind: entry.kind)
-    if small, frame == nil { placeSmall(window, id: id, size: smallSize, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame, display: display) }
+    let wanted = small && frame == nil ? smallSize ?? Self.smallDefaultSize : nil
+    if let wanted { placeSmall(window, id: id, size: wanted, pointer: smallPointer) } else if frame != nil || !window.isVisible { place(window, frame: frame, display: display) }
+    let placement = wanted.map { (wanted: $0, placed: window.frame) }
     relayoutRoot(window)
     managed[id] = entry
     FocusTrace.watch(window)
@@ -156,6 +158,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       return reportFrame(window)
     }
     let summoned = small && focus && smallPointer == nil && LittleArdiaHotKey.shared.takePress() && !NSApp.isActive
+    entry.summoned = summoned
     if summoned { ArdiaChromeWindowHost.floatOverActiveSpace(window) }
     if focus, entry.isWaitingToReveal {
       window.orderFront(nil)
@@ -164,7 +167,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       entry.whenRevealed { [weak self, weak entry, weak window] in
         guard let self, let entry, let window, self.managed[id] === entry, entry.window === window, self.typeAhead.keyOnReveal === window else { return }
         self.typeAhead.keyOnReveal = nil
-        window.makeKeyAndOrderFront(nil)
+        SummonedWindow.makeKeyAndFront(window, summoned: entry.summoned)
         self.typeAhead.keyed(window)
       }
     } else if focus {
@@ -177,16 +180,20 @@ final class WindowManager: NSObject, NSWindowDelegate {
       window.orderFront(nil)
     }
     if small, focus, smallPointer != nil { linkActivation.openedFromLink(window) }
-    if summoned { bringForwardOverActiveApp(window) }
+    if summoned {
+      linkActivation.openedFromLink(window)
+      SummonedWindow.bringForward(window)
+      entry.whenRevealed { [weak window] in if let window { SummonedWindow.checkLanding(window) } }
+    }
     observeFrame(window)
     reportFrame(window)
-    if small { fitToLanding(entry) }
+    if small { fitToLanding(entry, placement: placement) }
     fullScreen.windowShown(id)
   }
-  private func fitToLanding(_ entry: ManagedWindow) {
+  private func fitToLanding(_ entry: ManagedWindow, placement: (wanted: CGSize, placed: NSRect)?) {
     let id = entry.id
     landingFits[id]?.stop()
-    let landing = LittleLandingFit(window: { [weak self] in self?.window(id) }) { [weak self] window, frame in
+    let landing = LittleLandingFit(window: { [weak self] in self?.window(id) }, placement: placement) { [weak self] window, frame in
       guard let self else { return }
       self.hostFitSizes[id] = frame.size
       window.setFrame(frame, display: true)
@@ -334,20 +341,13 @@ final class WindowManager: NSObject, NSWindowDelegate {
     let fullScreenRoles: NSWindow.CollectionBehavior = [.fullScreenPrimary, .fullScreenNone]
     window.collectionBehavior = window.collectionBehavior.subtracting(fullScreenRoles).union([.moveToActiveSpace, .fullScreenAuxiliary])
   }
-  private func bringForwardOverActiveApp(_ window: NSWindow) {
-    linkActivation.openedFromLink(window)
-    window.orderFrontRegardless()
-    window.makeKey()
-  }
-  private func placeSmall(_ window: NSWindow, id: String, size: CGSize?, pointer: NSPoint?) {
+  private static let smallDefaultSize = CGSize(width: 900, height: 640)
+  private func placeSmall(_ window: NSWindow, id: String, size: CGSize, pointer: NSPoint?) {
     let mouse = pointer ?? NSEvent.mouseLocation
     let screen = (pointer == nil && NSApp.isActive ? NSApp.keyWindow?.screen : nil)
       ?? NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     guard let visible = screen?.visibleFrame else { return window.center() }
-    let width = min(max(size?.width ?? 900, window.minSize.width), visible.width)
-    let height = min(max(size?.height ?? 640, window.minSize.height), visible.height)
-    let origin = NSPoint(x: (visible.midX - width / 2).rounded(), y: (visible.midY - height / 2).rounded())
-    window.setFrame(NSRect(origin: origin, size: NSSize(width: width.rounded(), height: height.rounded())), display: false)
+    window.setFrame(ArdiaChromeWindowHost.littleFrame(for: size, minimumSize: window.minSize, visibleFrame: visible), display: false)
     hostFitSizes[id] = window.frame.size
   }
   private func place(_ window: NSWindow, frame: CGRect?, display: String? = nil) {
@@ -433,7 +433,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     if let index = pending.firstIndex(where: { $0.id == id }) {
       return open(id: id, pending.remove(at: index).options, focus: true)
     }
-    window(id)?.makeKeyAndOrderFront(nil)
+    if let entry = managed[id] { SummonedWindow.makeKeyAndFront(entry.window, summoned: entry.summoned) }
   }
 
   func setTitle(id: String, title: String) {
