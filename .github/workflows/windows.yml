@@ -59,6 +59,7 @@ concurrency:
 
 jobs:
   gate:
+    if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
