@@ -141,7 +141,7 @@ test("no page takes the keyboard while one is on screen ahead of JS, whoever ask
   assert.ok(page.indexOf("[ArdiaWebView onScreenAheadIn:self.window]") < page.indexOf("[_tab focus]"), "every path ends here: JS's focus(), a load, the window becoming key, an activation");
   assert.match(page, /if \(\[ArdiaWebView onScreenAheadIn:self\.window\]\) return \[self askFocusAheadOfSwitch:NO\];/);
   const restore = body(focus, "- (void)restoreFocusIfDue");
-  assert.ok(restore.indexOf("if ([ArdiaWebView onScreenAheadIn:window]) return;") < restore.indexOf("_focus.onActivate = NO;\n  NSResponder"), "an activation under the page on screen stays due");
+  assert.ok(restore.indexOf("if ([ArdiaWebView onScreenAheadIn:window]) return;") < restore.indexOf("_focus.onActivate = NO;\n  RefreshPageKeyState(page, window);\n  NSResponder"), "an activation under the page on screen stays due");
   const after = body(input, "+ (void)focusPagesAskedAheadOfSwitch");
   assert.match(after, /if \(\[ArdiaWebView revealGapIn:window\]\) continue;/);
   assert.match(after, /if \(view->_visible\) \[view focusPage\];\n    else \[ArdiaWebView focusVisiblePageIn:window\];/, "the page that asked if JS still has it in front, else the one JS switched to: where the keyboard would be had the request not waited");
