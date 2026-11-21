@@ -1,4 +1,5 @@
-import { setFieldProviders, showSystemPanel, type FieldProviderOpened, type VerificationCodeFound } from "../../platform/passwordProviders";
+import { setFieldProviders, showSystemPanel, type FieldProviderHint, type FieldProviderOpened, type VerificationCodeFound } from "../../platform/passwordProviders";
+import { offerPanelHint, panelHintReported } from "./panelHints";
 import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import { warnFor } from "../telemetry/consoleConsent";
 import { consentToken, type ConsentToken } from "../telemetry/choice";
@@ -24,10 +25,10 @@ import {
   type PasswordManagerChoice,
 } from "./passwordManagerChoice";
 import { closeVerificationCodePrompts, offerVerificationCode } from "./verificationCodes";
-import { followMode, forgetPendingOfferToSave, passwordAutofill, pendingOfferToSave, writeOfferToSave } from "./offerToSave";
+import { followMode, forgetPendingOfferToSave, offerToSaveHeldOffSomewhere, passwordAutofill, pendingOfferToSave, watchPendingOfferToSave, writeOfferToSave } from "./offerToSave";
 
 export { forgetPendingOfferToSave, passwordAutofill };
-export { profilesSharingData, type ManagerPlugin, type PasswordManagerChoice, type VerificationCodeFound };
+export { profilesSharingData, type FieldProviderHint, type FieldProviderOpened, type ManagerPlugin, type PasswordManagerChoice, type VerificationCodeFound };
 
 
 const browser = () => useBrowser.getState();
@@ -79,10 +80,23 @@ export function useNeverChosenCount(): number {
 
 export const neverChosenCount = () => neverChosenProfiles(browser()).length;
 
+let engage = () => {};
+
 export function choosePasswordManager(profileId: string, manager: PasswordManagerChoice) {
   const s = browser();
   notePasswordManagerChosen(choiceKind(manager));
+  engage();
   for (const id of profilesSharingData(s, profileId)) s.updateProfile(id, { passwordManager: manager });
+}
+
+const choseAwayFromArdia = (s: BrowserState) => Object.values(s.profiles).some((p) => !!p && p.passwordManager !== undefined && p.passwordManager !== "ardia");
+
+let heldOffAtStart: boolean | null = null;
+
+export function passwordManagerInUse(): boolean {
+  if (currentManagerPlugins().length > 0 || choseAwayFromArdia(browser())) return true;
+  heldOffAtStart ??= offerToSaveHeldOffSomewhere();
+  return heldOffAtStart;
 }
 
 function adoptNeverChosen(name: string) {
@@ -246,6 +260,7 @@ export function startPasswordManager() {
   };
 
   beforePluginsCommit((next, before) => {
+    if (!ready && commitPlugins(next).length) begin(true);
     if (!ready) return;
     const active = new Set(commitPlugins(next).map((p) => p.name));
     for (const name of [...withdrawing]) if (!active.has(name) || recordOf(next, name) !== recordOf(before, name)) withdrawing.delete(name);
@@ -265,24 +280,35 @@ export function startPasswordManager() {
     void pushProviders(providerPlugins(currentManagerPlugins()), consent);
   });
 
-  const begin = () => {
-    if (ready || !pluginsView().scanned) return;
+  let stopWatchingReady: (() => void) | null = null;
+  const watchReady = (pending: boolean) => {
+    if (pending && !stopWatchingReady) stopWatchingReady = usePages.subscribe((s, prev) => s.ready !== prev.ready && syncReady());
+    else if (!pending && stopWatchingReady) {
+      stopWatchingReady();
+      stopWatchingReady = null;
+    }
+  };
+  const begin = (inUse = false) => {
+    if (ready || !pluginsView().scanned || !(inUse || passwordManagerInUse())) return;
     ready = true;
     syncProfiles();
     syncWindows();
     syncReady();
+    watchPendingOfferToSave(watchReady);
+    watchReady(pendingOfferToSave() > 0);
+    useBrowser.subscribeTo(["profiles", "windows"], (s, prev) => {
+      if (s.profiles !== prev.profiles) syncProfiles();
+      if (s.windows !== prev.windows) syncWindows();
+    });
   };
+  engage = () => begin(true);
 
-  begin();
   usePlugins.subscribe((s, prev) => {
-    if (!ready) return begin();
-    if (s.listings !== prev.listings || s.records !== prev.records || s.order !== prev.order) syncModes();
+    const changed = s.listings !== prev.listings || s.records !== prev.records || s.order !== prev.order;
+    if (!ready) return void ((changed || s.scanned !== prev.scanned) && begin());
+    if (changed) syncModes();
   });
-  usePages.subscribe((s, prev) => s.ready !== prev.ready && syncReady());
-  useBrowser.subscribe((s, prev) => {
-    if (s.profiles !== prev.profiles) syncProfiles();
-    if (s.windows !== prev.windows) syncWindows();
-  });
+  begin();
 }
 
 function codeSetupOn(tabId: string): boolean {
@@ -292,13 +318,18 @@ function codeSetupOn(tabId: string): boolean {
 
 export const verificationCodeFound = (tabId: string, found: VerificationCodeFound) => offerVerificationCode(tabId, found, codeSetupOn, generation);
 
-export function fieldProviderOpened(event: FieldProviderOpened) {
-  if (event?.via === "badge" || event?.via === "menu") notePasswordPanel(event.via, event.shown === true);
+export function fieldProviderOpened(tabId: string, event: FieldProviderOpened) {
+  if (event?.via === "badge" || event?.via === "menu") notePasswordPanel(event.via, event.shown === true, event.reason);
+  void offerPanelHint(tabId, event);
 }
+
+export const fieldProviderHint = (tabId: string, hint: FieldProviderHint) => panelHintReported(tabId, hint);
+
+const PANEL_MAY_BE_UP = new Set(["noPanel", "tabGone"]);
 
 export async function openSystemPanel(tabId: string): Promise<boolean> {
   const result = await showSystemPanel(tabId, generation).catch(() => null);
-  return !!result?.shown;
+  return !!result && (result.shown || PANEL_MAY_BE_UP.has(result.reason ?? ""));
 }
 
 export function passwordManagerSnapshot(): Record<string, string> | null {

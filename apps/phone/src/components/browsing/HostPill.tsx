@@ -4,6 +4,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring
 import { haptics } from "../../state/app/haptics";
 import type { BrowserTab } from "../../state/tabs/tabModels";
 import { capsule, chromeInk, chromeLayout, ChromeSurface, Favicon, floatingBarLayout, Symbol, tabsMotion, usePresence } from "../ui";
+import { privateMark } from "../ui/IncognitoSpecs";
 import { barAddress, spokenAddress } from "./FloatingBar";
 import { hostPillLayout } from "./hostPillTokens";
 import { NotSecureLock } from "./NotSecureLock";
@@ -27,7 +28,7 @@ export function HostPill({ tab, dark, shown, anchors = false, contentStyle, onEx
       <Animated.View testID="hostPillCentreGlyphs" collapsable={false} style={back.centreGlyphs}>
       <Animated.View testID="hostPillContent" nativeID={ids?.face} collapsable={false} style={[styles.content, contentStyle]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Show Toolbar" accessibilityValue={{ text: spokenAddress(address) }} onPress={onExpand} onPressIn={haptics.barPress} style={styles.hit}>
-        {address.isPrivate ? <Symbol name="eyeglassesThin" size={hostPillLayout.siteIcon * hostPillLayout.privateSymbolShare} color={ink.secondary} /> : null}
+        {address.isPrivate ? <Symbol name={privateMark} size={hostPillLayout.siteIcon * hostPillLayout.privateSymbolShare} color={ink.secondary} /> : null}
         {address.insecure ? (
           <NotSecureLock testID="hostPillNotSecure" size={hostPillLayout.siteIcon} color={ink.notSecure} />
         ) : address.isPrivate ? null : address.pageUrl ? (
@@ -67,7 +68,7 @@ export function useBarFold(collapsed: boolean, reduceMotion: boolean) {
     return { opacity: android ? fold.value : 1, transform: [{ translateY: (hostPillLayout.height / 2) * (1 - scale) }, { scale }] };
   }, [shrink]);
   const pillContent = useAnimatedStyle(() => ({ opacity: fold.value }));
-  return { bar, pill, pillContent, pillMounted: android || presence.mounted };
+  return { bar, pill, pillContent, pillMounted: android || presence.mounted, progress: fold };
 }
 
 const styles = StyleSheet.create({

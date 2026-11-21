@@ -292,7 +292,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | --- | --- | --- |
 | `ARDIA_DATA_DIR` | path | Scratch data dir: Chrome's data in `<dir>/Chromium`, the app's documents, defaults, keychain items and Sparkle state (`packages/shell/ios/ArdiaIsolation.m`); Chrome gets `--use-mock-keychain`. A Debug build refuses to start without one |
 | `ARDIA_BACKGROUND` | `1` (anything but empty or `0`) | Hidden test instance (Rules › never steal focus; `docs/testing.md`) |
-| `ARDIA_REMOTE_DEBUGGING_PORT` | port | CDP on that port, only on the mock keychain |
+| `ARDIA_REMOTE_DEBUGGING_PORT` | port | CDP on that port, only on the mock keychain. CDP doesn't go through Settings › Advanced › Let programs control Ardia, so that switch can't be judged on an instance with a port: test it on one launched without |
 | `ARDIA_INSTANCE` | `jsLocation=host:port` | This launch's Metro (Debug builds) |
 | | `chromiumSwitches=--a --b=x,y` | Extra Chrome switches, space-separated, only on the mock keychain; background mode drops the auto-accept capture ones, and `--ardia-*` never passes |
 | | `downloadsDir=<dir>` | Chrome's default download folder for this launch, never written to the profile |
@@ -326,6 +326,7 @@ The only variables the app and engine read, through `ArdiaLaunchConfig` (`packag
 | | `importSecret=<s>` · `importDiaBundleId=<id>` · `importDiaWindows=<json>` | Import's Safe Storage secret · the app Dia's tabs come from (opened hidden and quit by the import) · fixture windows answering for it, with no Automation prompt |
 | | `cliInstallScript=<path>` | Another `ardia` installer script (the Linux and Windows hosts' installer; macOS no longer runs one) |
 | | `applePasswordsPanel` | Background mode really opens macOS's Passwords panel for the key and Edit › AutoFill › Passwords… instead of logging it (`docs/testing.md`); the panel is another process's window and can show on screen |
+| | `systemPanelRace` | Runs AppKit's delayed autofill show-or-hide pass right after the Passwords command, to check the panel survives it (`docs/testing.md`) |
 | | `bundledPlugins=<dir>` | Built-in plugins come from this folder instead of `Ardia.app/Contents/Resources/Plugins` (`docs/plugins.md` › Built-in plugins) |
 | | `legacySource=<home>` · `legacyCrashAfter=<step>` | The Netnyahoo → Ardia migration from a scratch home |
 | | `bangsUrl` · `onboarding` · `whatsNew` · `telemetry` · `liveMock=<url>` · `calendarFixture` | Debug builds only: bang list, run onboarding, show What's New, send telemetry, live folders from a mock, the calendar fixture |

@@ -1,4 +1,5 @@
-import { create, type StateCreator } from "zustand";
+import { create, type StateCreator, type StoreApi, type UseBoundStore } from "zustand";
+import { withToolbarKeptWhileScrolling } from "../settings/toolbarScrollDefault";
 import { setHeldReportsTransaction } from "../../platform/nativeEvents";
 import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "../bookmarks/bookmarks";
 import { changedIds } from "./changes";
@@ -20,7 +21,7 @@ import { activated, apply } from "../tabs/tabs";
 import { createTabsSlice, type TabsSlice } from "../tabs/tabsSlice";
 import { bindLiveToBrowser, forgetAllLive } from "../tabs/tabLive";
 import { settle, SettleDidNotConverge } from "./settle";
-import { transactional } from "./transaction";
+import { transactional, type SubscribeTo } from "./transaction";
 import { actionsApart } from "./actionsApart";
 import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "../windows/ui";
@@ -103,7 +104,7 @@ export const afterStoreTransactionIdempotent = transactions.afterTransactionIdem
 export const inStoreTransaction = transactions.inTransaction;
 setHeldReportsTransaction(storeTransaction);
 
-export const useBrowser = create<BrowserState>()(actionsApart(transactions.middleware(batched((...a) => ({
+const createdBrowser = create<BrowserState>()(actionsApart(transactions.middleware(batched((...a) => ({
   ...createProfilesSlice(...a),
   ...createWindowsSlice(...a),
   ...createTabsSlice(...a),
@@ -127,7 +128,8 @@ export const useBrowser = create<BrowserState>()(actionsApart(transactions.middl
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const settings = parseSettings(data.settings);
+    const kept = withToolbarKeptWhileScrolling(data.settings, parseSettingsMeta(data.settingsMeta));
+    const settings = parseSettings(kept.settings);
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 
     notePinChoices(data.pinChoices ?? {});
@@ -168,7 +170,7 @@ export const useBrowser = create<BrowserState>()(actionsApart(transactions.middl
       profileOrder,
       orphanedProfileData: (data.orphanedProfileData ?? []).filter((e) => !engines.has(e)),
       settings,
-      settingsMeta: parseSettingsMeta(data.settingsMeta),
+      settingsMeta: kept.settingsMeta,
       windows,
       windowOrder,
       tabs,
@@ -205,6 +207,7 @@ export const useBrowser = create<BrowserState>()(actionsApart(transactions.middl
     set(next);
   },
 })))));
+export const useBrowser = createdBrowser as UseBoundStore<StoreApi<BrowserState>> & { subscribeTo: SubscribeTo<BrowserState> };
 bindLiveToBrowser(useBrowser, transactions.afterTransactionIdempotent);
 
 export type { CreateWindowOptions } from "../windows/windows";

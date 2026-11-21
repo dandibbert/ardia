@@ -352,7 +352,6 @@ export const materialDialogLook = {
   title: { fontSize: 24, lineHeight: 32 },
   message: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25 },
   button: { fontSize: 14, lineHeight: 20, fontWeight: "500", letterSpacing: 0.1 },
-  enterScale: 0.92,
   shadow: "0px 4px 8px 3px rgba(0,0,0,0.15), 0px 1px 3px 0px rgba(0,0,0,0.3)",
 } as const;
 
@@ -611,6 +610,7 @@ export const spacesLayout = {
 export const tabsInk = {
   incognitoCard: "#1C1D22",
   incognitoCardRaised: "#2A2B31",
+  incognitoOnLight: Platform.OS === "android" ? "rgba(28,29,34,0.6)" : "#1C1D22",
   incognitoBackdrop: ["#1A1A1E", "#0E0E10"] as const,
   incognitoSheet: "#151517",
   cardShadow: "rgba(0,0,0,0.18)",

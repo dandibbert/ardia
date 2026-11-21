@@ -17,6 +17,8 @@ import { reloadHooks } from "../automation/hookRules";
 import { noteConfigProblemToastDismissed, noteConfigProblemToastShown } from "../telemetry/configProblemToasts";
 import { consentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
+import { loadPluginTheme, parsePluginThemeKey } from "../plugins/themes";
+import { activeManifest, currentPlugins, usePlugins } from "../plugins/store";
 
 const RECONCILE_DELAY_MS = 100;
 const PROBLEMS_TOAST = "config-problems";
@@ -43,18 +45,51 @@ let outlines = true;
 let tabCorners: number | null = null;
 let minimalism = false;
 let stopWatchingMinimalism: (() => void) | undefined;
-let folderWatch: { phase: "beforeFirstWindow" } | { phase: "watching"; themeName: string | null } = { phase: "beforeFirstWindow" };
+let windowsUp = false;
 let reported = new Set<string>();
 let pendingProblems = false;
 let unsubscribers: (() => void)[] = [];
+let watching: string | null | undefined;
 let schemas: Record<string, string> | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const lastGoodThemes = new Map<string, ThemeParts>();
+const pluginThemeLoads = new Map<string, { parts: ThemeParts; problems: string[] } | "loading">();
+let stopWatchingPlugins: (() => void) | null = null;
 
 const themeFile = (name: string) => `themes/${name}.json`;
 
+function pluginThemeLoaded(name: string, loadKey: string, parts: ThemeParts | null, problems: string[]) {
+  pluginThemeLoads.set(loadKey, { parts: parts ?? lastGoodThemes.get(name) ?? NO_THEME, problems });
+  if (parts) lastGoodThemes.set(name, parts);
+  if (defaults && theme.name === name) reconcileConfig();
+}
+
+function readPluginTheme(name: string, plugin: string, id: string, problems: string[]): ThemeParts {
+  const s = currentPlugins();
+  if (!activeManifest(s, plugin)?.contributes.themes.some((t) => t.id === id)) {
+    problems.push(`${CONFIG_FILE}: theme ${name} needs the ${plugin} plugin turned on with a theme ${id}`);
+    return NO_THEME;
+  }
+  const loadKey = `${name}@${s.listings[plugin]?.hash ?? ""}`;
+  const loaded = pluginThemeLoads.get(loadKey);
+  if (loaded && loaded !== "loading") {
+    problems.push(...loaded.problems);
+    return loaded.parts;
+  }
+  if (!loaded && defaults) {
+    pluginThemeLoads.set(loadKey, "loading");
+    loadPluginTheme(plugin, id, defaults).then(
+      (result) => (result.ok ? pluginThemeLoaded(name, loadKey, { roles: result.theme.roles, look: result.theme.look }, result.theme.problems) : pluginThemeLoaded(name, loadKey, null, [`${CONFIG_FILE}: theme ${name}: ${result.reason}`])),
+      (error: unknown) => pluginThemeLoaded(name, loadKey, null, [`${CONFIG_FILE}: theme ${name}: ${error instanceof Error ? error.message : "couldn't load"}`]),
+    );
+  }
+  return theme.name === name ? { roles: theme.roles, look: theme.look } : (lastGoodThemes.get(name) ?? NO_THEME);
+}
+
 function readTheme(name: string | null, problems: string[]): ThemeParts {
   if (!name || !defaults) return NO_THEME;
+  const pluginTheme = parsePluginThemeKey(name);
+  if (pluginTheme) return readPluginTheme(name, pluginTheme.plugin, pluginTheme.id, problems);
   const file = themeFile(name);
   const read = readConfigFile(file);
   if (read.status === "missing") {
@@ -74,7 +109,7 @@ function readTheme(name: string | null, problems: string[]): ThemeParts {
 }
 
 function applySidebarWidth(before: number | null, after: number | null) {
-  if (folderWatch.phase !== "watching" || after === null || after === before) return;
+  if (!windowsUp || after === null || after === before) return;
   const width = Math.round(after);
   if (useBrowser.getState().settings.sidebarWidth !== width) useBrowser.getState().updateSettings({ sidebarWidth: width });
 }
@@ -144,7 +179,7 @@ export function problemsToast(problems: readonly string[]): { title: string; mes
 }
 
 function showProblems() {
-  if (folderWatch.phase !== "watching") return;
+  if (!windowsUp) return;
   const toasts = useToasts.getState().toasts;
   const showing = Object.keys(toasts).filter((id) => toasts[id]?.key === PROBLEMS_TOAST);
   if (!reported.size) {
@@ -187,14 +222,11 @@ function report(problems: string[]) {
   if (changed) showProblems();
 }
 
-function watchFiles(themeName: string | null) {
-  folderWatch = { phase: "watching", themeName };
-  const consent = consentToken();
-  watchConfigFiles(["config.json", "hooks.json", ...(themeName ? [themeFile(themeName)] : [])]).then(changed, (error: unknown) => warnFor(consent, "[config] couldn't watch the config folder", error));
-}
-
 function watchNames() {
-  if (folderWatch.phase === "watching" && theme.name !== folderWatch.themeName) watchFiles(theme.name);
+  if (theme.name === watching) return;
+  watching = theme.name;
+  const consent = consentToken();
+  watchConfigFiles(["config.json", "hooks.json", ...(theme.name && !parsePluginThemeKey(theme.name) ? [themeFile(theme.name)] : [])]).then(changed, (error: unknown) => warnFor(consent, "[config] couldn't watch the config folder", error));
 }
 
 export function reconcileConfig(launch = true) {
@@ -212,7 +244,7 @@ export function reconcileConfig(launch = true) {
   applyTheme({ name, ...readTheme(name, problems) });
   if (launch) report(problems);
   else reported = new Set(problems);
-  watchNames();
+  if (watching !== undefined) watchNames();
 }
 
 function writeSchemas() {
@@ -241,20 +273,23 @@ export function startConfigFiles(roles: RolePalettes, launch = true) {
   if (defaults) return;
   defaults = roles;
   reconcileConfig(launch);
-  stopWatchingSidebarText = useBrowser.subscribe((s, prev) => {
+  stopWatchingSidebarText = useBrowser.subscribeTo(["settings"], (s, prev) => {
     if (s.settings.sidebarTextSize !== prev.settings.sidebarTextSize) applyTheme(theme);
   });
-  unsubscribers.push(useBrowser.subscribe((s, prev) => s.settings.elementOutlines !== prev.settings.elementOutlines && applyTheme(theme)));
-  unsubscribers.push(useBrowser.subscribe((s, prev) => s.settings.tabCornerRadius !== prev.settings.tabCornerRadius && applyTheme(theme)));
-  stopWatchingMinimalism = useBrowser.subscribe((s, prev) => {
+  unsubscribers.push(useBrowser.subscribeTo(["settings"], (s, prev) => s.settings.elementOutlines !== prev.settings.elementOutlines && applyTheme(theme)));
+  unsubscribers.push(useBrowser.subscribeTo(["settings"], (s, prev) => s.settings.tabCornerRadius !== prev.settings.tabCornerRadius && applyTheme(theme)));
+  stopWatchingPlugins = usePlugins.subscribe((s, prev) => {
+    if ((s.listings !== prev.listings || s.records !== prev.records || s.order !== prev.order) && theme.name && parsePluginThemeKey(theme.name)) reconcileConfig();
+  });
+  stopWatchingMinimalism = useBrowser.subscribeTo(["settings"], (s, prev) => {
     if (s.settings.minimalismMode !== prev.settings.minimalismMode) applyTheme(theme);
   });
   afterFirstWindow(() => {
-    folderWatch = { phase: "watching", themeName: theme.name };
+    windowsUp = true;
     onConfigChange(changed);
-    watchFiles(theme.name);
+    watchNames();
     writeSchemas();
-    unsubscribers.push(useToasts.subscribe(toastsChanged), useBrowser.subscribe((next, previous) => next.windowOrder !== previous.windowOrder && windowsChanged()));
+    unsubscribers.push(useToasts.subscribe(toastsChanged), useBrowser.subscribeTo(["windowOrder"], (next, previous) => next.windowOrder !== previous.windowOrder && windowsChanged()));
     showProblems();
   });
 }
@@ -269,16 +304,20 @@ export function resetConfigFilesForTests() {
   timer = undefined;
   defaults = null;
   theme = { name: null, ...NO_THEME };
-  folderWatch = { phase: "beforeFirstWindow" };
   appliedSidebarText = "default";
   stopWatchingSidebarText?.();
   stopWatchingSidebarText = null;
+  windowsUp = false;
   reported = new Set();
   pendingProblems = false;
   for (const unsubscribe of unsubscribers) unsubscribe();
   unsubscribers = [];
+  watching = undefined;
   schemas = null;
   lastGoodThemes.clear();
+  pluginThemeLoads.clear();
+  stopWatchingPlugins?.();
+  stopWatchingPlugins = null;
   setActiveLook(DEFAULT_LOOK);
   useBasePalette.setState({ palette: null, theme: null, look: DEFAULT_LOOK, blocks: null });
 }

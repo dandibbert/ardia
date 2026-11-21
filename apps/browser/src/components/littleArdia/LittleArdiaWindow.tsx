@@ -4,11 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 import { useTheme } from "../ui/theme";
 import { openPanel } from "../../state/windows/actions";
-import { useActiveTab, useSettings, useWindowFullScreen, useWindowId, useWindowProfile, useWindowUi } from "../../state/browser/hooks";
+import { useActiveTab, useWindowFullScreen, useWindowId, useWindowProfile, useWindowUi } from "../../state/browser/hooks";
 import type { Tab } from "../../state/browser/types";
 import { CommandPanel } from "../omnibox/CommandPanel";
 import { ContentCard } from "../window/ContentCard";
-import { BrowserWindowControls } from "../window/BrowserWindowControls";
+import { browserWindowControls } from "../window/BrowserWindowControls";
 import { DownloadsPopover } from "../downloads/Downloads";
 import { ExtensionOverlays } from "../extensions/ExtensionOverlays";
 import { ToolbarPopupAnchor } from "../extensions/ToolbarExtensions";
@@ -27,6 +27,7 @@ import { PageLabel, SMALL_BAR_BUTTON, SmallBar } from "./SmallChrome";
 import { SMALL_LIGHTS_CENTER } from "../../state/windows/small";
 import { littleArdiaBarLayout } from "./barLayout";
 import { HistoryButton } from "../toolbar/NavButtons";
+import { NAV_HINTS, useShortcutHints } from "../../state/commands/commandShortcuts";
 import { toolbarPalette } from "../ui/toolbarColors";
 import { useHistoryAvailability } from "../../state/tabs/navigation";
 import { LITTLE_ARDIA_PINCH, LITTLE_ARDIA_SWIPE_CLOSE, SMALL_FIELD_MAX_WIDTH, smallBarRow } from "./tokens";
@@ -85,7 +86,7 @@ export function LittleArdiaWindow() {
       <CommandPanel windowWidth={size.width} />
       <DownloadsPopover />
       <ExtensionOverlays />
-      <BrowserWindowControls />
+      {browserWindowControls()}
     </View>
   );
 }
@@ -194,20 +195,20 @@ function LittleArdiaBar() {
 function HistoryButtons({ tabId, windowId }: { tabId: string; windowId: string }) {
   const palette = toolbarPalette(useTheme(), null);
   const history = useHistoryAvailability(tabId);
+  const hints = useShortcutHints(NAV_HINTS);
   return (
     <>
-      <HistoryButton place={BACK_AT()} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} closesTab={history.backCloses} />
-      <HistoryButton place={FORWARD_AT()} tabId={tabId} windowId={windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={alreadyFocused} />
+      <HistoryButton place={BACK_AT()} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} closesTab={history.backCloses} historyHint={hints.back} />
+      <HistoryButton place={FORWARD_AT()} tabId={tabId} windowId={windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={alreadyFocused} historyHint={hints.forward} />
     </>
   );
 }
 
 function ProfileButton({ windowId }: { windowId: string }) {
   const profile = useWindowProfile();
-  const iconsShown = useSettings((s) => s.profileSwitcherIcons);
   return (
     <Button variant="icon" look="row" tooltip={`Profile: ${profile.name}`} onPress={() => void openLittleArdiaProfileMenu(windowId)}>
-      <ProfileBadge profile={iconsShown ? profile : { ...profile, icon: null }} size={16} />
+      <ProfileBadge profile={profile.switcherDot ? { ...profile, icon: null } : profile} size={16} />
     </Button>
   );
 }

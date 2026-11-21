@@ -6,20 +6,57 @@
       "title": "Command Line",
       "blurb": "Drive Ardia from your terminal or an agent.",
       "icon": "terminal.fill",
-      "version": "0.3.0",
-      "release": "https://github.com/ardia-browser/plugins/releases/download/cli-v0.3.0",
+      "version": "0.4.0",
+      "release": "https://github.com/ardia-browser/plugins/releases/download/cli-v0.4.0",
       "artifacts": {
         "macos-arm64": {
-          "file": "cli-plugin-0.3.0-macos-arm64.tar.gz",
-          "sha256": "076c2139d35b59acc826ea4db8dbce4526f6406bc8e3b2ef5de440d0d28be022"
+          "file": "cli-plugin-0.4.0-macos-arm64.tar.gz",
+          "sha256": "5f6442242c0a7d42d9ec592c599a167faa3675dbbc18999ef2cf34fc2336339e"
         },
         "linux-x64": {
-          "file": "ardia-cli-0.3.0-linux-x64.tar.gz",
-          "sha256": "a02dd77418a1c1ccdab4a2b22be45d336d4095f951c264d6711bd889d9162afb"
+          "file": "ardia-cli-0.4.0-linux-x64.tar.gz",
+          "sha256": "5bd2bf6cc2f6e34bbfbb78cf28e3ee0963db569697e951cf7d45cfcc35a7a9bf"
         },
         "installer": {
           "file": "install.sh",
           "sha256": "7e865385ba438f1623a14e7278b7d84e30b837855e0370e3c0d81727e60cb54d"
+        }
+      },
+      "preselected": true,
+      "legacyInstall": {
+        "program": "ardia",
+        "root": "Library/Application Support/Ardia/CLI",
+        "current": "current"
+      },
+      "telemetry": {
+        "title": "The ardia command",
+        "items": [
+          "Each command's name (like history or browse snapshot), its exit and error codes, and the names of the options it was given, never their values",
+          "How long it took, step by step (starting up, starting its helper, connecting to Ardia, finding the tab, the command itself, waiting for the page to settle), plus counts and sizes: browser calls, steps in a batch, how many coding agents the install gave the agent skill to or skipped, the length of a page snapshot and of the output, how many requests an action sent, how many reading tabs it had to open again, and whether the output was cut short, the input humanized, it gave up waiting for its helper, it set a viewport size, it reloaded a crashed page or Ardia refused it a tab. Times, counts and yes or no only",
+          "Its version, macOS version, chip and Python version, with this Mac's install ID",
+          "After a crash: the error's type (with its message only when it's one of Python's fixed ones, like “division by zero”), and the module, function and line number of each step in the stack trace",
+          "Nothing from commands pointed at a test browser (--port, --ws), and nothing at all with DO_NOT_TRACK=1 or ARDIA_TELEMETRY=0 set"
+        ]
+      },
+      "anchorAliases": [
+        "commandLine"
+      ],
+      "reservedPrograms": [
+        "ardia"
+      ],
+      "example": "ardia tabs"
+    },
+    {
+      "name": "apple-passwords",
+      "title": "Apple Passwords",
+      "blurb": "Fill logins and verification codes from the Passwords app on every site.",
+      "icon": "key.fill",
+      "version": "1.0.0",
+      "release": "https://github.com/ardia-browser/plugins/releases/download/apple-passwords-v1.0.0",
+      "artifacts": {
+        "macos-arm64": {
+          "file": "apple-passwords-plugin-1.0.0-macos-arm64.tar.gz",
+          "sha256": "9bca4437519ec6df5b590ebca1a6d4eef0a3e8f9aa08d0c8508051f96a45feee"
         }
       }
     }

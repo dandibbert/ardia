@@ -55,6 +55,9 @@ export function withoutRecentlyClosed(s: BrowserState, windowId: string | null |
   return gone.size ? { cleared: gone.size, next } : undefined;
 }
 
+const closedBefore = (closed: ClosedTab[], entry: ClosedTab) =>
+  entry.closeBatch ? closed.filter((c) => c.closeBatch === entry.closeBatch && c.index < entry.index).length : 0;
+
 function canRestoreTabInto(s: BrowserState, c: ClosedTab, windowId: string | undefined): boolean {
   const w = windowId ? s.windows[windowId] : undefined;
   if (isIncognitoProfile(c.tab.profileId)) return c.windowId === windowId;
@@ -63,7 +66,8 @@ function canRestoreTabInto(s: BrowserState, c: ClosedTab, windowId: string | und
 
 export function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string | null): BrowserState {
   const owner = entry.tab.profileId;
-  if (entry.pinnedTile && entry.tabId && !s.tabs[entry.tabId] && s.parkedPins[owner]?.tabs.some((p) => p.id === entry.tabId)) {
+  const key = entry.pinKey ?? entry.tabId;
+  if (entry.pinnedTile && key && entry.tabId && !s.tabs[entry.tabId] && s.parkedPins[owner]?.tabs.some((p) => p.id === key)) {
     const target = resolveWindowId(s, requested);
     let windowId = target && s.windows[target]!.kind !== "private" && s.windows[target]!.profileId === owner ? target : undefined;
     let next = s;
@@ -72,7 +76,8 @@ export function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string
       next = withWindow(next, emptyWindow(windowId, owner, "main", null));
     }
     next = adoptParkedPins(next, windowId, owner);
-    if (next.tabs[entry.tabId]) return restoreTab(next, entry, windowId);
+    const adopted = next.windows[windowId]!.tabIds.find((id) => next.tabs[id]?.profileId === owner && next.tabs[id]!.pin && pinKeyOf(next.tabs[id]!) === key);
+    if (adopted) return restoreTab(next, { ...entry, tabId: adopted, restoreFrom: entry.restoreFrom ?? entry.tabId, pinKey: undefined }, windowId);
   }
   const closedTabs = s.closedTabs.filter((c) => c.id !== entry.id);
   if (entry.small && !isIncognitoProfile(entry.tab.profileId)) {
@@ -111,7 +116,7 @@ export function restoreTab(s: BrowserState, entry: ClosedTab, requested?: string
     url: entry.tab.url || undefined,
     profileId,
     snapshot: entry.tab,
-    index: w.id === entry.windowId ? entry.index : undefined,
+    index: w.id === entry.windowId ? entry.index - closedBefore(closedTabs, entry) : undefined,
     adoptId: entry.tabId && entry.tab.url ? restoreId(entry.restoreFrom ?? entry.tabId) : undefined,
   });
   next = withTab;

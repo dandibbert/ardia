@@ -37,11 +37,13 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   func linkArrivedFromOtherApp(_ urls: [URL]) { linkActivation.linkArrived(urls) }
 
-  private func kind(of window: NSWindow?) -> WindowKind? { id(of: window).flatMap { managed[$0]?.kind } }
+  func kind(of window: NSWindow?) -> WindowKind? { id(of: window).flatMap { managed[$0]?.kind } }
 
   private func isBrowserWindow(_ window: NSWindow?) -> Bool { kind(of: window)?.isBrowser == true }
 
   func isMainWindow(_ window: NSWindow?) -> Bool { kind(of: window) == .browser }
+
+  func isSteadyBrowserWindow(_ window: NSWindow?) -> Bool { isBrowserWindow(window) && id(of: window).flatMap { managed[$0]?.exit } == nil }
 
   var keyWindowKind: WindowKind? { keyWindowId.flatMap { managed[$0]?.kind } }
 
@@ -49,6 +51,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     guard let window else { return nil }
     return managed.first { $0.value.window === window }?.key
   }
+  var anyIncognitoWindow: Bool { managed.values.contains { $0.incognito } }
   var keyWindowId: String? { id(of: NSApp.keyWindow) ?? id(of: NSApp.mainWindow) }
 
   func closeForeignKeyWindow() -> Bool {
@@ -104,7 +107,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
     }
     if let chromeWindow = ChromeWindows.makeWindow(profile: options.profile, chromeWindow: small ? nil : options.chromeWindow, appWindow: small ? claim : id) {
       if options.incognito { chromeWindow.appearance = NSAppearance(named: .darkAqua) }
-      let entry = ManagedWindow(id: id, kind: kind, window: chromeWindow)
+      let entry = ManagedWindow(id: id, kind: kind, window: chromeWindow, incognito: options.incognito)
       let root = makeContentView(id)
       ArdiaChromeWindowHost.embedRootView(root, in: chromeWindow)
       if !chromeWindow.isVisible {
@@ -134,7 +137,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       configureSmall(window)
       LittleArdiaHandoff.shared.opened(id, linkFrom: options.returnTo)
     }
-    show(ManagedWindow(id: id, kind: kind, window: window), frame: frame, title: title, focus: focus, small: small, smallSize: options.size, smallPointer: options.pointer, display: options.display)
+    show(ManagedWindow(id: id, kind: kind, window: window, incognito: options.incognito), frame: frame, title: title, focus: focus, small: small, smallSize: options.size, smallPointer: options.pointer, display: options.display)
   }
   private func show(
     _ entry: ManagedWindow, frame: CGRect?, title: String, focus: Bool, small: Bool, smallSize: CGSize?, smallPointer: NSPoint?,
@@ -394,9 +397,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private func motionStyle(_ kind: WindowKind) -> WindowMotion.Style { kind == .small ? .little : .main }
 
   private func nextKeyWindow(after closing: NSWindow) -> NSWindow? {
-    NSApp.orderedWindows.first {
-      $0 !== closing && $0.isVisible && !$0.isMiniaturized && $0.canBecomeKey && isBrowserWindow($0) && id(of: $0).flatMap { managed[$0]?.exit } == nil
-    }
+    NSApp.orderedWindows.first { $0 !== closing && $0.isVisible && !$0.isMiniaturized && $0.canBecomeKey && isSteadyBrowserWindow($0) }
   }
   func close(id: String) {
     if let index = pending.firstIndex(where: { $0.id == id }) {
@@ -509,6 +510,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   @objc func fullScreenChanged(_ notification: Notification) {
     guard let window = notification.object as? NSWindow, let id = id(of: window), let entry = managed[id] else { return }
     let entered = notification.name == NSWindow.didEnterFullScreenNotification
+    guard FullScreenLifecycle.shared.acceptsEnd(of: window, entering: entered) else { return }
     entry.isFullScreen = entered
     sendFullScreen(window, id: id, on: entered)
     if entered { fullScreen.entered(id) }

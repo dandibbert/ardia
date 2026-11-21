@@ -7,8 +7,8 @@ import { noteAutoCleanUp } from "../telemetry/cleanUpCounts";
 const RECHECK_MS = 30 * 60 * 1000;
 const RETRY_FLOOR_MS = 1000;
 
-type AutoCleanUp = { phase: "stopped" } | { phase: "running"; unsubscribe: () => void; timer: ReturnType<typeof setTimeout> | null };
-let cleanUp: AutoCleanUp = { phase: "stopped" };
+let timer: ReturnType<typeof setTimeout> | null = null;
+let unsubscribe: (() => void) | null = null;
 
 const inactiveForMs = (s: BrowserState) => {
   const minutes = s.settings.cleanUpInactiveTabsAfterMinutes;
@@ -26,13 +26,11 @@ export function nextAutoCleanUpAt(s: BrowserState, now = Date.now(), sweptAt = -
 }
 
 function schedule(sweptAt?: number) {
-  const running = cleanUp;
-  if (running.phase !== "running") return;
-  if (running.timer) clearTimeout(running.timer);
-  running.timer = null;
+  if (timer) clearTimeout(timer);
+  timer = null;
   const now = Date.now();
   const at = nextAutoCleanUpAt(useBrowser.getState(), now, sweptAt);
-  if (at !== null) running.timer = setTimeout(cleanUpDue, Math.max(sweptAt === undefined ? 0 : RETRY_FLOOR_MS, at - now));
+  if (at !== null) timer = setTimeout(cleanUpDue, Math.max(sweptAt === undefined ? 0 : RETRY_FLOOR_MS, at - now));
 }
 
 function cleanUpWindow(windowId: string, after: number, hiddenProfilesUpTo?: number) {
@@ -51,7 +49,7 @@ function sweep(after: number) {
 }
 
 function cleanUpDue() {
-  if (cleanUp.phase === "running") cleanUp.timer = null;
+  timer = null;
   const sweptAt = Date.now();
   const after = inactiveForMs(useBrowser.getState());
   if (after !== null) sweep(after);
@@ -68,22 +66,20 @@ function deselectedTabs(s: BrowserState, prev: BrowserState): string[] {
 }
 
 export function startAutoCleanUp() {
-  if (cleanUp.phase === "running") return;
-  const unsubscribe = useBrowser.subscribe((s, prev) => {
+  if (unsubscribe) return;
+  unsubscribe = useBrowser.subscribeTo(["windows", "settings"], (s, prev) => {
     if (s.windows !== prev.windows) {
       const left = deselectedTabs(s, prev);
       if (left.length) noteDeselectedTabs(s, left);
     }
     if (inactiveForMs(s) !== inactiveForMs(prev)) schedule();
   });
-  cleanUp = { phase: "running", unsubscribe, timer: null };
   schedule();
 }
 
 export function stopAutoCleanUp() {
-  const running = cleanUp;
-  if (running.phase !== "running") return;
-  cleanUp = { phase: "stopped" };
-  running.unsubscribe();
-  if (running.timer) clearTimeout(running.timer);
+  unsubscribe?.();
+  unsubscribe = null;
+  if (timer) clearTimeout(timer);
+  timer = null;
 }

@@ -13,6 +13,7 @@ export type Profile = {
   name: string;
   color: ProfileColor;
   icon: string | null;
+  switcherDot?: true;
   createdAt: number;
   dataId?: string;
   theme?: ProfileTheme | null;
@@ -156,12 +157,14 @@ export type ClosedTab = {
   tab: TabSnapshot;
   tabId?: string;
   restoreFrom?: string;
+  closeBatch?: string;
   windowId: string;
   index: number;
   group: ClosedGroupInfo | null;
   parents?: ClosedGroupInfo[];
   closedAt: number;
   pinnedTile?: boolean;
+  pinKey?: string;
   small?: boolean;
 };
 

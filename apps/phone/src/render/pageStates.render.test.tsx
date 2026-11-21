@@ -13,6 +13,7 @@ import { currentTabs, useTabs } from "../state/tabs/store";
 import type { BrowserTab } from "../state/tabs/tabModels";
 import { launchTabs } from "../state/tabs/tabsState";
 import { renderSurface, someTabs, unmount, withTabs } from "../../test/render/harness";
+import { privateMark } from "../components/ui/IncognitoSpecs";
 
 const onIPhone = Platform.OS === "ios";
 
@@ -60,11 +61,11 @@ test("a loading page with no saved picture shows main's placeholder centred on t
   unmount(root);
 });
 
-test("the placeholder's contents wait main's delay, then fade in: 250 then 150 ms on iPhone, Compose's 300 then 220 ms on Android", () => {
+test("the placeholder's contents wait main's delay, then fade in: 250 then 150 ms on both phones", () => {
   const tab = currentTabs().open[0]!;
   const root = renderSurface(<BrowsingScreen tab={tab} />, { flushTimers: false });
   const opacity = () => style(node(root, "pageLoadingContent")!).opacity;
-  const [wait, fade] = onIPhone ? [250, 150] : [300, 220];
+  const [wait, fade] = [250, 150];
   expect(opacity()).toBe(0);
   act(() => jest.advanceTimersByTime(wait - 16));
   expect(opacity()).toBe(0);
@@ -206,7 +207,7 @@ test("the lock sits in the site icon's own slot at the site icon's size, so the 
 
 test("the bar's icon slot for the four tabs: a normal secure page shows its favicon, a normal insecure one the red lock alone, an Incognito secure one its eyeglasses, and an Incognito insecure one the eyeglasses then the lock; a screen reader hears Incognito, Not Secure, then the host", () => {
   const { spokenAddress } = require("../components/browsing/FloatingBar") as typeof import("../components/browsing/FloatingBar");
-  const glyphs = (root: Root) => root.root.findAll((found) => typeof found.type !== "string" && (found.props.name === "eyeglassesThin" || found.props.testID === "floatingBarNotSecure" || ("pageUrl" in found.props && typeof found.props.size === "number"))).map((found) => (found.props.name === "eyeglassesThin" ? "eyeglasses" : found.props.testID === "floatingBarNotSecure" ? "lock" : "favicon"));
+  const glyphs = (root: Root) => root.root.findAll((found) => typeof found.type !== "string" && (found.props.name === privateMark || found.props.testID === "floatingBarNotSecure" || ("pageUrl" in found.props && typeof found.props.size === "number"))).map((found) => (found.props.name === privateMark ? "eyeglasses" : found.props.testID === "floatingBarNotSecure" ? "lock" : "favicon"));
   const cases = [
     { url: "https://secure.example/", isPrivate: false, shows: ["favicon"], spoken: "secure.example" },
     { url: "http://plain.example/", isPrivate: false, shows: ["lock"], spoken: "Not Secure, plain.example" },

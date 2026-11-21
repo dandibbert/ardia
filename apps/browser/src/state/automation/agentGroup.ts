@@ -1,4 +1,4 @@
-import { cliOwnsTab } from "../../platform/cli";
+import { controlOwnsTab } from "../../platform/control";
 import { changedIds } from "../browser/changes";
 import { useBrowser, type BrowserState } from "../browser/store";
 import { innermostGroupOf } from "../groups/groups";
@@ -29,16 +29,19 @@ export function groupAgentTab(tabId: string, consent: ConsentToken | null): bool
   return true;
 }
 
-export function startAgentGroup(owns: OwnerCheck = cliOwnsTab) {
+export function startAgentGroup(
+  owns: OwnerCheck = controlOwnsTab,
+  stillOn: () => boolean = () => useBrowser.getState().settings.cliControl && useBrowser.getState().settings.agentTabsGrouped,
+) {
   if (stopWatching) return;
-  stopWatching = useBrowser.subscribe((s, prev) => {
+  stopWatching = useBrowser.subscribeTo(["tabs"], (s, prev) => {
     if (s.tabs === prev.tabs || !s.settings.agentTabsGrouped || !s.settings.cliControl) return;
     const opened = changedIds(s.tabs, prev.tabs).filter((id) => !prev.tabs[id] && s.tabs[id] && !s.tabs[id]!.pin);
     if (!opened.length || opened.length > RESTORED_AT_ONCE) return;
     const consent = consentToken();
     for (const id of opened) {
       void owns(id).then(
-        (owner) => void (owner.owned && !owner.shown && groupAgentTab(id, consent)),
+        (owner) => void (stillOn() && owner.owned && !owner.shown && groupAgentTab(id, consent)),
         () => {},
       );
     }

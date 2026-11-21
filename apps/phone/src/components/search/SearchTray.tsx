@@ -1,4 +1,5 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { IncognitoEyes } from "../ui/IncognitoEyes";
 import { countRender } from "../../state/app/interactionPerf";
 import { AppState, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SheetScrollContext, SheetScrollView, sheetPullTranslation, type SheetScroll } from "../ui/Sheet";
@@ -12,6 +13,7 @@ import { useSearchEditsPage, useSearchFieldVersion, useSearchInitialText, useSea
 import { SEARCH_ANCHOR_ID, SEARCH_FACE_ID, SEARCH_FIELD_ID, SEARCH_REVEAL_ID, SEARCH_ROWS_REVEAL_ID, setStageMorphs, stageExit, stageOpened, stagePresented, stageSettled, useStageBar } from "../../state/search/stageBar";
 import { SearchStage, SearchStagePanel, searchStageIsNative, type SearchStageHandle, type SearchStageLift } from "../../platform/searchStage";
 import { useScreenLayout } from "../../state/app/screenLayout";
+import { isOpenDuo } from "../../lib/bottomBarSpan";
 import { useChromeStyle } from "../../state/settings/appearance";
 import { withAlpha } from "../../lib/color";
 import { initialPresence, presenceSettled, presenceShown, presenceTarget } from "../../lib/sheetPresence";
@@ -29,6 +31,7 @@ import { useTabs } from "../../state/tabs/store";
 import { countUsage, reportLaunchTray } from "../../state/telemetry/telemetry";
 import { browseLayout, capsule, FloatingMenu, font, ink, LookFrost, MotionView, moveTo, radius, screenReaderActions, type MotionCurve, type MotionTarget, rolesFor, trayLandingDelayMs, space, stageMotion, barReturnMotion, Symbol, SURFACES_FROST, tabsCurve, tabsInk, tabsLayout, tabsMotion, trayMotion, trayShadow, useTheme, FadeView, fadeIsNative, ChromeSurface, floatingPanelLayout, useDesign, useReduceTransparency, useReduceMotion, settingsUIAvailable, SystemGlyph } from "../ui";
 import { SuggestionRow } from "./SuggestionRow";
+import { MaterialSearchTray } from "./MaterialSearchView";
 import { TrayInput, type TrayInputHandle } from "./TrayInput";
 import { canSearchByVoice, presentVoiceSearch } from "../../state/voice/store";
 import { commandBarMotion, commandPanelPlace, useCommandBar } from "../duo/CommandBar";
@@ -62,6 +65,8 @@ function useTrayTheme() {
 }
 
 export function SearchTray() {
+  const design = useDesign();
+  if (design === "material") return <MaterialSearchTray />;
   return searchStageIsNative() ? <StagedTray /> : <SheetTray />;
 }
 
@@ -436,6 +441,8 @@ function StagedTray() {
   const reduceTransparency = useReduceTransparency();
   const chrome = useChromeStyle();
   const phoneLayout = useScreenLayout((s) => s.layout.name === "phone");
+  const hinged = useScreenLayout((s) => s.hinge !== "none");
+  const landsDirectly = useScreenLayout((s) => isOpenDuo(window.width, s.hinge));
   const pills = useStageBar((state) => state.pills);
   const stage = useRef<SearchStageHandle>(null);
   const [mounted, setMounted] = useState<number | null>(open ? session : null);
@@ -682,6 +689,7 @@ function StagedTray() {
       rowsRevealNativeId={SEARCH_ROWS_REVEAL_ID}
       fieldCenter={floatingPanelLayout.fieldInset + fieldHeight / 2}
       commandTop={command ? command.top : null}
+      landsDirectly={landsDirectly}
       morphLook={morphLook}
       onLift={lifted}
       onReveal={revealed}
@@ -707,7 +715,7 @@ function StagedTray() {
           {mounted !== null ? (
             <View
               key={presentation}
-              style={command ? { marginLeft: command.left, width: command.width } : styles.stageCard}
+              style={command ? { marginLeft: command.left, width: command.width } : [styles.stageCard, hinged ? { paddingLeft: insets.left + floatingPanelLayout.inset, paddingRight: insets.right + floatingPanelLayout.inset } : null]}
               importantForAccessibility={closing ? "no-hide-descendants" : "auto"}
               accessibilityElementsHidden={closing}
             >
@@ -914,8 +922,8 @@ function IncognitoToggle() {
       style={[styles.incognito, panelField ? styles.panelIncognito : null]}
     >
       <View testID="trayIncognitoGlyph" style={styles.incognitoGlyph}>
-        {on ? <Animated.View testID="trayIncognitoPlate" entering={modeToggleIn} exiting={modeToggleOut} style={styles.incognitoPlate} /> : null}
-        <Symbol name="eyeglassesThin" size={INCOGNITO_GLYPH} color={on ? tabsInk.onDark : theme.foregroundTertiary} />
+        {on && Platform.OS !== "android" ? <Animated.View testID="trayIncognitoPlate" entering={modeToggleIn} exiting={modeToggleOut} style={styles.incognitoPlate} /> : null}
+        <IncognitoEyes incognito={on} size={INCOGNITO_GLYPH} color={on ? tabsInk.onDark : theme.foregroundTertiary} />
       </View>
     </Pressable>
   );

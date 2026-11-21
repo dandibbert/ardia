@@ -37,7 +37,7 @@ export const STEPS: OnboardingStep[] = stepsForThisSurface(["intro", "source", "
 
 const answeredByPreset = (q: Question, preset: Preset) => !q.askedWithPreset && q.keys.length > 0 && q.keys.every((k) => k in PRESETS[preset]);
 
-const SIDEBAR_ONLY: readonly QuestionId[] = ["address", "switcher"];
+const SIDEBAR_ONLY: readonly QuestionId[] = ["address"];
 export const liquidGlass = isLiquidGlass();
 
 export function questionsFor(step: OnboardingStep): Question[] {
@@ -149,7 +149,12 @@ export function chooseSource(source: BrowserSourceId | null) {
 
 export const sourcePatch = (): Partial<Settings> => {
   const { source, prefill } = useOnboarding.getState();
-  return prefill === "preset" ? presetPatch(source) : {};
+  if (prefill !== "preset") return {};
+  const { searchEngine, ...rest } = presetPatch(source);
+  if (searchEngine === undefined) return rest;
+  if (!useBrowser.getState().settingsMeta.inferred.includes("searchEngine")) return { ...rest, searchEngine };
+  noteOnboarding("presetKeptImport");
+  return rest;
 };
 
 export function setOnboardingDraft(patch: Partial<Settings>) {
