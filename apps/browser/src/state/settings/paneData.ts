@@ -1,8 +1,6 @@
 import { useBrowser } from "../browser/store";
 import {
   engineInfo,
-  listComponents,
-  WIDEVINE_COMPONENT_ID,
   appIcons,
   currentAppIcon,
   isDefaultBrowser,
@@ -30,8 +28,8 @@ import { engineProfile } from "../browser/model";
 import { currentSyncFolder, folderInfo } from "../sync/engine";
 import { extensionsProfileId, refreshExtensions } from "../extensions/actions";
 import { cached, load, loadAll, need, resource, store, useAllLoaded, type Needed } from "./resources";
-import type { SettingsPane } from "./settingsWindows";
-import { FOLLOW_EVERY_MS, FOLLOW_FOR_MS, switchOutcome, updaterBusy } from "./updateStatus";
+import { onSettingsOpen, type SettingsPane } from "./settingsWindows";
+import { FOLLOW_EVERY_MS, FOLLOW_FOR_MS, FOLLOW_UPDATE_EVERY_MS, FOLLOW_UPDATE_FOR_MS, switchOutcome, updateUnderWay, updaterBusy } from "./updateStatus";
 import { noteUpdateChannelSwitch } from "../telemetry/usage";
 import { consentToken } from "../telemetry/client";
 import { forgetPendingOfferToSave, passwordAutofill } from "../site/passwordManager";
@@ -70,20 +68,13 @@ export const shortcutItems = resource("menuShortcuts", () =>
   ),
 );
 export const engineVersion = resource("engineInfo", () => engineInfo().catch(() => null));
-export const widevine = resource("widevine", () =>
-  listComponents().then(
-    (list) => list.find((c) => c.id === WIDEVINE_COMPONENT_ID) ?? null,
-    () => null,
-  ),
-);
-
 const defaultProfile = () => engineProfile(useBrowser.getState(), currentSettings().defaultProfileId);
 
 export function paneNeeds(pane: SettingsPane, profileId: string | null): Needed[] {
   const profile = profileId ? engineProfile(useBrowser.getState(), profileId) : defaultProfile();
   switch (pane) {
     case "general":
-      return [need(loginItem), need(defaultBrowser), need(updater), need(downloadSettings, profile), need(contentBlocker), need(syncFolder, currentSyncFolder() ?? null), need(engineVersion), need(widevine)];
+      return [need(loginItem), need(defaultBrowser), need(updater), need(downloadSettings, profile), need(contentBlocker), need(syncFolder, currentSyncFolder() ?? null), need(engineVersion)];
     case "profiles":
       return [
         need(downloadSettings, profile),
@@ -111,6 +102,8 @@ export function paneNeeds(pane: SettingsPane, profileId: string | null): Needed[
 export const usePaneLoaded = (pane: SettingsPane, profileId: string | null) => useAllLoaded(paneNeeds(pane, profileId));
 
 export const preparePane = (pane: SettingsPane, profileId: string | null) => loadAll(paneNeeds(pane, profileId));
+
+onSettingsOpen((pane, profileId) => void preparePane(pane, profileId));
 
 function noteAsked(profile: string, toggle: AutofillToggle, asked: boolean, now: boolean) {
   rememberAsked(profile, toggle, asked, now);
@@ -159,21 +152,23 @@ export function setUpdaterPrefs(patch: { automaticChecks?: boolean; automaticDow
   if (patch.channel !== undefined) void setUpdateChannel(patch.channel).finally(() => followUpdater((s) => noteUpdateChannelSwitch(s.available ? switchOutcome(s.switchCheck) : null, consent)));
 }
 
-let followRun: object | null = null;
+let following = 0;
+let followingNow = false;
 
 export function followUpdater(settled?: (state: UpdaterState) => void) {
-  if (followRun && !settled) return;
-  const run = {};
-  followRun = run;
-  const until = Date.now() + FOLLOW_FOR_MS;
+  if (followingNow && !settled) return;
+  const run = ++following;
+  followingNow = true;
+  const started = Date.now();
   const tick = (): Promise<void> =>
     load(updater, [], { fresh: true }).then((state) => {
-      if (run !== followRun) return;
-      if (updaterBusy(state) && Date.now() < until) return new Promise<void>((done) => setTimeout(done, FOLLOW_EVERY_MS)).then(tick);
-      followRun = null;
+      if (run !== following) return;
+      const updating = updateUnderWay(state);
+      if (updaterBusy(state) && Date.now() < started + (updating ? FOLLOW_UPDATE_FOR_MS : FOLLOW_FOR_MS)) return new Promise<void>((done) => setTimeout(done, updating ? FOLLOW_UPDATE_EVERY_MS : FOLLOW_EVERY_MS)).then(tick);
+      followingNow = false;
       settled?.(state);
     });
-  void tick().catch(() => run === followRun && (followRun = null));
+  void tick().catch(() => run === following && (followingNow = false));
 }
 
 export function chooseAppIcon(id: string) {

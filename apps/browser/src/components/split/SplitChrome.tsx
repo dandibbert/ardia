@@ -317,17 +317,25 @@ function DropZone({ pane, side, shown, stage, pointerX, onHidden }: { pane: Rect
 
 export const SplitToast = memo(function SplitToast({ windowId }: { windowId: string }) {
   const toast = useToasts((s) => s.toasts[windowId] ?? null);
-  const [view, setView] = useState<{ toast: NonNullable<typeof toast>; closing: boolean } | null>(toast && { toast, closing: false });
-  if (toast && toast !== view?.toast) setView({ toast, closing: false });
-  else if (!toast && view && !view.closing) setView({ ...view, closing: true });
+  const [shown, setShown] = useState(toast);
+  const [closing, setClosing] = useState(false);
+  const [held, setHeld] = useState(false);
+  if (toast && toast !== shown) {
+    setShown(toast);
+    setClosing(false);
+  } else if (!toast && shown && !closing) setClosing(true);
   useEffect(() => {
-    if (!toast || toast.sticky) return;
-    const timer = setTimeout(() => setView((now) => (now && !now.closing ? { ...now, closing: true } : now)), toast.action ? TOAST_ACTION_MS : TOAST_MS);
+    if (!toast || toast.sticky || (held && toast.secondary)) return;
+    const timer = setTimeout(() => setClosing(true), toast.holdMs ?? (toast.action ? TOAST_ACTION_MS : TOAST_MS));
     return () => clearTimeout(timer);
-  }, [toast?.id]);
-  if (!view) return null;
-  const { toast: shown, closing } = view;
-  const action = shown.action;
+  }, [toast?.id, held && !!toast?.secondary]);
+  if (!shown) return null;
+  const { action, secondary } = shown;
+  const pick = (chosen: typeof action) => () => {
+    chosen?.run();
+    setShown(null);
+    hideToast(windowId, shown.id);
+  };
   return (
     <Toast
       key={shown.id}
@@ -335,14 +343,15 @@ export const SplitToast = memo(function SplitToast({ windowId }: { windowId: str
       message={shown.message ?? undefined}
       icon={shown.icon ?? "rectangle.split.3x1"}
       action={action?.title}
-      onAction={() => {
-        action?.run();
-        setView(null);
-        hideToast(windowId, shown.id);
-      }}
+      onAction={pick(action)}
+      secondary={secondary?.title}
+      onSecondary={pick(secondary)}
+      onHeld={secondary ? setHeld : undefined}
+      titleLines={shown.titleLines}
       closing={closing}
       onClosed={() => {
-        setView(null);
+        setShown(null);
+        setClosing(false);
         hideToast(windowId, shown.id);
       }}
     />

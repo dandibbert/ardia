@@ -21,7 +21,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
   private static let behindTimeout = 1.5
   private static let revealTimeout = 0.6
   let typeAhead = TypeAheadHold()
-  private let linkActivation = LinkActivationOrder()
+  private let linkActivation = LinkActivationOrder(), leaving = LeavingOverPiP()
   private(set) lazy var fullScreen = FullScreenRestore(windows: self)
 
   private override init() {
@@ -111,11 +111,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
       let root = makeContentView(id)
       ArdiaChromeWindowHost.embedRootView(root, in: chromeWindow)
       if !chromeWindow.isVisible {
-        chromeWindow.alphaValue = 0
-        entry.reveal = .waiting(then: [], entrance: small || options.animated ? !small || frame == nil : nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.revealTimeout) { [weak self, weak entry] in
-          if let self, let entry { self.reveal(entry) }
-        }
+        entry.waitToReveal(entrance: small || options.animated ? !small || frame == nil : nil, timeout: Self.revealTimeout) { [weak self] in self?.reveal($0) }
       }
       entry.keepContentSized(in: root)
       entry.watchContent(of: root) { [weak self] entry, root in self?.contentAppeared(entry, root: root) }
@@ -317,8 +313,9 @@ final class WindowManager: NSObject, NSWindowDelegate {
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       NotificationCenter.default.addObserver(self, selector: #selector(auxFrameChanged(_:)), name: name, object: window)
     }
+    entry.waitToReveal(entrance: nil, timeout: Self.revealTimeout) { [weak self] in self?.reveal($0) }
     entry.keepContentSized(in: root)
-    entry.watchContent(of: root) { entry, root in entry.keepContentSized(in: root) }
+    entry.watchContent(of: root) { [weak self] entry, root in self?.contentAppeared(entry, root: root) }
     relayoutRoot(window)
     window.makeKeyAndOrderFront(nil)
   }
@@ -465,7 +462,7 @@ final class WindowManager: NSObject, NSWindowDelegate {
 
   @objc private func appDidBecomeActive(_ notification: Notification) {
     if ArdiaChromeWindowHost.consumePictureInPictureActivation() { return }
-    DispatchQueue.main.async { [weak self] in self?.focusBrowserPastPiP() }
+    DispatchQueue.main.async { [weak self] in if self?.leaving.givesFocusBack() != true { self?.focusBrowserPastPiP() } }
   }
 
   private func focusBrowserPastPiP() {

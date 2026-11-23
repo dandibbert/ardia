@@ -15,6 +15,8 @@ import { presentSearch, useSearch } from "../state/search/store";
 import { useStageBar } from "../state/search/stageBar";
 import { currentTabs, useTabs } from "../state/tabs/store";
 import * as telemetry from "../state/telemetry/telemetry";
+import * as lookViews from "../components/ui/LookViews";
+import { searchPanel } from "../components/search/searchPanelTokens";
 import { renderSurface, unmount, withTabs } from "../../test/render/harness";
 
 type StageProps = {
@@ -30,7 +32,8 @@ type StageProps = {
   morphLook?: { usesGlass: boolean; panelTint: string; panelDark: boolean; classicPanel: string };
   onLift?: (lift: { lift: number; up: boolean }) => void;
   onReveal?: (reveal: { late: boolean }) => void;
-  onSettled?: (settled: { landed: boolean }) => void;
+  onSettled?: (settled: { landed: boolean; path?: string }) => void;
+  onLanding?: (landing: { lands: boolean; path: string }) => void;
 };
 
 const mockFaceTaken = { then: (taken: () => void) => taken() };
@@ -47,7 +50,7 @@ jest.mock("@ardia/phone-native", () => {
   const SearchStage = React.forwardRef((props: Record<string, unknown>, ref) => {
     React.useImperativeHandle(ref, () => mockStage, []);
     mockSeen.props = props as never;
-    const { onLift, onReveal, onSettled, morphLook, anchorNativeId, faceNativeId, commandTop, fieldCenter, shown, ...rest } = props;
+    const { onLift, onReveal, onSettled, onLanding, morphLook, anchorNativeId, faceNativeId, commandTop, fieldCenter, shown, ...rest } = props;
     return React.createElement(native.View, rest);
   });
   const CompletingField = React.forwardRef((props: Record<string, unknown>, ref) => {
@@ -96,7 +99,7 @@ type Root = ReturnType<typeof renderSurface>;
 const page = (withBar = true) => {
   const root = renderSurface(
     <DesignProvider design="redesigned">
-      {withBar ? <BrowsingScreen tab={currentTabs().open[0]!} /> : null}
+      {withBar ? <BrowsingScreen tabId={currentTabs().open[0]!.id} /> : null}
       <SearchTray />
     </DesignProvider>,
   );
@@ -178,10 +181,11 @@ onIPhone("the field takes the keyboard as soon as the stage has presented, as ma
   expect(mockFocus).toHaveBeenCalledTimes(1);
 });
 
-onIPhone("a page's long address opens selected and showing its start, as main's field: the native field selects it all when the stage's focus lands, not at mount", () => {
+onIPhone("editing a page's address opens the panel with an empty field, as Arc's does, and selects nothing", () => {
   const root = page();
-  act(() => presentSearch("page", "https://en.wikipedia.org/w/index.php?title=Pastel_de_nata&utm_medium=search&utm_source=ardia"));
-  expect(field(root)!.props.selectsAllOnFocus).toBe(true);
+  act(() => presentSearch("page", "https://en.wikipedia.org/wiki/Pastel_de_nata", null, { currentUrl: "https://en.wikipedia.org/wiki/Pastel_de_nata", currentTabId: currentTabs().open[0]!.id }));
+  expect(useSearch.getState().text).toBe("");
+  expect(field(root)!.props.selectsAllOnFocus).toBe(false);
 });
 
 onIPhone("the stage is told which native view is the field, so it focuses the field itself as it presents", () => {
@@ -243,7 +247,7 @@ onIPhone("nothing above the bar's glass fades: the capsule, the pill and the sid
   expect(glassOf(root, "floatingBarAddress").props).toMatchObject({ shown: true, shownMs: 0 });
 });
 
-onIPhone("the side buttons shrink 0.8 and slide 12 points out while search is open, and come back after it closes", () => {
+onIPhone("the side buttons slide 12 points out while search is open and come back on one clock with their glass, at once after it closes, with no squish", () => {
   const root = page();
   open();
   advance(200);
@@ -252,15 +256,18 @@ onIPhone("the side buttons shrink 0.8 and slide 12 points out while search is op
   expect(opacity(host(root, "floatingBarTabsGlyphs"))).toBe(0);
   expect(glassOf(root, "floatingBarTabs").props.shown).toBe(false);
   expect(glassOf(root, "floatingBarPlus").props.shown).toBe(false);
-  expect(Object.assign({}, ...leading.transform)).toEqual({ translateX: -12, scale: 0.8 });
-  expect(Object.assign({}, ...(getAnimatedStyle(host(root, "floatingBarTrailing")!) as { transform: Record<string, number>[] }).transform)).toEqual({ translateX: 12, scale: 0.8 });
+  expect(Object.assign({}, ...leading.transform)).toEqual({ translateX: -12 });
+  expect(Object.assign({}, ...(getAnimatedStyle(host(root, "floatingBarTrailing")!) as { transform: Record<string, number>[] }).transform)).toEqual({ translateX: 12 });
   expect(host(root, "floatingBarPlus")).toBeDefined();
   act(() => browse.cancelSearch());
-  advance(100);
-  expect(opacity(host(root, "floatingBarTabsGlyphs"))).toBe(0);
-  advance(800);
+  expect(glassOf(root, "floatingBarTabs").props).toMatchObject({ shown: true, shownMs: 150 });
+  advance(48);
+  const halfway = opacity(host(root, "floatingBarTabsGlyphs"));
+  expect(halfway).toBeGreaterThan(0.2);
+  expect(halfway).toBeLessThan(1);
+  advance(200);
   expect(opacity(host(root, "floatingBarTabsGlyphs"))).toBeCloseTo(1, 2);
-  expect(glassOf(root, "floatingBarTabs").props.shown).toBe(true);
+  expect((Object.assign({}, ...(getAnimatedStyle(host(root, "floatingBarLeading")!) as { transform: Record<string, number>[] }).transform) as { translateX: number }).translateX).toBeCloseTo(0, 5);
 });
 
 onIPhone("cancel lands the panel in the bar's pill, Go departs, and without a pill to land in it drops", () => {
@@ -278,6 +285,31 @@ onIPhone("cancel lands the panel in the bar's pill, Go departs, and without a pi
   open();
   act(() => browse.cancelSearch());
   expect(mockStage.close).toHaveBeenLastCalledWith("drop", 0);
+});
+
+onIPhone("when the stage says the cancelled panel has no pill to land in, the bar's pill and its glass come back at once with the side buttons instead of after the settle, the capsule's glass whole in that frame rather than materializing", () => {
+  const root = page();
+  open();
+  act(() => browse.cancelSearch());
+  expect(centreSeen(root)).toBe(0);
+  expect(glassOf(root, "floatingBarAddress").props.shown).toBe(false);
+  act(() => stage().onLanding?.({ lands: false, path: "anchorNotFound" }));
+  expect(glassOf(root, "floatingBarAddress").props).toMatchObject({ shown: true, shownMs: 0 });
+  expect(glassOf(root, "floatingBarTabs").props.shown).toBe(true);
+  advance(200);
+  expect(centreSeen(root)).toBe(1);
+  act(() => stage().onSettled?.({ landed: false, path: "anchorNotFound" }));
+  expect(centreSeen(root)).toBe(1);
+});
+
+onIPhone("a panel the stage flies into the pill keeps the bar's pill hidden until it lands", () => {
+  const root = page();
+  open();
+  act(() => browse.cancelSearch());
+  act(() => stage().onLanding?.({ lands: true, path: "anchored" }));
+  expect(centreSeen(root)).toBe(0);
+  act(() => stage().onSettled?.({ landed: true, path: "anchored" }));
+  expect(centreSeen(root)).toBe(1);
 });
 
 onIPhone("settling shows the pill at once with no fade, tells the stage to finish in that same hand-over, and only then unmounts the panel's content at low priority", () => {
@@ -334,7 +366,7 @@ onIPhone("the dim fades in once the stage says the panel is up, and fades with t
     { state: State.ACTIVE, translationY: 60 },
   ]);
   expect(mockStage.holdLift).toHaveBeenCalledTimes(1);
-  const travel = 274 + 300;
+  const travel = StyleSheet.flatten(host(root, "traySurface")!.props.style).height as number;
   expect(opacity(host(root, "trayDim"))).toBeCloseTo(1 - 60 / travel, 2);
 });
 
@@ -390,10 +422,11 @@ onIPhone("a drag past the dismiss distance closes through the stage with the tra
 
 onIPhone("the stage gets the panel's look, the field's centre and, on a late reveal, a count that Incognito never sends", () => {
   const counted = jest.spyOn(telemetry, "countUsage").mockImplementation(() => undefined);
+  jest.spyOn(lookViews, "useSolidChrome").mockReturnValue(false);
   const root = page();
   open();
-  expect(stage().fieldCenter).toBeCloseTo(9 + 47.5 / 2);
-  expect(stage().morphLook).toMatchObject({ usesGlass: true, panelDark: false });
+  expect(stage().fieldCenter).toBeCloseTo(16 + 47.5 / 2);
+  expect(stage().morphLook).toMatchObject({ usesGlass: false, panelDark: false, frosted: true, classicPanel: "rgba(255,255,255,0.62)" });
   reveal(true);
   expect(counted).toHaveBeenCalledWith("search_reveals_late");
   act(() => browse.cancelSearch());
@@ -404,6 +437,23 @@ onIPhone("the stage gets the panel's look, the field's centre and, on a late rev
   expect(stage().morphLook).toMatchObject({ panelDark: true });
   reveal(true);
   expect(counted).not.toHaveBeenCalledWith("search_reveals_late");
+});
+
+onIPhone("the panel and its morph take one look from the chrome style: frosted under Glass, the solid fill under Classic or Reduce Transparency, in the face and the morph alike", () => {
+  const solid = jest.spyOn(lookViews, "useSolidChrome").mockReturnValue(false);
+  const root = page();
+  open();
+  expect(stage().morphLook).toMatchObject({ frosted: true, classicPanel: searchPanel.light.tint });
+  expect(host(root, "searchPanelFace")!.findAll((node) => node.type === lookViews.LookFrost)).toHaveLength(1);
+  act(() => browse.cancelSearch());
+  act(() => stage().onSettled?.({ landed: true }));
+  solid.mockReturnValue(true);
+  open();
+  expect(stage().morphLook).toMatchObject({ frosted: false, classicPanel: searchPanel.light.solid });
+  const face = host(root, "searchPanelFace")!;
+  expect(face.findAll((node) => node.type === lookViews.LookFrost)).toHaveLength(0);
+  expect(StyleSheet.flatten(face.props.style).backgroundColor).toBe(searchPanel.light.solid);
+  expect(root.root.findAll((node) => node.type === lookViews.LookFrost && node.props.fill !== undefined && node.props.variant === "thin")).toHaveLength(0);
 });
 
 onAndroid("Android keeps the sheet tray and its own motion: no stage, and the bar's centre never hides", () => {
@@ -434,13 +484,14 @@ for (const [name, hinge, right] of [["open Duo", "fullyOpen", 84], ["closed Duo"
   });
 }
 
-onIPhone("with no hinge the search panel keeps its 8 a side", () => {
+onIPhone("with no hinge the search panel runs edge to edge inside the safe area, as Arc's does", () => {
   const root = page();
   open();
   advance(400);
   const card = stageCardOf(root);
-  expect(card.paddingHorizontal).toBe(8);
-  expect(card.paddingRight).toBeUndefined();
+  expect(card.paddingHorizontal).toBeUndefined();
+  const insets = safeArea.useSafeAreaInsets();
+  expect(card).toMatchObject({ paddingLeft: insets.left, paddingRight: insets.right });
 });
 
 const anchorSpan = (root: Root, width: number) => {

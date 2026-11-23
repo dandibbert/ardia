@@ -4,9 +4,10 @@ import { queryPrefixLength, type TrayRow } from "../../state/search/omnibox";
 import { countRender } from "../../state/app/interactionPerf";
 import type { Design } from "../../lib/design";
 import type { Point } from "../../lib/menuPlace";
-import { browseLayout, Favicon, font, MaterialIconButton, radius, screenReaderActions, space, Symbol, tabsMotion, useDesign, type ColorRoles, type SymbolName } from "../ui";
+import { browseLayout, Favicon, font, MaterialIconButton, radius, screenReaderActions, space, Symbol, tabsMotion, useDesign, type ColorRoles, type SymbolName, Tappable } from "../ui";
 import { useMaterialRipple } from "../ui/MaterialSurfaces";
 import { materialBottomBar, materialSize, materialType } from "../ui/materialTokens";
+import { searchPanel } from "./searchPanelTokens";
 
 const MATERIAL_ROW_ICON = 20;
 
@@ -43,8 +44,9 @@ export const SuggestionRow = memo(function SuggestionRow({ row, typed, roles, in
   const material = design === "material";
   const ripple = useMaterialRipple();
   const twoLine = row.kind !== "query" || Boolean(row.detail);
-  const rowStyle = material ? [styles.materialRow, twoLine ? styles.materialRowTwoLine : null] : styles.row;
-  const content = <RowContent row={row} typed={typed} roles={roles} interactive={interactive} onRefine={onRefine} />;
+  const panel = design === "redesigned";
+  const rowStyle = material ? [styles.materialRow, twoLine ? styles.materialRowTwoLine : null] : panel ? styles.panelRow : styles.row;
+  const content = panel ? <PanelRowContent row={row} typed={typed} roles={roles} /> : <RowContent row={row} typed={typed} roles={roles} interactive={interactive} onRefine={onRefine} />;
   const menuActions = menu.map((item, index) => ({ name: `${MENU_ACTION}${index}`, label: item.label, run: item.run }));
   if (!interactive) {
     const actions = [
@@ -130,11 +132,11 @@ function RowContent({ row, typed, roles, interactive, onRefine }: { row: TrayRow
               onPress={() => onRefine(row)}
             />
           ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Refine ${row.title}`} onPress={() => onRefine(row)} style={styles.refine}>
+            <Tappable kind="icon" label={`Refine ${row.title}`} onPress={() => onRefine(row)} style={styles.refine}>
               <View style={styles.refineGlyph}>
                 <Symbol name="arrowUpForward" size={15} color={roles.rowIcon} />
               </View>
-            </Pressable>
+            </Tappable>
           )
         ) : (
           <View style={material ? styles.materialRefine : styles.refine}>
@@ -143,6 +145,42 @@ function RowContent({ row, typed, roles, interactive, onRefine }: { row: TrayRow
             </View>
           </View>
         )
+      ) : null}
+    </>
+  );
+}
+
+const PANEL_TRAILING: Partial<Record<TrayRow["kind"], true>> = { calc: true, paste: true, browseForMe: true };
+
+export const panelTitleLines = (fontScale: number) => (fontScale > LARGE_TEXT ? 3 : 1);
+
+function PanelRowContent({ row, typed, roles }: { row: TrayRow; typed: string; roles: ColorRoles }) {
+  const lines = panelTitleLines(useWindowDimensions().fontScale);
+  const detail = row.kind === "query" ? row.detail : row.kind === "page" ? (row.switchesTab ? row.detail : null) : PANEL_TRAILING[row.kind] ? row.detail : null;
+  const fromMac = row.kind === "page" && !row.switchesTab ? (row.fromMac ?? null) : null;
+  return (
+    <>
+      <View style={styles.panelLeading}>
+        {row.kind === "page" ? <Favicon iconUrl={row.favicon} pageUrl={row.url} size={searchPanel.iconSlot} /> : <Symbol name={row.kind === "paste" && row.offer === "link" ? "link" : LEADING[row.kind]} size={searchPanel.glyph} color={roles.rowIcon} />}
+      </View>
+      <View style={styles.panelLabel}>
+        {row.kind === "query" ? (
+          <QueryTitle title={row.title} typed={typed} roles={roles} lines={lines} style={styles.panelTitleText} />
+        ) : (
+          <Text style={[styles.panelTitleText, { color: roles.foregroundPrimary }]} numberOfLines={lines}>
+            {row.title}
+          </Text>
+        )}
+        {detail ? (
+          <Text style={[styles.panelDetail, { color: roles.foregroundSecondary }]} numberOfLines={1}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {fromMac ? (
+        <View testID="panelRowFromMac" accessible accessibilityLabel={fromMac} style={styles.panelTrailing}>
+          <Symbol name="laptop" size={searchPanel.trailingGlyph} color={roles.rowIcon} />
+        </View>
       ) : null}
     </>
   );
@@ -168,6 +206,21 @@ const styles = StyleSheet.create({
     paddingRight: browseLayout.rowTrailing,
     borderRadius: radius.row,
   },
+  panelRow: {
+    minHeight: searchPanel.rowPitch,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: searchPanel.iconGap,
+    paddingLeft: searchPanel.rowLeading,
+    paddingRight: searchPanel.rowTrailing,
+    borderRadius: radius.row,
+    borderCurve: "continuous",
+  },
+  panelLeading: { width: searchPanel.iconSlot, height: searchPanel.iconSlot, alignItems: "center", justifyContent: "center" },
+  panelLabel: { flex: 1, flexDirection: "row", alignItems: "baseline", gap: space.s },
+  panelTitleText: { flexShrink: 1, fontSize: searchPanel.titleSize },
+  panelDetail: { flexShrink: 2, fontSize: searchPanel.detailSize },
+  panelTrailing: { width: searchPanel.trailingGlyph + space.xs, alignItems: "center", justifyContent: "center" },
   materialRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -189,3 +242,5 @@ const styles = StyleSheet.create({
   materialRefine: { width: materialSize.iconButton, height: materialSize.iconButton, alignItems: "center", justifyContent: "center" },
   refineGlyph: { transform: [{ rotate: "-90deg" }] },
 });
+
+export const panelRowLayout = { row: styles.panelRow, leading: styles.panelLeading, title: styles.panelTitleText } as const;

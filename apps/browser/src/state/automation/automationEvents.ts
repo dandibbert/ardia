@@ -10,9 +10,9 @@ export type AutomationEventSink = (name: AutomationEventName, data: Record<strin
 
 type Commit = { url: string; at: number };
 
-type EventFeed = { sink: AutomationEventSink; startedAt: number; stopWatching: () => void };
-
-let feed: EventFeed | null = null;
+let sink: AutomationEventSink | null = null;
+let stopWatching: (() => void) | null = null;
+let startedAt = 0;
 const commits = new Map<string, Commit>();
 
 function windowData(s: BrowserState, windowId: string) {
@@ -60,9 +60,9 @@ const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function sendNavigated(tabId: string, { url, sameDocument }: HeldNavigation) {
   const s = useBrowser.getState();
-  if (!feed || !isEligibleTab(s, tabId)) return;
+  if (!sink || !isEligibleTab(s, tabId)) return;
   const t = s.tabs[tabId]!;
-  feed.sink("tab.navigated", { windowId: t.windowId, tabId, profile: t.profileId, ...shownPage({ ...t, url }), sameDocument });
+  sink("tab.navigated", { windowId: t.windowId, tabId, profile: t.profileId, ...shownPage({ ...t, url }), sameDocument });
 }
 
 function releaseNavigations(tabId: string) {
@@ -85,14 +85,14 @@ function holdNavigation(tabId: string, url: string, sameDocument: boolean) {
 
 function sendPageError(tabId: string, url: string, status: number) {
   const s = useBrowser.getState();
-  if (!feed || !isEligibleTab(s, tabId)) return;
+  if (!sink || !isEligibleTab(s, tabId)) return;
   const t = s.tabs[tabId]!;
-  feed.sink("page.error", { windowId: t.windowId, tabId, profile: t.profileId, url: shownPage({ ...t, url }).url, status });
+  sink("page.error", { windowId: t.windowId, tabId, profile: t.profileId, url: shownPage({ ...t, url }).url, status });
 }
 
 export function noteCommit(tabId: string, url: string | undefined, at: number | undefined, httpStatus?: number) {
-  if (!feed || url === undefined || at === undefined || !url || url === "about:blank") return;
-  const last = commits.get(tabId) ?? { url: "", at: feed.startedAt };
+  if (!sink || url === undefined || at === undefined || !url || url === "about:blank") return;
+  const last = commits.get(tabId) ?? { url: "", at: startedAt };
   if (at <= last.at && url === last.url) return;
   commits.set(tabId, { url, at: Math.max(at, last.at) });
   const document = at > last.at;
@@ -101,27 +101,24 @@ export function noteCommit(tabId: string, url: string | undefined, at: number | 
 }
 
 export function startEventFeed(send: AutomationEventSink) {
-  if (feed) {
-    feed.sink = send;
-    return;
-  }
-  const startedAt = Date.now();
-  void reportPageCommits(true).catch(() => {});
+  sink = send;
+  if (stopWatching) return;
+  startedAt = Date.now();
+  void reportPageCommits("automation", true).catch(() => {});
   const s = useBrowser.getState();
   for (const id in s.tabs) commits.set(id, { url: s.tabs[id]!.url, at: startedAt });
-  const stopWatching = useBrowser.subscribe((next, prev) => {
-    diffStates(next, prev, (name, data) => feed?.sink(name, data));
+  const unsubscribe = useBrowser.subscribe((next, prev) => {
+    diffStates(next, prev, (name, data) => sink?.(name, data));
     if (next.tabs !== prev.tabs) for (const id of commits.keys()) if (!next.tabs[id]) commits.delete(id);
   });
-  feed = { sink: send, startedAt, stopWatching };
+  stopWatching = unsubscribe;
 }
 
 export function stopEventFeed() {
-  if (feed) {
-    void reportPageCommits(false).catch(() => {});
-    feed.stopWatching();
-  }
-  feed = null;
+  if (stopWatching) void reportPageCommits("automation", false).catch(() => {});
+  stopWatching?.();
+  stopWatching = null;
+  sink = null;
   commits.clear();
   for (const timer of releaseTimers.values()) clearTimeout(timer);
   releaseTimers.clear();

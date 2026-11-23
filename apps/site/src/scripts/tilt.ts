@@ -2,7 +2,8 @@ type Layer = { el: HTMLElement; dx: number; dy: number };
 type Stage = { el: HTMLElement; layers: Layer[]; x: number; y: number; gx: number; gy: number };
 
 const motion = matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)");
-const SETTLE_MS = 220;
+const SETTLE_MS = 90;
+const REACH = 0.35;
 const stages = new Map<Element, Stage>();
 for (const el of document.querySelectorAll<HTMLElement>("[data-tilt]")) {
   const layers = [...el.querySelectorAll<HTMLElement>("[data-depth]")]
@@ -37,7 +38,7 @@ type Loop = { phase: "idle" } | { phase: "scheduled"; frame: number; last: numbe
 let loop: Loop = { phase: "idle" };
 
 function paint(stage: Stage) {
-  for (const { el, dx, dy } of stage.layers) el.style.translate = `${(stage.x * dx).toFixed(2)}px ${(stage.y * dy).toFixed(2)}px`;
+  for (const { el, dx, dy } of stage.layers) el.style.translate = `${(stage.x * dx * REACH).toFixed(2)}px ${(stage.y * dy * REACH).toFixed(2)}px`;
 }
 
 function tick(now: number) {
@@ -82,7 +83,7 @@ function wake() {
 addEventListener(
   "pointermove",
   (e) => {
-    if (e.pointerType !== "mouse" || !motion.matches) return;
+    if (e.pointerType !== "mouse" || e.buttons !== 0 || !motion.matches) return;
     pointer = { x: e.clientX, y: e.clientY };
     wake();
   },

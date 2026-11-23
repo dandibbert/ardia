@@ -14,19 +14,16 @@ import { consentToken } from "../telemetry/client";
 import { isWindowClosing } from "../windows/closingWindows";
 import { setSidebarUi, sidebarUi } from "./sidebarUi";
 
+const MOUNT_AFTER_MS = 70;
 const SHOW_AFTER_MS = 140;
 const SESSION_START = Date.now();
 const POINTER_POLL_MS = 50;
 let showTimer: ReturnType<typeof setTimeout> | undefined;
-type PointerWatch = { phase: "idle" } | { phase: "stale" } | { phase: "watching"; timer: ReturnType<typeof setInterval> };
-const POINTER_IDLE: PointerWatch = { phase: "idle" };
-let pointer: PointerWatch = POINTER_IDLE;
+let mountTimer: ReturnType<typeof setTimeout> | undefined;
+let pointerTimer: ReturnType<typeof setInterval> | undefined;
 let hoveredRow: number | null = null;
-
-function setPointer(next: PointerWatch) {
-  if (pointer.phase === "watching") clearInterval(pointer.timer);
-  pointer = next;
-}
+let keyboardMoves = 0;
+let pointerStale = false;
 
 export function switcherStep(windowId: string, backward: boolean) {
   const current = sidebarUi().switcher;
@@ -38,13 +35,23 @@ export function switcherStep(windowId: string, backward: boolean) {
   const from = activeTabId(s, windowId);
   if (from) void rememberPicture(from);
   if (from && tabEngine(s, from) === "webkit") noteTabSwitcherOpenedInWebKit();
-  setSidebarUi({ switcher: { windowId, ids, index: backward ? ids.length - 1 : 1, visible: false } });
+  setSidebarUi({ switcher: { windowId, ids, index: backward ? ids.length - 1 : 1, mounted: false, visible: false } });
   void setSwitcherCapture(true);
+  clearTimeout(mountTimer);
   clearTimeout(showTimer);
+  mountTimer = setTimeout(mountSwitcher, MOUNT_AFTER_MS);
   showTimer = setTimeout(() => {
     const s = sidebarUi().switcher;
-    if (s) setSidebarUi({ switcher: { ...s, visible: true } });
+    if (!s) return;
+    setSidebarUi({ switcher: { ...s, mounted: true, visible: true } });
+    if (hoveredRow !== null && !pointerStale) watchPointer();
   }, SHOW_AFTER_MS);
+}
+
+function mountSwitcher() {
+  clearTimeout(mountTimer);
+  const s = sidebarUi().switcher;
+  if (s && !s.mounted) setSidebarUi({ switcher: { ...s, mounted: true } });
 }
 
 function syncSwitcherTabs(windowId: string, state = useBrowser.getState()) {
@@ -59,8 +66,10 @@ function syncSwitcherTabs(windowId: string, state = useBrowser.getState()) {
   if (!ids.length) return endSwitcher();
   const selected = s.ids[s.index];
   const selectedIndex = selected ? ids.indexOf(selected) : -1;
-  setPointer(POINTER_IDLE);
+  stopPointerWatch();
   hoveredRow = null;
+  pointerStale = false;
+  keyboardMoves++;
   setSidebarUi({ switcher: { ...s, ids, index: selectedIndex >= 0 ? selectedIndex : Math.min(s.index, ids.length - 1) } });
 }
 
@@ -81,12 +90,14 @@ export function subscribeSwitcherTabChanges(windowId: string) {
 export function moveSwitcher(step: 1 | -1) {
   const s = sidebarUi().switcher;
   if (!s) return;
+  mountSwitcher();
   focusSwitcherRow(s.index + step);
-  const stale: PointerWatch = { phase: "stale" };
-  setPointer(stale);
+  stopPointerWatch();
+  pointerStale = true;
+  const move = ++keyboardMoves;
   void setSwitcherCapture(true).then(() => {
-    if (pointer !== stale || !sidebarUi().switcher) return;
-    setPointer(POINTER_IDLE);
+    if (move !== keyboardMoves || !sidebarUi().switcher) return;
+    pointerStale = false;
     if (hoveredRow !== null) watchPointer();
   });
 }
@@ -100,32 +111,35 @@ export function focusSwitcherRow(index: number) {
 
 export function hoverSwitcherRow(index: number) {
   hoveredRow = index;
-  if (pointer.phase === "stale") return;
+  if (pointerStale || !sidebarUi().switcher?.visible) return;
   if (switcherPointerMoved()) {
-    setPointer(POINTER_IDLE);
+    stopPointerWatch();
     return focusSwitcherRow(index);
   }
   watchPointer();
 }
 
 function watchPointer() {
-  if (pointer.phase === "watching") return;
-  const timer = setInterval(() => {
-    if (!sidebarUi().switcher || hoveredRow === null) return setPointer(POINTER_IDLE);
+  pointerTimer ??= setInterval(() => {
+    if (!sidebarUi().switcher || hoveredRow === null) return stopPointerWatch();
     if (!switcherPointerMoved()) return;
     const row = hoveredRow;
-    setPointer(POINTER_IDLE);
+    stopPointerWatch();
     focusSwitcherRow(row);
   }, POINTER_POLL_MS);
-  setPointer({ phase: "watching", timer });
 }
 
 export function leaveSwitcherRow(index: number) {
   if (hoveredRow === index) hoveredRow = null;
 }
 
+function stopPointerWatch() {
+  clearInterval(pointerTimer);
+  pointerTimer = undefined;
+}
+
 function pointedRow(s: NonNullable<ReturnType<typeof sidebarUi>["switcher"]>) {
-  return s.visible && pointer.phase !== "stale" && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
+  return s.visible && !pointerStale && hoveredRow !== null && hoveredRow < s.ids.length && switcherPointerMoved() ? hoveredRow : null;
 }
 
 export async function closeSwitcherRow() {
@@ -134,7 +148,7 @@ export async function closeSwitcherRow() {
   const id = s.ids[pointedRow(s) ?? s.index];
   if (!id) return;
   const consent = consentToken();
-  await closeTab(id);
+  await closeTab(id, { user: { consent } });
   syncSwitcherTabs(s.windowId);
   if (!sidebarUi().switcher?.ids.includes(id) || isWindowClosing(s.windowId)) noteTabSwitcherRowClosed(consent);
 }
@@ -156,9 +170,12 @@ export function cancelSwitcher() {
 }
 
 function endSwitcher() {
+  clearTimeout(mountTimer);
   clearTimeout(showTimer);
-  setPointer(POINTER_IDLE);
+  stopPointerWatch();
   hoveredRow = null;
+  pointerStale = false;
+  keyboardMoves++;
   void setSwitcherCapture(false);
   setSidebarUi({ switcher: null });
 }

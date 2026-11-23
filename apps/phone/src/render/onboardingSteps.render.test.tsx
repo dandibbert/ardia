@@ -1,10 +1,12 @@
 import { Platform, StyleSheet } from "react-native";
 import * as Reanimated from "react-native-reanimated";
 import { act, type ReactTestInstance } from "react-test-renderer";
-import { OnboardingView, stepIn, stepOut } from "../components/onboarding/OnboardingView";
+import { archiveTip, OnboardingView, stepIn, stepOut } from "../components/onboarding/OnboardingView";
 import { onboardingCurves, onboardingLayout, onboardingMotion } from "../components/onboarding/onboardingTokens";
 import { ToggleRow } from "../components/settings/SettingsKit";
-import { Symbol } from "../components/ui";
+import { ActionButton, PrimaryButton, shadowCss, Symbol, ToggleRow as SwitchRow } from "../components/ui";
+import { setPreference } from "../state/settings/store";
+import { selectCopy } from "../lib/platformCopy";
 import { advanceOnboarding, useOnboarding } from "../state/onboarding/store";
 import type { OnboardingStep } from "../state/settings/settingsRules";
 import { useSync } from "../state/sync/store";
@@ -63,23 +65,22 @@ test.each([
   ["blocking", "Continue"],
   ["sync", "Connect to Your Mac"],
   ["allSet", "Start Browsing"],
-] as const)("the %s step's %s is SwiftUI's capsule on iPhone and Compose's 14-point rounded rectangle on Android", (step, title) => {
+] as const)("the %s step's %s is a 16-point smooth rounded rectangle in the space's accent on iPhone, not a capsule, and Compose's 16-point rounded rectangle on Android", (step, title) => {
   const root = showStep(step);
   const style = buttonStyle(root, title);
-  expect(style.borderRadius).toBeCloseTo(iPhone ? 190 / 6 : 14);
+  expect(style.borderRadius).toBe(16);
+  expect(style.backgroundColor).toBe("#B25B6B");
   expect(style.minHeight).toBeCloseTo(iPhone ? 190 / 3 : 50);
   unmount(root);
 });
 
-onIos("a taller button at a large text size stays a capsule", () => {
+onIos("a taller button at a large text size keeps its 16-point corners instead of growing into a capsule", () => {
   const root = showStep("welcome");
-  const button = root.root.findAll((node) => typeof node.type === "string" && node.props.accessibilityRole === "button" && textIn(node) === "Get Started")[0]!;
-  act(() => button.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 354, height: 90 } } }));
-  expect(buttonStyle(root, "Get Started").borderRadius).toBe(45);
+  expect(buttonStyle(root, "Get Started").borderRadius).toBe(16);
   unmount(root);
 });
 
-onIos("the welcome step is SwiftUI's: the icon 24 points above the words, a 17-point subtitle 12 under the title, the words 32 in, and the button 24 under the space in 24-point margins with 12 below", () => {
+onIos("the welcome step: the icon 24 points above the words, a 17-point subtitle 12 under the title, the words 32 in, and the button 24 under the space in 24-point margins with 12 below", () => {
   const root = showStep("welcome");
   expect(styleOf(root, "welcomeIcon").marginBottom).toBe(24);
   const words = styleOf(root, "welcomeWords");
@@ -106,11 +107,11 @@ test.each(["blocking", "sync", "allSet"] as const)("the %s step puts the words 2
   unmount(root);
 });
 
-test("the sync step's art sits centred in its space, as both native apps' pages do, while the blocking and all-set cards sit at the bottom", () => {
+test("every step's art sits centred in its space, so the blocking and all-set cards leave no empty band above them", () => {
   for (const [step, place] of [
     ["sync", "center"],
-    ["blocking", "flex-end"],
-    ["allSet", "flex-end"],
+    ["blocking", "center"],
+    ["allSet", "center"],
   ] as const) {
     const root = showStep(step);
     expect(styleOf(root, "onboardingIllustration").justifyContent).toBe(place);
@@ -118,15 +119,17 @@ test("the sync step's art sits centred in its space, as both native apps' pages 
   }
 });
 
-onIos("the blocking step's rows are SwiftUI's plain toggles: three titles 50 points tall and 16 in, no icon tiles, dividers 16 in, on a 20-point card of the page colour at 90% with SwiftUI's soft shadow", () => {
+onIos("the blocking step's rows are the shared switch rows, knob-only on iPhone as the page menu's are: three titles, no icon tiles, dividers 16 in, on a 16-point white card with the shared card shadow, under an accent hero tile", () => {
+  selectCopy(Platform.OS);
   const root = showStep("blocking");
   const card = hosts(root, "onboardingCard")[0]!;
   const switches = card.findAll((node) => typeof node.type === "string" && node.props.accessibilityRole === "switch");
   expect(switches.map((node) => node.props.accessibilityLabel)).toEqual(["Block Ads", "Block Trackers", "Block Cookie Banners"]);
-  for (const row of switches) expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: 50, paddingHorizontal: 16 });
+  expect(card.findAll((node) => node.type === SwitchRow).map((row) => row.props.press)).toEqual(["knob", "knob", "knob"]);
   expect(card.findAll((node) => node.type === Symbol)).toHaveLength(0);
   expect(card.findAll((node) => node.type === ToggleRow)).toHaveLength(0);
-  expect(StyleSheet.flatten(card.props.style)).toMatchObject({ borderRadius: 20, paddingVertical: 4, backgroundColor: "rgba(255, 255, 255, 0.9)", boxShadow: "0px 6px 32px rgba(0, 0, 0, 0.06)" });
+  expect(StyleSheet.flatten(card.props.style)).toMatchObject({ borderRadius: 16, paddingVertical: 4, backgroundColor: "#FFFFFF", boxShadow: shadowCss("card", false) });
+  expect(hosts(root, "onboardingHero")[0]!.findAll((node) => node.type === Symbol)[0]!.props.name).toBe("handRaised");
   expect(onboardingLayout.rowIcons).toBe(false);
   unmount(root);
 });
@@ -138,13 +141,13 @@ onAndroid("the blocking step keeps Compose's rows with their icon tiles", () => 
   unmount(root);
 });
 
-onIos("the all-set step's tips are SwiftUI's plain rows: body text, 50 points tall, 16 in, no icons, on the same card", () => {
+onIos("the all-set step's tips are plain rows: body text, 56 points tall, 16 in, no icons, on the same card", () => {
   const root = showStep("allSet");
   const card = hosts(root, "onboardingCard")[0]!;
-  for (const tip of ["Tap + to search.", "Flick a tab up to close it.", "Swipe a page to go back.", "Old tabs archive after a day."]) expect(textIn(card)).toContain(tip);
+  for (const tip of ["Tap + to search.", "Flick a tab up to close it.", "Swipe a page to go back.", "Old tabs archive after 1 day."]) expect(textIn(card)).toContain(tip);
   expect(card.findAll((node) => node.type === Symbol)).toHaveLength(0);
   const tip = card.findAll((node) => typeof node.type === "string" && textIn(node) === "Tap + to search." && StyleSheet.flatten(node.props.style)?.minHeight !== undefined)[0]!;
-  expect(StyleSheet.flatten(tip.props.style)).toMatchObject({ minHeight: 50, paddingHorizontal: 16 });
+  expect(StyleSheet.flatten(tip.props.style)).toMatchObject({ minHeight: 56, paddingHorizontal: 16 });
   unmount(root);
 });
 
@@ -259,5 +262,94 @@ test("with Reduce Motion the welcome step fades in at once without the tilt, sca
   expect(onboardingMotion.riseReduced).toEqual({ timing: { duration: 300, easing: expect.anything() } });
   expect(styleOf(root, "welcomeIcon").transform).toEqual([{ rotate: "-6deg" }, { scale: 1 }]);
   expect(styleOf(root, "welcomeWords").transform).toEqual([{ translateY: 0 }]);
+  unmount(root);
+});
+
+test("the archive tip reads the same Archive Tabs preference Settings shows, and names no duration when archiving is off", () => {
+  expect(archiveTip("day")).toBe("Old tabs archive after 1 day.");
+  expect(archiveTip("week")).toBe("Old tabs archive after 7 days.");
+  expect(archiveTip("twelveHours")).toBe("Old tabs archive after 12 hours.");
+  expect(archiveTip("never")).not.toMatch(/\d|day|hour/);
+  setPreference("autoArchiveInterval", "week");
+  const root = showStep("allSet");
+  expect(textOf(root)).toContain("Old tabs archive after 7 days.");
+  expect(textOf(root)).not.toContain("after 1 day");
+  unmount(root);
+  setPreference("autoArchiveInterval", "day");
+});
+
+test("a step that is leaving is dead to touch and hidden from screen readers from the moment it starts to leave, then goes", () => {
+  const root = showStep("blocking");
+  act(() => useOnboarding.setState({ step: "allSet", forward: true }));
+  const steps = hosts(root, "onboardingStep");
+  expect(steps).toHaveLength(2);
+  const [leaving, arriving] = steps as [ReactTestInstance, ReactTestInstance];
+  expect(leaving.props).toMatchObject({ pointerEvents: "none", accessibilityElementsHidden: true, importantForAccessibility: "no-hide-descendants" });
+  expect(arriving.props).toMatchObject({ pointerEvents: "auto", accessibilityElementsHidden: false });
+  expect(textIn(arriving)).toContain("Start Browsing");
+  act(() => jest.advanceTimersByTime(50));
+  expect(hosts(root, "onboardingStep")).toHaveLength(1);
+  unmount(root);
+});
+
+test("finishing makes the whole onboarding dead to touch and hidden from screen readers while it fades, then it goes", async () => {
+  const root = showStep("allSet");
+  await pressButton(root, "Start Browsing");
+  const shell = hosts(root, "onboarding");
+  expect(shell).toHaveLength(1);
+  expect(shell[0]!.props).toMatchObject({ pointerEvents: "none", accessibilityElementsHidden: true });
+  act(() => jest.advanceTimersByTime(50));
+  expect(hosts(root, "onboarding")).toHaveLength(0);
+  unmount(root);
+});
+
+test("every step's primary is the shared PrimaryButton and Not Now is the shared plain action, not a rebuilt button", () => {
+  const root = showStep("sync");
+  const primaries = root.root.findAll((node) => node.type === PrimaryButton).map((node) => node.props.title);
+  const plain = root.root.findAll((node) => node.type === ActionButton && node.props.variant === "plain").map((node) => node.props.title);
+  if (iPhone) {
+    expect(primaries).toEqual(["Connect to Your Mac"]);
+    expect(plain).toEqual(["Not Now"]);
+  }
+  unmount(root);
+});
+
+test("the usage-sharing row is the shared switch row, its label and switch state from the one contract", () => {
+  const root = showStep("allSet");
+  const rows = root.root.findAll((node) => node.type === SwitchRow && node.props.label === "Share anonymous usage stats");
+  expect(rows).toHaveLength(1);
+  const control = root.root.findAll((node) => typeof node.type === "string" && node.props.accessibilityRole === "switch" && node.props.accessibilityLabel === "Share anonymous usage stats");
+  expect(control).toHaveLength(1);
+  expect(control[0]!.props.accessibilityState).toMatchObject({ checked: expect.any(Boolean) });
+  unmount(root);
+});
+
+test.each(["welcome", "blocking", "sync", "allSet"] as const)("arriving at the %s step gives the screen reader its heading", async (step) => {
+  const focus = require("../components/ui/coverFocus") as typeof import("../components/ui/coverFocus");
+  const asked = jest.spyOn(focus, "focusForScreenReader").mockImplementation(() => () => undefined);
+  const root = showStep(step);
+  await act(async () => undefined);
+  const headingView = root.root.findAll((node) => typeof node.type !== "string" && node.props.accessibilityRole === "header").map((node) => node.instance).filter(Boolean)[0];
+  expect(headingView).toBeTruthy();
+  expect(asked.mock.calls.some(([target]) => target() === headingView)).toBe(true);
+  unmount(root);
+});
+
+test("moving on focuses the incoming step's heading and only the closing gate covers the outgoing one", async () => {
+  const focus = require("../components/ui/coverFocus") as typeof import("../components/ui/coverFocus");
+  const cancelled = jest.fn();
+  const asked = jest.spyOn(focus, "focusForScreenReader").mockImplementation(() => cancelled);
+  const root = showStep("welcome");
+  await act(async () => undefined);
+  const first = asked.mock.calls.length;
+  await act(async () => advanceOnboarding());
+  await act(async () => undefined);
+  expect(cancelled).toHaveBeenCalled();
+  const fresh = asked.mock.calls.slice(first).map(([target]) => target());
+  const incoming = root.root.findAll((node) => typeof node.type !== "string" && node.props.accessibilityRole === "header" && !textIn(node).includes("Meet your new favorite browser")).map((node) => node.instance).filter(Boolean)[0];
+  expect(incoming).toBeTruthy();
+  expect(fresh).toContain(incoming);
+  const outgoing = hosts(root, "onboardingStep").filter((node) => textIn(node).includes("Meet your new favorite browser"));
+  for (const step of outgoing) expect(step.props.accessibilityElementsHidden).toBe(true);
   unmount(root);
 });

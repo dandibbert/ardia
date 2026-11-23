@@ -8,6 +8,8 @@ import { watchPageContexts } from "./pages";
 import { watchActivation } from "./activation";
 import { watchPluginOmnibox } from "./omnibox";
 import { watchSurfaceRemounts } from "./surfaces";
+import { watchOfficialUpdates } from "./official";
+import { watchPageBarCommits } from "./pageBarCommits";
 
 let started = false;
 
@@ -23,6 +25,8 @@ export function startPlugins() {
   watchPageContexts();
   registerPluginSocketMethods();
   watchPluginFolder();
+  watchOfficialUpdates();
+  watchPageBarCommits();
   void rescanPlugins(consentToken());
   watchPluginOmnibox();
 }

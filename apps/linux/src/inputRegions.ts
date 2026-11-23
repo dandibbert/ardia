@@ -3,8 +3,8 @@ import type { CornerRadii } from "./hostExtensionView.ts";
 
 export type Rect = HostRect;
 export type RegionShape = "box" | "hit";
-export type PageArea = { slot: Element; rect: Rect; radii?: CornerRadii };
-type Page = { visible: boolean; radii?: () => CornerRadii };
+export type PageArea = { slot: Element; rect: Rect; radii?: CornerRadii; cardRadii?: CornerRadii };
+type Page = { visible: boolean; radii?: () => CornerRadii; cardRadii?: () => CornerRadii };
 
 export const REVEAL_DEADLINE_MS = 150;
 export const SETTLE_FRAMES = 12;
@@ -14,6 +14,7 @@ export type RegionDeps = {
   send: ((regions: HostInputRegions) => Promise<unknown>) | null;
   viewport: () => { width: number; height: number };
   rectOf: (element: Element) => Rect;
+  pageRectOf?: (element: Element) => Rect;
   receivesPointer: (element: Element) => boolean;
   watch: (element: Element, changed: () => void) => () => void;
   animating: (elements: readonly Element[]) => boolean;
@@ -100,13 +101,15 @@ export function createInputRegions(deps: RegionDeps) {
     for (const child of element.children) hitRects(child, out);
   };
 
+  const pageRectOf = deps.pageRectOf ?? deps.rectOf;
+
   const measurePages = () => {
     const window = { x: 0, y: 0, ...deps.viewport() };
     const areas: PageArea[] = [];
-    for (const [slot, { visible, radii }] of pages) {
+    for (const [slot, { visible, radii, cardRadii }] of pages) {
       if (!visible || !slot.isConnected) continue;
-      const clipped = intersection(deps.rectOf(slot), window);
-      if (clipped) areas.push({ slot, rect: rounded(clipped), ...(radii ? { radii: radii() } : {}) });
+      const clipped = intersection(pageRectOf(slot), window);
+      if (clipped) areas.push({ slot, rect: rounded(clipped), ...(radii ? { radii: radii() } : {}), ...(cardRadii ? { cardRadii: cardRadii() } : {}) });
     }
     return areas;
   };
@@ -117,7 +120,7 @@ export function createInputRegions(deps: RegionDeps) {
       const rect = deps.rectOf(element);
       if (area(rect)) raw.push(rect);
     } else hitRects(element, raw);
-    const hosted = [...pages.keys()].filter((slot) => element.contains(slot)).map(deps.rectOf);
+    const hosted = [...pages.keys()].filter((slot) => element.contains(slot)).map((slot) => pageRectOf(slot));
     return raw.flatMap((rect) => hosted.reduce<Rect[]>((pieces, hole) => pieces.flatMap((piece) => subtract(piece, hole)), [rect])).map(rounded);
   };
 
@@ -167,7 +170,7 @@ export function createInputRegions(deps: RegionDeps) {
   const flush = () => {
     const areas = measurePages();
     const pageRects = areas.map((page) => page.rect);
-    const key = JSON.stringify(areas.map((page) => [page.rect, page.radii ?? null]));
+    const key = JSON.stringify(areas.map((page) => [page.rect, page.radii ?? null, page.cardRadii ?? null]));
     if (key !== pagesKey || areas.length !== pageSlots.length || areas.some((page, index) => page.slot !== pageSlots[index])) {
       pagesKey = key;
       pageSlots = areas.map((page) => page.slot);
@@ -209,10 +212,12 @@ export function createInputRegions(deps: RegionDeps) {
   };
 
   return {
-    setPage(slot: Element, visible: boolean, radii?: () => CornerRadii) {
+    setPage(slot: Element, visible: boolean, radii?: () => CornerRadii, cardRadii?: () => CornerRadii) {
       const known = pages.get(slot);
-      if (known?.visible === visible && known.radii === radii) return;
-      pages.set(slot, { visible, ...(radii ? { radii } : {}) });
+      const keptRadii = radii ?? known?.radii;
+      const keptCardRadii = cardRadii ?? known?.cardRadii;
+      if (known?.visible === visible && known.radii === keptRadii && known.cardRadii === keptCardRadii) return;
+      pages.set(slot, { visible, ...(keptRadii ? { radii: keptRadii } : {}), ...(keptCardRadii ? { cardRadii: keptCardRadii } : {}) });
       schedule();
     },
     dropPage(slot: Element) {

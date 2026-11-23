@@ -46,6 +46,8 @@ public class FocusModule: Module {
     Function("setConsentEpoch") { (epoch: String) in
       ArdiaEvents.consentEpoch = epoch
       FocusHandoff.shared.setConsentEpoch(epoch)
+      let setEpoch = NSSelectorFromString("ardia_setConsentEpoch:")
+      if let view = NSClassFromString("RCTView") as AnyObject?, view.responds(to: setEpoch) { _ = view.perform(setEpoch, with: epoch) }
       PressRelease.forgetPresses()
     }
     AsyncFunction("pressRepeated") { () -> [String: Any]? in PressRelease.pressRepeated }.runOnQueue(.main)
@@ -78,14 +80,21 @@ public class FocusModule: Module {
       self.lifetime.run { self.setDragEscapeCapture(active) }
     }.runOnQueue(.main)
 
-    Function("switcherPointerMoved") { [weak self] () -> Bool in self?.switcherPointer.moved(to: NSEvent.mouseLocation) ?? true }
+    Function("takeHoverCounts") { () -> [String: [String: Int]] in
+      let take = NSSelectorFromString("ardia_takeHoverCounts")
+      guard let view = NSClassFromString("RCTView") as AnyObject?, view.responds(to: take),
+        let taken = view.perform(take)?.takeUnretainedValue() as? [String: [String: NSNumber]]
+      else { return [:] }
+      return taken.mapValues { $0.mapValues(\.intValue) }
+    }
+    Function("switcherPointerMoved") { [weak self] () -> Bool in self?.switcherPointer.moved(to: SwitcherPointer.location) ?? true }
   }
 
   private func setSwitcherCapture(_ active: Bool) {
     if let monitor = switcherMonitor { NSEvent.removeMonitor(monitor) }
     switcherMonitor = nil
     SwitcherHold.capturing = active
-    switcherPointer.start(active ? NSEvent.mouseLocation : nil)
+    switcherPointer.start(active ? SwitcherPointer.location : nil)
     guard active else { return }
     let emit: ([String: Any]) -> Void = { ShellEvents.send(.app, $0) }
     switcherMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseUp, .rightMouseUp, .otherMouseUp]) { [weak self] event in

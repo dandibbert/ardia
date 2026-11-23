@@ -1,3 +1,4 @@
+import { asSecret } from "@ardia/core";
 import { createElement } from "react";
 import { shell } from "../../platform/devShell";
 import { readDocument, writeDocument } from "../../platform/documents";
@@ -133,6 +134,9 @@ export function startDevHarness() {
     get tileFolders(): typeof import("../../state/pins/tileFolders") & typeof import("../../state/sidebar/tileFolderUi") {
       return { ...require("../../state/pins/tileFolders"), ...require("../../state/sidebar/tileFolderUi") };
     },
+    get launchRows(): typeof import("../../state/sidebar/launchRows") {
+      return require("../../state/sidebar/launchRows");
+    },
     get sidebarRows(): typeof import("../../state/sidebar/sidebarUi") {
       return require("../../state/sidebar/sidebarUi");
     },
@@ -159,6 +163,10 @@ export function startDevHarness() {
     },
     get settingsNav(): typeof import("../../state/settings/settingsWindows").useSettingsNav {
       return require("../../state/settings/settingsWindows").useSettingsNav;
+    },
+    get sync(): Omit<typeof import("../../state/sync/engine"), "enterRecoveryPhrase"> & { enterRecoveryPhrase(folder: string, text: string): ReturnType<typeof import("../../state/sync/engine").enterRecoveryPhrase>; native: typeof import("../../platform/sync").SyncNative } {
+      const engine = require("../../state/sync/engine");
+      return { ...engine, enterRecoveryPhrase: (folder: string, text: string) => engine.enterRecoveryPhrase(folder, asSecret("syncPhrase", text)), native: require("../../platform/sync").SyncNative };
     },
     get preload(): typeof import("../../state/tabs/prewarm") {
       return require("../../state/tabs/prewarm");
@@ -202,6 +210,7 @@ export function startDevHarness() {
       const { WhatsSentSheet } = require("../settings/panes/ShareDiagnostics") as typeof import("../settings/panes/ShareDiagnostics");
       showSettingsSheet(createElement(WhatsSentSheet));
     },
+    showWebKitLimits: () => (require("../settings/panes/WebKitLimitsSheet") as typeof import("../settings/panes/WebKitLimitsSheet")).showWebKitLimits("engineRow"),
     showFilterLists: () => {
       const { showSettingsSheet } = require("../../state/settings/sheet") as typeof import("../../state/settings/sheet");
       const { FilterListsSheet } = require("../settings/panes/FilterListsSheet") as typeof import("../settings/panes/FilterListsSheet");
@@ -242,6 +251,9 @@ export function startDevHarness() {
     },
     get freezes(): typeof import("../../state/telemetry/freezes") & typeof import("../../state/telemetry/freezeRecords") {
       return { ...require("../../state/telemetry/freezes"), ...require("../../state/telemetry/freezeRecords") };
+    },
+    get engineSwap(): typeof import("../../state/engines/engineSwap") {
+      return require("../../state/engines/engineSwap");
     },
   };
   (globalThis as { ac?: typeof ac }).ac = ac;

@@ -1,17 +1,12 @@
 import { parseRemoteSuggestions, suggestReplyJson, suggestRequestUrl, type RemoteSite, type RemoteSuggestions, type SearchEngine } from "./engines.ts";
 
 type FetchResponse = { ok: boolean; text(): Promise<string> };
-export type FetchLike = (url: string, init: { signal: AbortSignal }) => Promise<FetchResponse>;
+export type FetchLike = (url: string, init: { signal: AbortSignal; engine?: SearchEngine }) => Promise<FetchResponse>;
 
 export type SuggestFetcher = {
-  request(engine: SearchEngine, query: string, onResult: (suggestions: string[], sites: RemoteSite[]) => void): void;
+  request(engine: SearchEngine, query: string, onResult: (suggestions: string[], sites: RemoteSite[]) => void, onFailed?: () => void): void;
   cancel(): void;
 };
-
-type PendingRequest =
-  | { phase: "idle" }
-  | { phase: "waiting"; timer: ReturnType<typeof setTimeout> }
-  | { phase: "fetching"; controller: AbortController };
 
 export function createSuggestFetcher({
   fetch,
@@ -24,14 +19,16 @@ export function createSuggestFetcher({
 }): SuggestFetcher {
   const cache = new Map<string, RemoteSuggestions>();
   const none: RemoteSuggestions = { queries: [], sites: [] };
-  let pending: PendingRequest = { phase: "idle" };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight: AbortController | undefined;
   let generation = 0;
 
   const cancel = () => {
     generation++;
-    if (pending.phase === "waiting") clearTimeout(pending.timer);
-    if (pending.phase === "fetching") pending.controller.abort();
-    pending = { phase: "idle" };
+    clearTimeout(timer);
+    timer = undefined;
+    inFlight?.abort();
+    inFlight = undefined;
   };
 
   const remember = (url: string, suggestions: RemoteSuggestions) => {
@@ -42,7 +39,7 @@ export function createSuggestFetcher({
 
   return {
     cancel,
-    request(engine, query, onResult) {
+    request(engine, query, onResult, onFailed) {
       cancel();
       const url = suggestRequestUrl(engine, query);
       if (!url) return;
@@ -52,10 +49,11 @@ export function createSuggestFetcher({
         void Promise.resolve().then(() => current === generation && onResult(cached.queries, cached.sites));
         return;
       }
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
+        timer = undefined;
         const controller = new AbortController();
-        pending = { phase: "fetching", controller };
-        fetch(url, { signal: controller.signal })
+        inFlight = controller;
+        fetch(url, { signal: controller.signal, engine })
           .then(async (res): Promise<RemoteSuggestions | null> => {
             if (!res.ok) return null;
             try {
@@ -69,17 +67,18 @@ export function createSuggestFetcher({
               if (controller.signal.aborted) return;
               if (suggestions) remember(url, suggestions);
               if (current === generation) {
-                pending = { phase: "idle" };
+                inFlight = undefined;
                 const answer = suggestions ?? none;
                 onResult(answer.queries, answer.sites);
               }
             },
             () => {
-              if (current === generation) pending = { phase: "idle" };
+              if (controller.signal.aborted || current !== generation) return;
+              inFlight = undefined;
+              onFailed?.();
             },
           );
       }, delay);
-      pending = { phase: "waiting", timer };
     },
   };
 }

@@ -14,8 +14,8 @@ export const profileRows = {
         profiles: {
           title: "Profiles",
           explained: true,
-          description: `Pick a profile in the bar to change its settings. Drag to reorder. ${keyText("⌃1")}–${keyText("⌃9")} switch between them.`,
-          keywords: ["create profile", "new profile", "delete profile", "reorder", "work", "personal"],
+          description: `Pick one to edit it; drag to reorder. ${keyText("⌃1")}–${keyText("⌃9")} switch.`,
+          keywords: ["create profile", "new profile", "delete profile", "reorder", "work", "personal", "drag", "switch profiles", "profile settings"],
         },
       },
     },
@@ -48,6 +48,11 @@ export const profileRows = {
     {
       section: "This profile",
       rows: {
+        themeColor: {
+          title: "Colour",
+          description: "Pick a theme colour and edit it: colours, intensity, blur, noise and direction.",
+          keywords: ["theme", "theme colour", "theme color", "color", "gradient", "custom theme", "custom colour", "edit theme", "reset theme", "intensity", "pass-through blur", "noise", "grain", "direction", "tint"],
+        },
         syncThisProfile: {
           title: "Sync this profile",
           keywords: ["sync profile", "sync"],
@@ -105,8 +110,8 @@ export const profileRows = {
       rows: {
         passwordManager: {
           title: "Password manager",
-          description: "Ardia's own, a password manager plugin, or none when an extension handles logins.",
-          keywords: ["password manager", "passwords app", "passkeys", "verification codes", "2fa", "one time code", "autofill passwords"],
+          description: "Ardia's own, a plugin, or none for an extension.",
+          keywords: ["password manager", "passwords app", "passkeys", "verification codes", "2fa", "one time code", "autofill passwords", "password manager plugin", "extension", "logins", "none"],
           shown: () => PLATFORM_FEATURES.systemPasswordManagers && PLATFORM_FEATURES.plugins,
         },
         offerToSavePasswords: {

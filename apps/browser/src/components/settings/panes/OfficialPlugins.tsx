@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { copyText } from "../../../state/app/system";
-import { disablePlugin, installOfficialPlugin, type OfficialPlugin } from "../../../state/plugins/actions";
-import { useOfficialPlugins, usePluginConsent, usePluginOrder, usePluginPrograms } from "../../../state/plugins/hooks";
+import { FULL_CONTROL_SUMMARY, installOfficialPlugin, UNSAVED, type OfficialPlugin } from "../../../state/plugins/actions";
+import { useOfficialFetch, useOfficialPlugins, usePluginConsent, usePluginFullControl, usePluginOrder, usePluginPrograms, usePluginUnsaved } from "../../../state/plugins/hooks";
 import { installedLabel, isOffered, officialInSettings, officialTitle, officialView, wasCancelled, type OfficialAttempt } from "../../../state/plugins/officialView";
+import { OFFICIAL_LEGACY_PROGRAMS } from "../../../state/plugins/officialPin";
+import { refreshLegacyInstalls, useLegacyInstalls } from "../../../state/plugins/programRegistry";
 import { goToSettingsPane } from "../../../state/settings/settingsWindows";
 import { consentToken, noteOfficialPlugin } from "../../../state/telemetry/officialPluginCounts";
 import { Group, Row, SectionHeader } from "../Form";
 import { findSetting, type SettingId } from "../settingsIndex";
 import { officialPluginAnchor } from "../rows/pluginRows";
-import { ActivitySpinner, Button, IconTile, Text, Toggle } from "../../ui";
+import { ActivitySpinner, Button, IconTile, Text } from "../../ui";
 import { lineHeight, monoFace, space } from "../../ui/tokens";
 
 const COPIED_FOR_MS = 2000;
@@ -23,6 +25,7 @@ export function usePluginsBelowOfficial(): string[] {
 export function OfficialPluginsSection() {
   const all = useOfficialPlugins();
   const plugins = all.filter((p) => officialInSettings([p]));
+  useEffect(() => void refreshLegacyInstalls(), []);
   if (!officialInSettings(all)) return null;
   return (
     <View>
@@ -58,14 +61,19 @@ function useInstall(plugin: OfficialPlugin) {
     setBusy(false);
     setFailure(result.ok || wasCancelled(result) ? null : result.reason);
   };
-  const attempt: OfficialAttempt = busy ? { state: asking ? "asking" : "installing" } : failure ? { state: "failed", reason: failure } : null;
+  const unsaved = usePluginUnsaved(plugin.name);
+  const attempt: OfficialAttempt = busy ? { state: asking ? "asking" : "installing" } : failure ? { state: "failed", reason: failure } : unsaved ? { state: "failed", reason: UNSAVED } : null;
   return { attempt, install };
 }
 
 function OfficialPluginRow({ plugin }: { plugin: OfficialPlugin }) {
   const programs = usePluginPrograms(plugin.name);
   const { attempt, install } = useInstall(plugin);
-  const view = officialView(plugin, programs, attempt);
+  const fetch = useOfficialFetch(plugin.name);
+  const legacy = useLegacyInstalls((s) => s.owners.includes(plugin.name));
+  const olderProgram = legacy && Object.hasOwn(OFFICIAL_LEGACY_PROGRAMS, plugin.name) ? OFFICIAL_LEGACY_PROGRAMS[plugin.name]! : null;
+  const view = officialView(plugin, programs, attempt, fetch, olderProgram);
+  const fullControl = usePluginFullControl(plugin.name) ? FULL_CONTROL_SUMMARY : null;
   const offered = isOffered(plugin);
   useEffect(() => {
     if (offered) noteOfficialPlugin("settings", "shown", plugin.name);
@@ -77,9 +85,9 @@ function OfficialPluginRow({ plugin }: { plugin: OfficialPlugin }) {
       title={
         <View style={TITLE}>
           <Text>{officialTitle(plugin)}</Text>
-          {view.note === "installed" || view.note === "on" ? (
+          {view.note === "installed" ? (
             <Text size="caption" tone="textSecondary">
-              {view.note === "on" ? "On" : installedLabel(plugin)}
+              {installedLabel(plugin)}
             </Text>
           ) : null}
         </View>
@@ -89,7 +97,7 @@ function OfficialPluginRow({ plugin }: { plugin: OfficialPlugin }) {
       description={
         view.note === "comingSoon" ? undefined : (
           <Text selectable={view.failed} lines={view.failed ? undefined : 2} size="caption" tone={view.failed ? "destructive" : "textSecondary"} style={LINE}>
-            {view.failed && view.status ? view.status : plugin.blurb}
+            {[fullControl, view.status ?? plugin.blurb].filter(Boolean).join(" · ")}
           </Text>
         )
       }
@@ -101,11 +109,11 @@ function OfficialPluginRow({ plugin }: { plugin: OfficialPlugin }) {
         </Text>
       ) : null}
       {view.firstCommand ? <FirstCommand command={view.firstCommand} /> : null}
-      {view.action === "install" || view.action === "turnOn" || (view.busy && !view.status) ? (
-        <Button title={plugin.switchable ? "Turn On…" : "Install…"} disabled={view.busy} onPress={() => void install()} />
+      {view.action === "install" || (view.busy && !view.status) ? (
+        <Button title="Install…" disabled={view.busy} onPress={() => void install()} />
       ) : null}
-      {view.toggle ? <Toggle value accessibilityLabel={`Turn off ${officialTitle(plugin)}`} onChange={(on) => void (!on && disablePlugin(plugin.name))} /> : null}
       {view.action === "again" ? <Button title="Try Again" onPress={() => void install()} /> : null}
+      {view.action === "update" ? <Button title="Update…" onPress={() => void install()} /> : null}
     </Row>
   );
 }

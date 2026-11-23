@@ -1,5 +1,6 @@
 import { lastTabClosesWindow, onWindowRequest } from "../../platform/tabs";
 import { noteMouseShortcutRun } from "../telemetry/mouseShortcutCounts";
+import { menuSyncTotals } from "./menuSyncTotals";
 import { nativeConsent } from "../telemetry/nativeConsent";
 import { onDownload } from "../../platform/downloads";
 import { releaseProfile } from "../../platform/profiles";
@@ -15,6 +16,7 @@ import { isUtilityWindowId } from "../settings/settingsWindows";
 import { openingLightsCenter } from "../windows/layout";
 import { createWindowSync, type WindowPort } from "../windows/windowSync";
 import { closeLittleArdiaForAppLink, openExternalUrls } from "../littleArdia/actions";
+import { noteIncomingLinksRefused } from "../telemetry/externalAppCounts";
 import { startUnclaimedEscape } from "../windows/unclaimedEscape";
 import { SMALL_LIGHTS_CENTER } from "../windows/small";
 import { runCommand } from "../commands/commands";
@@ -23,7 +25,7 @@ import { finishAnimatedCloses } from "../windows/closeAnimated";
 import { followHandedBack, startKeyboardFollows } from "../focus/keyboardFollows";
 import { cancelAbandonedFocusMoves, settlingCommandFocus } from "../focus/focusHandoff";
 import { flushPersistence, resumePersistence } from "../session/persist";
-import { flushLive } from "../live/store";
+import { flushLive, useLive } from "../live/store";
 import { startWindowCloseGuard } from "../windows/windowClose";
 import { openLastWindowOrNew } from "../windows/lastWindow";
 import { noteDockReopen } from "../telemetry/usage";
@@ -34,7 +36,7 @@ import { startExtensionsBridge } from "../extensions/bridge";
 import { useExtensions } from "../extensions/actions";
 import { useReader } from "../reader/reader";
 import { answerQuitAfterSaves, isQuitting, setQuitting } from "./quit";
-import { liveReachesMenu, menuInputsChanged, trackedMenuState, type MenuReads } from "../commands/menuState";
+import { extensionsChangeMenu, liveReachesMenu, menuInputsChanged, menuLiveKey, pagesChangeMenu, readerChangesMenu, trackedMenuState, type MenuReads } from "../commands/menuState";
 import { onLiveChange } from "../tabs/tabLive";
 import { usePages } from "../tabs/pageState";
 import { openFromWindowlessPage } from "../tabs/openFromWindowlessPage";
@@ -63,11 +65,12 @@ export function startNativeSync() {
   cancelAbandonedFocusMoves();
   onCommand((e) => {
     if (e.mouseButton) noteMouseShortcutRun(e.mouseButton, nativeConsent(e));
-    settlingCommandFocus(e, runCommand);
+    const user = { consent: nativeConsent(e) };
+    settlingCommandFocus(e, (event) => runCommand(event, { user }));
   });
   startWindowCloseGuard();
   startExtensionsBridge();
-  onOpenURLs((urls, pointer, source, returnTo) => openExternalUrls(urls, pointer, source, returnTo));
+  onOpenURLs((urls, pointer, source, returnTo) => noteIncomingLinksRefused(openExternalUrls(urls, pointer, source, returnTo)));
   onWindowRequest(({ request, profile, fromWindow }) => openFromWindowlessPage(request, profile, fromWindow));
   startUnclaimedEscape();
   startKeyboardFollows();
@@ -123,15 +126,21 @@ export function startNativeSync() {
   let lastBookmarkMenus: unknown[] = [];
   let menuTimer: ReturnType<typeof setTimeout> | undefined;
   let menuReads: MenuReads | null = null;
+  let menuLive = "";
   const syncMenu = () => {
     menuTimer = undefined;
-    const { state, reads } = trackedMenuState(store.getState());
+    const now = store.getState();
+    menuLive = menuLiveKey(now);
+    const { state, reads } = trackedMenuState(now);
     menuReads = reads;
     const { bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks, ...rest } = state;
     const bookmarkMenus = [bookmarkFolders, recentBookmarks, bookmarksBar, otherBookmarks];
     const json = JSON.stringify(rest);
     const bookmarksChanged = !bookmarkMenus.every((menu, i) => menu === lastBookmarkMenus[i]);
-    if (json === lastMenu && !bookmarksChanged) return;
+    const unchanged = json === lastMenu && !bookmarksChanged;
+    menuSyncTotals.builds++;
+    if (unchanged) return;
+    menuSyncTotals.sends++;
     lastMenu = json;
     lastBookmarkMenus = bookmarkMenus;
     const sent = setMenuStateParts(state, bookmarksChanged);
@@ -152,16 +161,21 @@ export function startNativeSync() {
     if (!menuReads || menuInputsChanged(menuReads, s, prev)) menuTimer ??= setTimeout(syncMenu, 120);
   });
   onLiveChange((tabId) => {
-    if (liveReachesMenu(store.getState(), tabId)) menuTimer ??= setTimeout(syncMenu, 120);
+    if (menuTimer !== undefined) return;
+    const s = store.getState();
+    if (liveReachesMenu(s, tabId) && menuLiveKey(s) !== menuLive) menuTimer = setTimeout(syncMenu, 120);
   });
   usePages.subscribe((p, prev) => {
-    if (p.pages !== prev.pages) menuTimer ??= setTimeout(syncMenu, 120);
+    if (menuTimer === undefined && pagesChangeMenu(store.getState(), p.pages, prev.pages)) menuTimer = setTimeout(syncMenu, 120);
   });
   useExtensions.subscribe((e, prev) => {
-    if (e.lists !== prev.lists) menuTimer ??= setTimeout(syncMenu, 120);
+    if (e.lists !== prev.lists && extensionsChangeMenu(e.lists, prev.lists)) menuTimer ??= setTimeout(syncMenu, 120);
   });
-  useReader.subscribe(() => {
-    menuTimer ??= setTimeout(syncMenu, 120);
+  useReader.subscribe((r, prev) => {
+    if (readerChangesMenu(r, prev)) menuTimer ??= setTimeout(syncMenu, 120);
+  });
+  useLive.subscribe((l, prev) => {
+    if (l.folderOrder !== prev.folderOrder || l.folders !== prev.folders) menuTimer ??= setTimeout(syncMenu, 120);
   });
   void windows.sweep();
   startCaptionRegionSync();

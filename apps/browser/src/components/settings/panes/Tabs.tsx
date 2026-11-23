@@ -106,7 +106,7 @@ function LayoutSection() {
         <Group>
           <SettingToggle
             anchor="tabs.autoHideTabs"
-            description={`Tabs slide away until you point at the window's ${top ? "top edge" : "edge"}. ${keyText("⌘S")} toggles them in one window.`}
+            description={`Tabs slide away until you point at the ${top ? "top edge" : "edge"}. ${keyText("⌘S")} toggles.`}
           />
           <Row anchor="tabs.sidebarSide">
             <Segmented options={SIDEBAR_SIDES} value={sidebarSide} onChange={chooseSidebarSide} />
@@ -181,6 +181,7 @@ function TabsAndTopAppsSection() {
         <SettingToggle anchor="tabs.balancedTopApps" />
         <SettingToggle anchor="tabs.topAppFolders" />
         <SettingToggle anchor="tabs.tabReorderHaptics" />
+        <SettingToggle anchor="tabs.swipeBetweenTabs" />
         <SettingToggle anchor="tabs.showTabHoverMenu" />
         <SettingToggle anchor="tabs.showFullUrlInTabHoverMenu" />
         <SettingToggle anchor="tabs.autoPictureInPicture" />

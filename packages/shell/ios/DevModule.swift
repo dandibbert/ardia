@@ -251,13 +251,19 @@ public class DevModule: Module {
       let select = NSSelectorFromString("ardia_setPointerOverride:")
       guard let view = NSClassFromString("RCTView"), (view as AnyObject).responds(to: select) else { return false }
       guard on else {
+        SwitcherPointer.devLocation = nil
         _ = (view as AnyObject).perform(select, with: nil)
         return true
       }
       guard let window = WindowManager.shared.window(windowId) else { return false }
       let screen = SyntheticInput.screenPoint(x: x, top: y, in: window)
+      SwitcherPointer.devLocation = screen
       _ = (view as AnyObject).perform(select, with: NSValue(point: screen))
       return true
+    }.runOnQueue(.main)
+
+    AsyncFunction("devPointerSweep") { (windowId: String, spec: [String: Any], promise: Promise) in
+      DevPointerSweep.start(windowId: windowId, spec: spec, promise: promise)
     }.runOnQueue(.main)
 
     AsyncFunction("devSidebarEdgePointer") { (windowId: String, x: Double, y: Double, on: Bool) -> Bool in
@@ -332,6 +338,10 @@ public class DevModule: Module {
       timer.schedule(deadline: .now(), repeating: .microseconds(Int(interval * 1000)), leeway: .nanoseconds(0))
       timer.resume()
     }
+
+    AsyncFunction("devFieldTrace") { (on: Bool) -> [[String: Any]] in
+      DevFieldTrace.toggle(on)
+    }.runOnQueue(.main)
 
     AsyncFunction("devKeyEquivalent") { (windowId: String, press: [String: Any], promise: Promise) in
       KeyEquivalents.press(windowId: windowId, press) { promise.resolve($0) }
@@ -495,3 +505,34 @@ final class DevSnapshotBurst: NSObject {
 }
 #endif
 
+
+#if DEBUG
+enum DevFieldTrace {
+  private static var observer: CFRunLoopObserver?
+  private static var samples: [[String: Any]] = []
+  private static var last = ""
+
+  static func toggle(_ on: Bool) -> [[String: Any]] {
+    if let observer { CFRunLoopRemoveObserver(CFRunLoopGetMain(), observer, .commonModes) }
+    observer = nil
+    let taken = samples
+    samples = []
+    last = ""
+    guard on else { return taken }
+    let added = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, 2_000_001) { _, _ in sample() }
+    CFRunLoopAddObserver(CFRunLoopGetMain(), added, .commonModes)
+    observer = added
+    return taken
+  }
+
+  private static func sample() {
+    guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isFieldEditor else { return }
+    let selection = editor.selectedRange()
+    let text = editor.string
+    let key = "\(text)|\(selection.location)|\(selection.length)"
+    guard key != last else { return }
+    last = key
+    samples.append(["at": Date().timeIntervalSince1970 * 1000, "text": text, "start": selection.location, "end": NSMaxRange(selection)])
+  }
+}
+#endif

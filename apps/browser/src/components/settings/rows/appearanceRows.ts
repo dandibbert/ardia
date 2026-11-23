@@ -4,6 +4,7 @@ import { keyText } from "../../../state/commands/keyText";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import { interfaceScaleAdjustable } from "../../../state/settings/interfaceScale";
+import { windowButtonsChoosable } from "../../../lib/windowChrome";
 
 const inSidebar = (_: unknown, env: SettingsEnv) => !env.top;
 
@@ -60,6 +61,17 @@ export const appearanceRows = {
       },
     },
     {
+      section: "Window buttons",
+      rows: {
+        windowButtons: {
+          title: "Window buttons",
+          description: "Native, traffic lights, or none.",
+          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux", "hidden", "none", "tiling", "i3", "sway", "hyprland", "button layout", "desktop", "top left", "mac", "full screen", "menu button", "header"],
+          shown: () => windowButtonsChoosable,
+        },
+      },
+    },
+    {
       section: "Size and text",
       rows: {
         interfaceScale: {
@@ -92,6 +104,11 @@ export const appearanceRows = {
           title: `What ${PLATFORM_TERMS.switchTabsKey} does`,
           description: "Step through your tabs in order, or open the recent tabs switcher.",
           keywords: ["ctrl tab", "control tab", "alt tab", "tab switcher", "switch tabs", "switching tabs", "recent tabs", "recently used", "last tab", "previous tab", "next tab", "cycle tabs", "mru", "tabbing", "arc", "dia", "chrome"],
+        },
+        afterClosingTab: {
+          title: "After closing a tab",
+          description: "Go back to the previously active tab, or to the tab above (or to the left across the top).",
+          keywords: ["close tab", "closing", "closing tab", "closing a tab", "tab closing", "tab close", "after closing", "after close", "close behavior", "close behaviour", "cmd w", "next tab", "previous tab", "tab above", "tab to the left", "neighbour", "neighbor", "adjacent", "adjacent tab", "last used", "previously active", "focus", "select", "activate", "mru", "arc", "chrome", "firefox"],
         },
       },
     },

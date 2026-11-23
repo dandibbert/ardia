@@ -208,6 +208,26 @@ test("opening a keyring that was locked at launch resumes sync once from the sto
   assert.equal(resumed, 1);
 });
 
+test("a recovery phrase entered in another window reaches the sync window as a branded secret", async (t) => {
+  const { asSecret, isSecret, reveal } = await import("@ardia/core");
+  const channelName = `sync-${Math.random()}`;
+  const lease = nativeLease();
+  const engines = [];
+  const a = renderer("a", { candidate: true, lease, engines, channelName });
+  const settings = renderer("settings", { candidate: false, lease, engines, channelName });
+  t.after(() => { a.authority.stop(); settings.authority.stop(); });
+  await tick(80);
+  assert.deepEqual(await settings.authority.call("enterRecoveryPhrase", ["/home/tux/Sync", asSecret("syncPhrase", PHRASE)]), { ok: true });
+  const [folder, phrase] = a.calls.at(-1).args;
+  assert.equal(folder, "/home/tux/Sync");
+  assert.ok(isSecret(phrase));
+  assert.equal(phrase.kind, "syncPhrase");
+  assert.equal(reveal(phrase), PHRASE);
+  await settings.authority.call("setOpenTabsSynced", ["work", { relayedSecret: "syncPhrase", value: PHRASE }]);
+  assert.equal(isSecret(a.calls.at(-1).args[1]), false, "only the phrase argument of enterRecoveryPhrase is branded on arrival");
+  await assert.rejects(settings.authority.call("setOpenTabsSynced", ["work", asSecret("syncPhrase", PHRASE)]), TypeError);
+});
+
 test("one renderer runs sync, the others mirror it and forward their actions, and it fails over when that window closes", async (t) => {
   const channelName = `sync-${Math.random()}`;
   const lease = nativeLease();
@@ -246,6 +266,34 @@ test("one renderer runs sync, the others mirror it and forward their actions, an
   await tick(60);
   await assert.rejects(settings.authority.call("syncNow", []), { message: NO_AUTHORITY_MESSAGE });
   settings.authority.stop();
+});
+
+test("a Settings window picks the sync folder itself and hands turning on, choosing and moving it to the sync window", async (t) => {
+  const host = fakeHost((method) => (method === "ArdiaSync.chooseFolder" ? "/home/tux/Nextcloud" : null));
+  assert.equal(await syncModuleMethod(host, "ArdiaSync", "chooseFolder")("/home/tux"), "/home/tux/Nextcloud");
+  assert.equal(await syncModuleMethod(host, "ArdiaSync", "chooseFolder")(undefined), "/home/tux/Nextcloud");
+  assert.deepEqual(host.calls, [
+    { method: "ArdiaSync.chooseFolder", args: { args: ["/home/tux"] } },
+    { method: "ArdiaSync.chooseFolder", args: { args: [null] } },
+  ]);
+
+  const channelName = `sync-${Math.random()}`;
+  const lease = nativeLease();
+  const engines = [];
+  const browser = renderer("browser", { candidate: true, lease, engines, channelName });
+  const settings = renderer("settings", { candidate: false, lease, engines, channelName });
+  t.after(() => { browser.authority.stop(); settings.authority.stop(); });
+  await tick(80);
+  assert.equal(settings.authority.role(), "client");
+  await settings.authority.call("useFolder", ["/home/tux/Nextcloud/Ardia Sync"]);
+  await settings.authority.call("turnOnSync", ["/home/tux/Nextcloud/Ardia Sync", "picked"]);
+  await settings.authority.call("moveFolder", ["/media/usb/Ardia Sync"]);
+  assert.deepEqual(browser.calls, [
+    { method: "useFolder", args: ["/home/tux/Nextcloud/Ardia Sync"] },
+    { method: "turnOnSync", args: ["/home/tux/Nextcloud/Ardia Sync", "picked"] },
+    { method: "moveFolder", args: ["/media/usb/Ardia Sync"] },
+  ]);
+  assert.deepEqual(settings.calls, [], "the Settings window never runs sync itself");
 });
 
 test("refreshing sync documents drops journal parts stranded after a gap", async () => {

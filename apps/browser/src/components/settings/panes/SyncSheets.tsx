@@ -1,5 +1,5 @@
+import { asSecret, reveal } from "@ardia/core";
 import { confirm, showMenu } from "../../../state/app/system";
-import { errorText } from "../../../lib/errors";
 import { Box, Button, Checkbox, DialogActions, DialogTitle, ink, lineHeight, proseLineHeight, radius, Sheet, space, Symbol, tabularNums, Text, TextField } from "../../ui";
 import {
   copyRecoveryKit,
@@ -129,29 +129,27 @@ const phraseError = (r: Awaited<ReturnType<typeof enterRecoveryPhrase>>): string
   }
 };
 
-type PhraseState = { phase: "editing"; error: string | null } | { phase: "connecting" } | { phase: "joined" };
-
-const EDITING_PHRASE: PhraseState = { phase: "editing", error: null };
-
 function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; onChooseFolder?: () => void }) {
   const theme = useTheme();
   const [text, setText] = useState("");
-  const [state, setState] = useState<PhraseState>(EDITING_PHRASE);
-  const busy = state.phase === "connecting";
-  const error = state.phase === "editing" ? state.error : null;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [joined, setJoined] = useState(false);
   const syncing = useSync((s) => s.enabled);
   const count = text.toLowerCase().split(/[^a-z]+/).filter(Boolean).length;
   const submit = async () => {
     if (!folder || busy) return;
-    setState({ phase: "connecting" });
+    setBusy(true);
+    setError(null);
     const joining = !syncing;
-    const message = await enterRecoveryPhrase(folder.path, text).then(phraseError, errorText);
-    if (message) return setState({ phase: "editing", error: message });
-    if (joining) return setState({ phase: "joined" });
-    setState(EDITING_PHRASE);
-    closeSettingsSheet();
+    const result = await enterRecoveryPhrase(folder.path, asSecret("syncPhrase", text));
+    setBusy(false);
+    const message = phraseError(result);
+    if (message) setError(message);
+    else if (joining) setJoined(true);
+    else closeSettingsSheet();
   };
-  if (state.phase === "joined") return <JoinedSheet />;
+  if (joined) return <JoinedSheet />;
   return (
     <Sheet onClose={closeSettingsSheet}>
       <DialogTitle subtitle="Enter your 24-word recovery phrase to sync with another device.">Connect with Recovery Phrase</DialogTitle>
@@ -163,7 +161,7 @@ function PhraseSheet({ folder, onChooseFolder }: { folder: FolderInfo | null; on
           value={text}
           onChangeText={(t) => {
             setText(t);
-            setState((current) => (current.phase === "editing" && current.error !== null ? EDITING_PHRASE : current));
+            setError(null);
           }}
           autoFocus
           placeholder="Enter your 24-word recovery phrase"
@@ -320,7 +318,7 @@ function ConnectDeviceSheet() {
       <DialogActions
         leading={
           <>
-            <Button title={words ? "Hide Words" : "Show Words"} onPress={() => (words ? setWords(null) : void recoveryWords()?.then(setWords))} />
+            <Button title={words ? "Hide Words" : "Show Words"} onPress={() => (words ? setWords(null) : void recoveryWords().then((phrase) => setWords(phrase && reveal(phrase).split(" "))))} />
             <Button title="Copy Words" onPress={() => void copyRecoveryPhrase()} />
           </>
         }

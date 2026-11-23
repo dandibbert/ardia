@@ -1,7 +1,9 @@
+import { asSecret, type Secret } from "@ardia/core";
 import { create } from "zustand";
 import * as engine from "../../browser/src/state/sync/engine";
 import type { DataType, SendTarget, SyncUi } from "../../browser/src/state/sync/syncDoc";
 import type { FolderInfo, PhraseResult } from "../../browser/src/platform/sync";
+import { pickSyncFolder, type FolderMoveResult, type TurnOnFolder } from "../../browser/src/state/sync/folderMove";
 import { SyncNative } from "../../browser/src/platform/sync";
 import { ardiaHost, type ArdiaHost } from "./host";
 import { syncIdle, syncNowIfIdle, syncNowThrough } from "./syncForward";
@@ -25,7 +27,6 @@ import {
   releaseSyncAuthority,
   syncDeviceName,
   syncKeyStoreStatus,
-  withChosenSyncFolder,
   type SyncKeyStoreStatus,
 } from "./hostSync.ts";
 import { deleteDocument, readDocument, refreshDocument, saveDocument } from "./shims/shellBase";
@@ -81,7 +82,7 @@ function resumeWhenKeyringOpens(host: ArdiaHost) {
       keyStore = status;
       if (keyringMessage(status, false) !== shown) engine.useSync.setState({});
     },
-    resume: () => engine.enterRecoveryPhrase(engine.useSync.getState().folder ?? "", ""),
+    resume: () => engine.enterRecoveryPhrase(engine.useSync.getState().folder ?? "", asSecret("syncPhrase", "")),
   });
   keyringWatch = watchLockedSync(engine.useSync, tick, KEYRING_RETRY_MS);
 }
@@ -115,11 +116,11 @@ function remoteFor(host: ArdiaHost): SyncRemote {
     syncNow: () => engine.syncNow(),
     syncIdle: () => syncIdle(engine.syncNow),
     syncNowIfIdle: () => syncNowIfIdle(engine.syncNow),
-    turnOnSync: async (folder: string) => {
+    turnOnSync: async (folder: string, how?: TurnOnFolder) => {
       let result: Awaited<ReturnType<typeof engine.turnOnSync>>;
       try {
         result = await whileResettingHeldLogins(
-          () => engine.turnOnSync(folder),
+          () => engine.turnOnSync(folder, how),
           (result) => !("error" in result),
           () => engine.stopSync({ deleteData: true }),
         );
@@ -133,10 +134,10 @@ function remoteFor(host: ArdiaHost): SyncRemote {
       }
       return result;
     },
-    enterRecoveryPhrase: (folder: string, text: string) => {
+    enterRecoveryPhrase: (folder: string, phrase: Secret<"syncPhrase">) => {
       const begins = enterPhraseBegins(engine.useSync.getState());
       return whileResettingHeldLogins(
-        () => engine.enterRecoveryPhrase(folder, text),
+        () => engine.enterRecoveryPhrase(folder, phrase),
         (result) => begins && "ok" in result,
         () => engine.stopSync(),
       ).catch((error: unknown) => {
@@ -152,7 +153,8 @@ function remoteFor(host: ArdiaHost): SyncRemote {
     removeRemoteProfile: (syncId: string) => engine.removeRemoteProfile(syncId),
     removeSyncedDevice: (deviceId: string) => engine.removeSyncedDevice(deviceId),
     adoptProfileTheme: (profileId: string) => engine.adoptProfileTheme(profileId),
-    useFolder: (path: string) => withChosenSyncFolder(path, () => engine.chooseSyncFolder()),
+    useFolder: (path: string) => engine.setSyncFolder(path),
+    moveFolder: (path: string) => engine.moveSyncFolder(path),
     sendTargets: (profileIds: string[]) => Object.fromEntries(profileIds.map((profileId) => [profileId, engine.sendTargets(profileId)])),
     sendTab: (tabId: string, deviceId: string) => engine.sendTab(tabId, deviceId),
   };
@@ -217,7 +219,7 @@ export const linuxSyncHooks = {
   role: () => authority?.role() ?? "unavailable",
   heldLogins: () => heldLoginsStatus(),
   turnOnSync: (folder: string) => turnOnSync(folder),
-  enterRecoveryPhrase: (folder: string, text: string) => enterRecoveryPhrase(folder, text),
+  enterRecoveryPhrase: (folder: string, text: string) => enterRecoveryPhrase(folder, asSecret("syncPhrase", text)),
   stopSync: (options?: { deleteData?: boolean }) => stopSync(options),
   syncNow: () => syncNow(),
   setTypeSynced: (type: DataType, enabled: boolean) => setTypeSynced(type, enabled),
@@ -245,13 +247,24 @@ export async function folderInfo(path?: string | null): Promise<FolderInfo | nul
   return (await SyncNative?.folderInfo(path ?? useSync.getState().folder ?? null)) ?? null;
 }
 
+export async function setSyncFolder(path: string) {
+  if (leading()) engine.setSyncFolder(path);
+  else await forward("useFolder", [path]);
+}
+
 export async function chooseSyncFolder(): Promise<string | null> {
-  if (!SyncNative) return null;
-  if (leading()) return engine.chooseSyncFolder();
-  const picked = await SyncNative.chooseFolder(useSync.getState().folder);
-  if (!picked) return null;
-  await forward("useFolder", [picked]);
+  const picked = await pickSyncFolder(useSync.getState().folder);
+  if (picked) await setSyncFolder(picked);
   return picked;
+}
+
+export async function moveSyncFolder(path: string): Promise<FolderMoveResult> {
+  if (leading()) return engine.moveSyncFolder(path);
+  try {
+    return await forward<FolderMoveResult>("moveFolder", [path], INTERACTIVE_CALL_TIMEOUT_MS);
+  } catch (error) {
+    return { error: "failed", message: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 const WRITES_CLOSED: readonly string[] = ["starting", "locked", "off", "unavailable"];
@@ -271,20 +284,20 @@ export async function syncNow(stillWanted: () => void = () => {}): Promise<boole
   );
 }
 
-export async function turnOnSync(folder: string): Promise<{ ok: true } | { error: string }> {
+export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
   if (!SyncNative) return { error: "Sync isn’t available in this build." };
   try {
-    return await forward("turnOnSync", [folder], INTERACTIVE_CALL_TIMEOUT_MS);
+    return await forward("turnOnSync", [folder, how], INTERACTIVE_CALL_TIMEOUT_MS);
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-export async function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" }> {
+export async function enterRecoveryPhrase(folder: string, phrase: Secret<"syncPhrase">): Promise<PhraseResult | { error: "unavailable" }> {
   if (!SyncNative) return { error: "unavailable" };
   const consent = consentToken();
   try {
-    return await forward("enterRecoveryPhrase", [folder, text], INTERACTIVE_CALL_TIMEOUT_MS);
+    return await forward("enterRecoveryPhrase", [folder, phrase], INTERACTIVE_CALL_TIMEOUT_MS);
   } catch (error) {
     warnFor(consent, "[ardia linux] sync", error instanceof Error ? error.message : error);
     return { error: "unavailable" };
@@ -338,6 +351,7 @@ function refreshSendTargets() {
 export const onTabsReceived = engine.onTabsReceived;
 export const takeSnapshotWrites = engine.takeSnapshotWrites;
 export const takeOpenTabSyncCounts = engine.takeOpenTabSyncCounts;
+export const syncCore = (): "rust" | "native" => "native";
 
 export function sendTargets(profileId: string): SendTarget[] {
   return leading() ? engine.sendTargets(profileId) : relayedTargets[profileId] ?? [];

@@ -1,23 +1,50 @@
 import { useBrowser, type BrowserState } from "../browser/store";
 import { activeTabId } from "../browser/model";
 import { capture, consentNow, consentToken, isSharing, onConsentPeriodChange, stillValid, type ConsentToken } from "./client";
-import { appInfo } from "./transport";
-import { count, devJourneySamples, forgetJourneySamples, sample, since, summarizeJourneySamples } from "./journeySamples";
+import { appInfo, percentile } from "./transport";
 import { jsStartedAt } from "./jsStart";
+import { launchCohortFields } from "./launchCohort";
 import { fieldTiming } from "../../platform/fieldTiming";
 import { isAsleep } from "../tabs/pageSession";
 import { NATIVE_REVEAL_COUNTS, forgetDroppedPress, nativePressTime, type Mark } from "./nativeRevealMarks";
 import { switchingPress } from "../tabs/tabReveal";
+import { launchRowsFields, launchRowsSettled } from "../sidebar/launchRows";
 
 let on = false;
 
 const frame = (key: string, kind: string) => fieldTiming.markFrame(key, kind);
 
+const MAX_SAMPLES = 500;
+const samples = new Map<string, number[]>();
+const counts = new Map<string, number>();
+
+function sample(step: string, ms: number | null) {
+  if (ms === null || !(ms >= 0 && ms < 60_000)) return;
+  let list = samples.get(step);
+  if (!list) samples.set(step, (list = []));
+  if (list.length < MAX_SAMPLES) list.push(Math.round(ms));
+}
+
+const count = (what: string) => counts.set(what, (counts.get(what) ?? 0) + 1);
+const since = (at: number | null | undefined, from: number | null | undefined) => (at == null || from == null ? null : at - from);
+
 export function emitJourneys(final = false) {
   settle(final);
-  const props = summarizeJourneySamples();
-  if (!props) return;
+  if (!samples.size && !counts.size) return;
+  const props: Record<string, number> = {};
+  for (const [step, list] of samples) {
+    list.sort((a, b) => a - b);
+    const at = (p: number) => percentile(list, p);
+    props[`${step}_p50`] = at(0.5);
+    props[`${step}_p75`] = at(0.75);
+    props[`${step}_p95`] = at(0.95);
+    props[`${step}_max`] = list.at(-1)!;
+    props[`${step}_n`] = list.length;
+  }
+  for (const [what, n] of counts) props[what] = n;
   props.tabs = Object.keys(useBrowser.getState().tabs).length;
+  samples.clear();
+  counts.clear();
   if (on && isSharing()) capture("perf_journeys", props, consentNow());
 }
 
@@ -83,17 +110,10 @@ function settle(force: boolean) {
 }
 
 function settleOne(p: Pending, now: number): boolean {
-  switch (p.journey) {
-    case "j1":
-      return settleLaunch(p, now);
-    case "j2":
-      return settleNewTab(p, now);
-    case "j3":
-    case "j5":
-      return settleSwitch(p, now);
-    case "j4":
-      return settleNavigate(p, now);
-  }
+  if (p.journey === "j1") return settleLaunch(p, now);
+  if (p.journey === "j2") return settleNewTab(p, now);
+  if (p.journey === "j4") return settleNavigate(p, now);
+  return settleSwitch(p, now);
 }
 
 function settleNewTab(p: NewTab, now: number) {
@@ -129,17 +149,9 @@ function settleSwitch(p: Switch, now: number) {
   const started = mark(p.key, "request", p.t0, end) ?? mark(p.key, "start", p.t0, end);
   const fcp = started === null ? null : mark(p.key, "fcp", p.t0);
   if (started !== null && fcp === null && now - p.t0 < 20_000) return false;
-  const frameAt = mark(p.key, "frame", p.t0);
-  const view = mark(p.key, "view", p.t0, end);
-  const shown = mark(p.key, "shown", p.t0, end);
+  const frameAt = mark(p.key, "frame", p.t0), view = mark(p.key, "view", p.t0, end), shown = mark(p.key, "shown", p.t0, end);
   const kind = started !== null ? "load" : shown !== null ? "cold" : view !== null ? "warm" : "other";
-  const steps = {
-    js: p.heard - p.t0,
-    frame: since(frameAt, p.t0),
-    view: since(view, p.t0),
-    page: since(shown, p.t0),
-    total: since(kind === "load" ? fcp : kind === "cold" ? shown : kind === "warm" ? view : frameAt, p.t0),
-  };
+  const steps = { js: p.heard - p.t0, frame: since(frameAt, p.t0), view: since(view, p.t0), page: since(shown, p.t0), total: since(kind === "load" ? fcp : kind === "cold" ? shown : kind === "warm" ? view : frameAt, p.t0) };
   for (const [step, ms] of Object.entries(steps)) sample(`${p.journey}_${step}`, ms);
   count(`${p.journey}_${kind}`);
   if (Math.max(...Object.values(steps).map((ms) => ms ?? 0)) >= SLOW_SWITCH_MS && stillValid(p.consent)) {
@@ -175,16 +187,16 @@ const LAUNCH_SOURCES = new Set<string>(["login_item", "documents", "user"]);
 export const ago = (ms: number) =>
   bucket(ms, [[MINUTE, "<1m"], [10 * MINUTE, "<10m"], [HOUR, "<1h"], [8 * HOUR, "<8h"], [DAY, "<1d"], [7 * DAY, "<7d"]], "7d+");
 
-type LaunchJourney = { phase: "awaitingFirstCommit" } | { phase: "measuring" | "sent"; launch: Launch } | { phase: "untracked" };
-let launchJourney: LaunchJourney = { phase: "awaitingFirstCommit" };
-type PreviousLaunch = { lastLaunchAt: number | null; lastQuitAt: number | null; firstOfVersion: boolean | null };
+let launch: Launch | null = null;
+let launchSent = false;
+type PreviousLaunch = { lastLaunchAt: number | null; lastQuitAt: number | null; firstOfVersion: boolean | null; coldNth?: number | null; versionSince?: number | null };
 let previousLaunch: PreviousLaunch = { lastLaunchAt: null, lastQuitAt: null, firstOfVersion: null };
-const trackedLaunch = (): Launch | null => (launchJourney.phase === "measuring" || launchJourney.phase === "sent" ? launchJourney.launch : null);
+let firstRootCommitted = false;
 
 export function launchCommitted() {
-  if (launchJourney.phase !== "awaitingFirstCommit") return;
-  launchJourney = { phase: "untracked" };
-  if (!on) return;
+  if (firstRootCommitted) return;
+  firstRootCommitted = true;
+  if (launch || launchSent || !on) return;
   const start = appInfo().processStart;
   if (!start) return;
   const s = useBrowser.getState();
@@ -193,8 +205,7 @@ export function launchCommitted() {
     const tab = activeTabId(s, id);
     if (tab && s.tabs[tab]?.url && !isAsleep(s.tabs[tab])) keys.push(tab);
   }
-  const launch: Launch = { journey: "j1", t0: start, commit: Date.now(), keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length };
-  launchJourney = { phase: "measuring", launch };
+  launch = { journey: "j1", t0: start, commit: Date.now(), keys, tabs: Object.keys(s.tabs).length, windows: s.windowOrder.length };
   frame("launch", "content");
   probeUsable(launch);
   begin(launch);
@@ -206,7 +217,7 @@ function probeUsable(l: Launch) {
   const set = Date.now();
   usableTimer = setTimeout(() => {
     usableTimer = undefined;
-    if (!on || trackedLaunch() !== l) return;
+    if (!on || launch !== l) return;
     const now = Date.now();
     if (now - set < 50 || now - set > 30_000 || now - (l.commit ?? now) > 30_000) l.usable = now;
     else probeUsable(l);
@@ -214,22 +225,21 @@ function probeUsable(l: Launch) {
 }
 
 export function launchFirstWindow(at: number) {
-  const launch = trackedLaunch();
   if (launch) launch.firstWindow = at;
 }
 
 function settleLaunch(l: Launch, now: number) {
   const content = mark("launch", "content", l.t0);
   const paints = l.keys.map((k) => mark(k, "fcp", l.t0)).filter((at): at is number => at !== null);
-  const done = l.usable !== undefined && l.firstWindow !== undefined && content !== null && (paints.length || !l.keys.length);
+  const done = l.usable !== undefined && l.firstWindow !== undefined && content !== null && (paints.length || !l.keys.length) && launchRowsSettled();
   if (!done && now - (l.commit ?? l.t0) < 30_000) return false;
   sendLaunch(l, content, paints);
   return true;
 }
 
 function sendLaunch(l: Launch, content: number | null, paints: number[]) {
-  if (launchJourney.phase !== "measuring" || !on) return;
-  launchJourney = { phase: "sent", launch: launchJourney.launch };
+  if (launchSent || !on) return;
+  launchSent = true;
   const paint = paints.length ? Math.min(...paints) : null;
   const tab = paint === null ? l.keys[0] : l.keys.find((k) => mark(k, "fcp", l.t0) === paint);
   const s = useBrowser.getState();
@@ -265,7 +275,7 @@ function sendLaunch(l: Launch, content: number | null, paints: number[]) {
     history: bucket(history, [[0, "0"], [99, "<100"], [999, "<1k"], [4999, "<5k"], [19_999, "<20k"], [99_999, "<100k"]], "100k+"),
     history_oldest: oldestVisit > 0 && oldestVisit <= l.t0 ? bucket(l.t0 - oldestVisit, [[30 * DAY, "<30d"], [91 * DAY, "<91d"], [365 * DAY, "<1y"], [3 * 365 * DAY, "<3y"]], "3y+") : null,
     cold: bootTime && lastLaunchAt ? lastLaunchAt < bootTime : null,
-    first_of_version: firstOfVersion,
+    first_of_version: firstOfVersion, ...launchCohortFields(previousLaunch, l.t0), ...launchRowsFields(),
     update_prewarm: firstOfVersion ? (prewarm ? (prewarm.status === 0 ? "done" : "failed") : "none") : null,
     update_prewarm_ago: prewarm?.at ? ago(l.t0 - prewarm.at) : null,
     since_quit: lastQuitAt && (!lastLaunchAt || lastQuitAt >= lastLaunchAt) ? ago(l.t0 - lastQuitAt) : lastLaunchAt ? "unclean" : "unknown",
@@ -285,20 +295,14 @@ function watchStore(s: BrowserState, prev: BrowserState) {
     const heard = Date.now();
     if (s.windows[id]!.profileId !== prev.windows[id]!.profileId) {
       const t0 = prev.tabs[now] ? lastInput(heard) : null;
-      if (t0 === null) continue;
-      begin({ journey: "j5", key: now, t0, heard, consent: consentToken() });
-      frame(now, "frame");
+      if (t0 !== null) { begin({ journey: "j5", key: now, t0, heard, consent: consentToken() }); frame(now, "frame"); }
       continue;
     }
     if (prev.tabs[now]) pullMarks(heard);
     const t0 = (prev.tabs[now] ? nativePressTime(marks, switchingPress()) : null) ?? lastInput(heard);
     if (t0 === null) continue;
-    if (!prev.tabs[now]) {
-      if (!s.tabs[now]!.url) begin({ journey: "j2", key: now, t0, heard });
-    } else if (before && s.tabs[before]?.windowId === id) {
-      begin({ journey: "j3", key: now, t0, heard, consent: consentToken() });
-      frame(now, "frame");
-    }
+    if (!prev.tabs[now]) { if (!s.tabs[now]!.url) begin({ journey: "j2", key: now, t0, heard }); }
+    else if (before && s.tabs[before]?.windowId === id) { begin({ journey: "j3", key: now, t0, heard, consent: consentToken() }); frame(now, "frame"); }
   }
 }
 
@@ -355,12 +359,14 @@ function setOn(next: boolean, initial = false) {
   unwatchStore = undefined;
   clearTimeout(usableTimer);
   usableTimer = undefined;
-  if (trackedLaunch()) launchJourney = { phase: "untracked" };
+  if (launch) launchSent = true;
+  launch = null;
   clearTimeout(timer);
   timer = undefined;
   pending = [];
   marks.clear();
-  forgetJourneySamples();
+  samples.clear();
+  counts.clear();
 }
 
 export function startJourneys(previous: PreviousLaunch | null) {
@@ -373,10 +379,9 @@ export function startJourneys(previous: PreviousLaunch | null) {
 }
 
 export function journeysEnding() {
-  if (launchJourney.phase === "measuring") {
-    const { launch } = launchJourney;
+  if (launch && !launchSent) {
     settle(false);
-    sendLaunch(launch, mark("launch", "content", launch.t0), launch.keys.map((k) => mark(k, "fcp", launch.t0)).filter((at): at is number => at !== null));
+    if (!launchSent) sendLaunch(launch, mark("launch", "content", launch.t0), launch.keys.map((k) => mark(k, "fcp", launch!.t0)).filter((at): at is number => at !== null));
   }
   emitJourneys(true);
 }
@@ -385,6 +390,7 @@ export const devJourneys = () => ({
   on,
   native: true,
   pending: pending.map((p) => ({ ...p })),
-  ...devJourneySamples(),
+  samples: Object.fromEntries(samples),
+  counts: Object.fromEntries(counts),
   marks: Object.fromEntries(marks),
 });

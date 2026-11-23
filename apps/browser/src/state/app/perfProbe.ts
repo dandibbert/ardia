@@ -1,26 +1,11 @@
 import { findFibers, nameOf, roots, walk, type Fiber } from "./perfFibers";
 import { countNativeNodes, nativeNodes } from "./perfNativeNodes";
 import { bump, fresh, now, type Counter } from "./perfStats";
+import { perfProbeOptions } from "./perfRun";
 
-if (!(globalThis as { expo?: unknown }).expo) {
-  try {
-    const { TurboModuleRegistry } = require("react-native") as typeof import("react-native");
-    (TurboModuleRegistry.get("ExpoModulesCore") as { installModules?: () => void } | null)?.installModules?.();
-  } catch {}
-}
 const modules = (globalThis as { expo?: { modules?: Record<string, Record<string, (...a: unknown[]) => unknown>> } }).expo?.modules;
 const shell = modules?.ArdiaDocuments;
-
-const probeOptions = (() => {
-  try {
-    const info = modules?.ArdiaApp?.systemInfo?.() as { isolatedInstance?: boolean } | undefined;
-    if (!info?.isolatedInstance || typeof shell?.readDocument !== "function") return null;
-    const file = shell.readDocument("perf-probe");
-    return typeof file === "string" ? file : null;
-  } catch {
-    return null;
-  }
-})();
+const probeOptions = perfProbeOptions;
 
 export const perfProbeEnabled = probeOptions !== null;
 
@@ -32,6 +17,7 @@ const layoutEditAt = probeOptions?.includes("layoutEdit") ? 2 : 0;
 
 let stats = fresh();
 const subscriptions: Counter = {};
+const live = { listeners: {} as Counter, moduleListeners: {} as Counter, intervals: {} as Counter, timeouts: {} as Counter };
 const marks: Record<string, number> = {};
 const startedAt = now();
 const startup: [task: string, at: number, ms: number][] = [];
@@ -111,20 +97,30 @@ const callers = (stack: string | undefined, depth = 4) =>
 
 function wrapTimers() {
   const g = globalThis as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const liveTimers = new Map<unknown, { label: string; kind: "intervals" | "timeouts" }>();
+  const forgetTimer = (handle: unknown) => {
+    const timer = liveTimers.get(handle);
+    if (!timer) return;
+    liveTimers.delete(handle);
+    bump(live[timer.kind], timer.label, -1);
+  };
   for (const name of ["setTimeout", "setInterval", "requestAnimationFrame", "setImmediate"]) {
     const original = g[name];
     if (typeof original !== "function") continue;
+    const kind = name === "setInterval" ? "intervals" : name === "setTimeout" ? "timeouts" : null;
     g[name] = function (this: unknown, callback: unknown, ...rest: unknown[]) {
       if (typeof callback !== "function") return original.call(this, callback, ...rest);
       let label = `${name}:${callback.name || "anonymous"}`;
-      if (traceTimers && !callback.name) label += ` <${callers(new Error().stack, traceDepth)}>`;
+      if ((traceTimers || (kind && listenersProbe)) && !callback.name) label += ` <${callers(new Error().stack, traceDepth)}>`;
       bump(stats.timersScheduled, label);
-      return original.call(
+      let handle: unknown;
+      handle = original.call(
         this,
         function (this: unknown, ...args: unknown[]) {
           const t = now();
           const outer = task;
           task = label;
+          if (kind === "timeouts") forgetTimer(handle);
           try {
             return (callback as (...a: unknown[]) => unknown).apply(this, args);
           } finally {
@@ -135,6 +131,19 @@ function wrapTimers() {
         },
         ...rest,
       );
+      if (kind) {
+        liveTimers.set(handle, { label, kind });
+        bump(live[kind], label);
+      }
+      return handle;
+    };
+  }
+  for (const name of ["clearTimeout", "clearInterval"]) {
+    const original = g[name];
+    if (typeof original !== "function") continue;
+    g[name] = function (this: unknown, handle: unknown) {
+      forgetTimer(handle);
+      return original.call(this, handle);
     };
   }
 }
@@ -236,9 +245,21 @@ function wrapModuleEvents() {
         }
       };
     byName.set(name, timed);
-    return add.call(this, name, timed);
+    bump(live.moduleListeners, name);
+    const subscription = add.call(this, name, timed) as { remove?: () => void } | undefined;
+    const removeOnce = subscription?.remove;
+    if (subscription && typeof removeOnce === "function") {
+      let removed = false;
+      subscription.remove = () => {
+        if (!removed) bump(live.moduleListeners, name, -1);
+        removed = true;
+        removeOnce.call(subscription);
+      };
+    }
+    return subscription;
   };
   proto.removeListener = function (this: unknown, name: string, listener: unknown) {
+    bump(live.moduleListeners, name, -1);
     return remove.call(this, name, (typeof listener === "function" && wrapped.get(listener)?.get(name)) || listener);
   };
 }
@@ -267,6 +288,16 @@ type ProbedStore<S> = {
   subscribeTo?: (keys: readonly (keyof S)[], listener: Listener<S>) => () => void;
 };
 
+function countedUnsubscribe(name: string, unsubscribe: () => void): () => void {
+  bump(live.listeners, name);
+  let done = false;
+  return () => {
+    if (!done) bump(live.listeners, name, -1);
+    done = true;
+    unsubscribe();
+  };
+}
+
 function probedListener<S>(name: string, listener: Listener<S>, stack: string | undefined): Listener<S> {
   const site = stack ? `${name} ${callers(stack, 3)}` : "";
   return (s, prev) => {
@@ -288,9 +319,9 @@ function probedListener<S>(name: string, listener: Listener<S>, stack: string | 
 export function probeStore<S>(name: string, store: ProbedStore<S>) {
   if (!perfProbeEnabled) return;
   const subscribe = store.subscribe;
-  store.subscribe = Object.assign((listener: Listener<S>) => subscribe(probedListener(name, listener, listenersProbe ? new Error().stack : undefined)), { unprobed: subscribe });
+  store.subscribe = Object.assign((listener: Listener<S>) => countedUnsubscribe(name, subscribe(probedListener(name, listener, listenersProbe ? new Error().stack : undefined))), { unprobed: subscribe });
   const subscribeTo = store.subscribeTo;
-  if (subscribeTo) store.subscribeTo = (keys, listener) => subscribeTo(keys, probedListener(name, listener, listenersProbe ? new Error().stack : undefined));
+  if (subscribeTo) store.subscribeTo = (keys, listener) => countedUnsubscribe(name, subscribeTo(keys, probedListener(name, listener, listenersProbe ? new Error().stack : undefined)));
   subscribe((s, prev) => {
     bump(stats.storeUpdates, name);
     const a = s as Record<string, unknown>;
@@ -335,6 +366,7 @@ if (perfProbeEnabled) {
     findFibers,
     nameOf,
     subscriptions: () => ({ ...subscriptions }),
+    live: () => ({ listeners: { ...live.listeners }, moduleListeners: { ...live.moduleListeners }, intervals: { ...live.intervals }, timeouts: { ...live.timeouts } }),
     nativeNodes,
   };
 }

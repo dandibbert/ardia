@@ -11,6 +11,8 @@ final class WindowDragRegion: ExpoView {
   private static let dragDistance: CGFloat = 3
   private var monitor: Any?
   private var doubleClickDown: PressPlace?
+  private weak var pressAwaitingActivation: NSEvent?
+  private(set) static var activatingPresses = 0
 
   override var mouseDownCanMoveWindow: Bool {
     get { true }
@@ -33,6 +35,7 @@ final class WindowDragRegion: ExpoView {
     if let monitor { NSEvent.removeMonitor(monitor) }
     monitor = nil
     doubleClickDown = nil
+    pressAwaitingActivation = nil
     guard window != nil else { return }
     monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
       guard let self else { return event }
@@ -44,8 +47,11 @@ final class WindowDragRegion: ExpoView {
         return nil
       }
       self.doubleClickDown = nil
+      self.pressAwaitingActivation = nil
       guard let place = self.pressPlace(event) else { return event }
-      if NSApp.isActive, NSApp.keyWindow == nil, !event.modifierFlags.contains(.command) { return event }
+      let leavesWindowBehind = event.modifierFlags.contains(.command)
+      if !NSApp.isActive, !leavesWindowBehind { return place == .region ? self.pressAfterAppKitActivates(event, place) : event }
+      if NSApp.keyWindow == nil, !leavesWindowBehind { return event }
       ArdiaHost.notePointer(event, swallowedBy: "windowDragRegion")
       OutsidePressArea.tellAreas(event)
       self.press(event, place, releaseFollows: true)
@@ -57,7 +63,20 @@ final class WindowDragRegion: ExpoView {
     if let monitor { NSEvent.removeMonitor(monitor) }
   }
 
+  private func pressAfterAppKitActivates(_ event: NSEvent, _ place: PressPlace) -> NSEvent {
+    Self.activatingPresses += 1
+    pressAwaitingActivation = event
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.pressAwaitingActivation === event else { return }
+      self.pressAwaitingActivation = nil
+      guard self.clickable || NSEvent.pressedMouseButtons & 1 != 0 else { return }
+      self.press(event, place, releaseFollows: false)
+    }
+    return event
+  }
+
   override func mouseDown(with event: NSEvent) {
+    pressAwaitingActivation = nil
     if let place = pressPlace(event) { press(event, place, releaseFollows: false) } else { super.mouseDown(with: event) }
   }
 
@@ -98,15 +117,9 @@ final class WindowDragRegion: ExpoView {
   private func press(_ event: NSEvent, _ place: PressPlace, releaseFollows: Bool) {
     guard let window else { return }
     let leavesWindowBehind = event.modifierFlags.contains(.command)
-    if !NSApp.isActive, !leavesWindowBehind, !LaunchConfig.shared.background { NSApp.activate() }
     var key = NSApp.keyWindow
     while let k = key, k !== window { key = k.parent }
-    if !NSApp.isActive, window.canBecomeKey, !event.modifierFlags.contains(.command) {
-      FocusTrace.record("drag region click activates the app")
-      NSApp.activate()
-      keyOnceActive(window)
-    }
-    if key == nil, window.canBecomeKey, !leavesWindowBehind { window.makeKeyAndOrderFront(nil) }
+    if NSApp.isActive, key == nil, window.canBecomeKey, !leavesWindowBehind { window.makeKeyAndOrderFront(nil) }
     if clickable, place == .region { return clickOrDrag(event, in: window) }
     if event.clickCount == 2 {
       if releaseFollows { doubleClickDown = place } else { doubleClick(event, place) }
@@ -115,27 +128,6 @@ final class WindowDragRegion: ExpoView {
     ArdiaHost.beginPressLoop("windowDragRegion")
     defer { ArdiaHost.endPressLoop() }
     window.performDrag(with: event)
-  }
-
-  private final class ActivationWatch {
-    var observer: NSObjectProtocol?
-    func stop() {
-      if let observer { NotificationCenter.default.removeObserver(observer) }
-      observer = nil
-    }
-  }
-
-  private func keyOnceActive(_ window: NSWindow) {
-    let watch = ActivationWatch()
-    watch.observer = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
-      [weak window] _ in
-      watch.stop()
-      guard let window, window.isVisible, window.canBecomeKey else { return }
-      var key = NSApp.keyWindow
-      while let k = key, k !== window { key = k.parent }
-      if key == nil { window.makeKey() }
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { watch.stop() }
   }
 
   private func clickOrDrag(_ down: NSEvent, in window: NSWindow) {

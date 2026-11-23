@@ -29,6 +29,7 @@ export type Item = ItemSpec & {
   size: Animated.Value;
   frame: Frame | null;
   headerFrame: Frame | null;
+  held?: number;
 };
 
 export type Drop = StoreDrop & { sequence?: string[] };
@@ -55,7 +56,7 @@ type ItemLook = { source: boolean; landing: boolean; clipped: boolean; inFold: b
 export function dragItemStyle(item: Item, { source, landing, clipped, inFold, rowGap, tailOffset }: ItemLook) {
   const horizontal = item.kind === "tile";
   return {
-    ...(horizontal ? null : { marginTop: item.kind === "tail" ? tailOffset : item.gap }),
+    ...(horizontal ? null : { marginTop: item.kind === "tail" ? tailOffset : item.gap, flexShrink: 0 }),
     ...(source
       ? horizontal
         ? { opacity: 0 }

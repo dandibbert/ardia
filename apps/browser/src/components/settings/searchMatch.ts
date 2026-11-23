@@ -343,13 +343,19 @@ export function search<T extends Searchable>(index: Prepared<T>[], query: string
   const shown = hits.filter((h) => topTier < 2 || h.tier > 0);
   const placeOf = (h: Scored<T>) => `${h.entry.pane}\u0000${h.entry.section}`;
   const named = (h: Scored<T>) => h.title.length > 0 || h.viaPane;
-  const landed = new Set(shown.filter(named).map(placeOf));
+  const namedTier = new Map<string, number>();
+  for (const h of shown) {
+    if (!named(h)) continue;
+    const place = placeOf(h);
+    namedTier.set(place, Math.max(namedTier.get(place) ?? -1, h.tier));
+  }
+  const unnamedSeen = new Set<string>();
   return shown
     .filter((h) => {
       if (named(h)) return true;
       const place = placeOf(h);
-      if (landed.has(place)) return false;
-      landed.add(place);
+      if ((namedTier.get(place) ?? -1) >= h.tier || unnamedSeen.has(place)) return false;
+      unnamedSeen.add(place);
       return true;
     })
     .slice(0, limit)

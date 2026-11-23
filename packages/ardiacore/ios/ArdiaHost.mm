@@ -189,6 +189,13 @@ static void (^gQuitCancelledHandler)(void);
   return ardia_host::LoadedDataProfileNames();
 }
 
++ (NSDictionary<NSString *, NSString *> *)loadedProfilePaths {
+  NSMutableDictionary<NSString *, NSString *> *paths = [NSMutableDictionary dictionary];
+  for (NSString *name in ardia_host::LoadedDataProfileNames())
+    if (NSString *path = ardia_host::LoadedProfile(name).path) paths[name] = path;
+  return paths;
+}
+
 + (BOOL)stopCapture:(NSString *)tabId {
   ArdiaCoreTab *tab = ardia_host::TabWithAppTabId(tabId);
   return [tab stopCapture];
@@ -394,7 +401,7 @@ static NSDictionary<NSString *, id> *OffscreenRefusal(NSString *reason) {
     [sources addObject:@{
       @"id" : [NSString stringWithFormat:@"screen:%u:0", display.unsignedIntValue],
       @"kind" : @"screen",
-      @"name" : screen.localizedName ?: [NSString stringWithFormat:@"Screen %lu", (unsigned long)index],
+      @"name" : screen.localizedName.length ? screen.localizedName : [NSString stringWithFormat:@"Screen %lu", (unsigned long)index],
       @"width" : @(screen.frame.size.width),
       @"height" : @(screen.frame.size.height),
     }];

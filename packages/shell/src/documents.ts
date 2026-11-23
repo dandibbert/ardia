@@ -2,8 +2,13 @@ export type BangListReply = { status: number; etag: string | null; contentType: 
 
 export type DocumentsNative = {
   readDocument(name: string): string | null;
+  documentExists(name: string): boolean | Promise<boolean>;
   writeDocument(name: string, contents: string): void;
   saveDocument(name: string, contents: string): Promise<void>;
   documentSaved(name: string): Promise<void>;
   removeDocument(name: string): void;
+  copyDocument(name: string, copyName: string): Promise<void>;
+  listDocuments(prefix: string): string[];
+  createDocument(name: string, contents: string): Promise<void>;
+  syncDocument(name: string): Promise<void>;
 };

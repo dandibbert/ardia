@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+const mockTimers = mock.timers;
 const { useBrowser } = await import("../browser/store.ts");
 const { startAutomation } = await import("./controlSocket.ts");
 const stub = await import("../../test-native/index.ts");
@@ -70,29 +71,55 @@ test("offscreen: the shown tab, a tab the command didn't open, one that was show
   }
 });
 
-test("offscreen: tabs close 5 s after the last connection of a served session, and a new connection keeps them", async () => {
+test("offscreen: the 5 s close asks the engine first, so a connection JS hasn't heard about yet keeps its tabs", async () => {
   const { noteCliConnections } = await import("./offscreen.ts");
-  const closes = () => stub.engineCalls.filter((c) => c.verb === "cliCloseOffscreenTabs").length;
-  const before = closes();
-  mock.timers.enable({ apis: ["setTimeout"] });
+  let closes = 0;
+  let live = 0;
+  globalThis.acTestCliCloseOffscreen = () => void closes++;
+  globalThis.acTestCliControl = () => ({ state: "on", port: 1, connections: live, generation: 1, file: "" });
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await tick();
+  };
   try {
-    noteCliConnections(0);
-    mock.timers.tick(10_000);
-    assert.equal(closes(), before, "nothing was served yet");
-    noteCliConnections(2);
-    noteCliConnections(0);
-    noteCliConnections(0);
-    mock.timers.tick(4_999);
+    mockTimers.enable({ apis: ["setTimeout"] });
     noteCliConnections(1);
-    mock.timers.tick(10_000);
-    assert.equal(closes(), before, "a connection within the hold keeps the tabs");
     noteCliConnections(0);
-    mock.timers.tick(5_000);
-    assert.equal(closes(), before + 1);
+    live = 1;
+    mockTimers.tick(5000);
+    mockTimers.reset();
+    await settle();
+    assert.equal(closes, 0, "a connection the engine counts keeps the off-screen tabs");
+    live = 0;
+    mockTimers.enable({ apis: ["setTimeout"] });
+    noteCliConnections(1);
     noteCliConnections(0);
-    mock.timers.tick(10_000);
-    assert.equal(closes(), before + 1, "closed once, until the next served session");
+    mockTimers.tick(5000);
+    mockTimers.reset();
+    await settle();
+    assert.equal(closes, 1, "with no connection left, the off-screen tabs close");
   } finally {
-    mock.timers.reset();
+    mockTimers.reset();
+    delete globalThis.acTestCliCloseOffscreen;
+    delete globalThis.acTestCliControl;
+  }
+});
+
+test("offscreen: when the engine's status can't be read, the 5 s close still runs", async () => {
+  const { noteCliConnections } = await import("./offscreen.ts");
+  let closes = 0;
+  globalThis.acTestCliCloseOffscreen = () => void closes++;
+  globalThis.acTestCliControl = () => Promise.reject(new Error("engine gone"));
+  try {
+    mockTimers.enable({ apis: ["setTimeout"] });
+    noteCliConnections(1);
+    noteCliConnections(0);
+    mockTimers.tick(5000);
+    mockTimers.reset();
+    for (let i = 0; i < 20; i++) await tick();
+    assert.equal(closes, 1);
+  } finally {
+    mockTimers.reset();
+    delete globalThis.acTestCliCloseOffscreen;
+    delete globalThis.acTestCliControl;
   }
 });

@@ -7,6 +7,7 @@ export type AppMenuShortcuts = ReadonlyMap<string, { key: string; modifiers: rea
 export type AppMenuChoice =
   | { kind: "window"; action: WindowAction }
   | { kind: "about" }
+  | { kind: "updates"; restart: boolean }
   | { kind: "edit"; action: EditAction }
   | { kind: "command"; command: BrowserCommand; arg: string | null };
 
@@ -14,9 +15,11 @@ type WindowAction = "minimize" | "minimizeAll" | "maximize" | "close";
 const WINDOW_ACTIONS: readonly string[] = ["minimize", "minimizeAll", "maximize", "close"] satisfies WindowAction[];
 const WINDOW_ACTION_PREFIX = "window:";
 const ABOUT = "about";
+const CHECK_FOR_UPDATES = "checkForUpdates";
+const RESTART_TO_UPDATE = "restartToUpdate";
 const QUIT = "std:quit:";
 const FULL_SCREEN = "std:toggleFullScreen:";
-export type AppMenuContext = { fullScreen?: boolean; edit?: EditMenu | null };
+export type AppMenuContext = { fullScreen?: boolean; edit?: EditMenu | null; updates?: "check" | "restart" | null };
 const separator: MenuItem = { separator: true };
 
 const commandTitle = (command: string, arg?: string) => {
@@ -84,6 +87,7 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
   return [
     sub("Ardia", [
       { id: ABOUT, title: "About Ardia" },
+      ...(context.updates === "restart" ? [{ id: RESTART_TO_UPDATE, title: "Restart to Update" }] : context.updates === "check" ? [{ id: CHECK_FOR_UPDATES, title: "Check for Updates…" }] : []),
       separator,
       cmd("openSettings"),
       cmd("importBrowserData"),
@@ -97,7 +101,6 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
       cmd("newIncognitoWindow"),
       cmd("newLittleArdia"),
       ...(multipleProfiles ? [sub("New Little Ardia Window in Profile", state.profiles.map(entry("newLittleArdia")))] : []),
-      cmd("toggleOpenLinksInLittleArdia"),
       cmd("reopenClosedTab"),
       cmd("reopenClosedWindow"),
       cmd("openFile"),
@@ -111,7 +114,6 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
       separator,
       cmd("savePage"),
       sub("Share", [cmd("share", "via:copy", "Copy Link"), cmd("share", "via:email", "Email Link")]),
-      cmd("emailPageLocation"),
       cmd("print"),
       cmd("printWithSystemDialog"),
     ]),
@@ -141,24 +143,32 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
       cmd("reload"),
       cmd("forceReload"),
       separator,
-      cmd("toggleTabLayout"),
-      cmd("toggleSidebar"),
-      cmd("toggleSidebarSide"),
-      separator,
-      cmd("openSplitPane"),
-      cmd("focusNextPane"),
-      cmd("focusPreviousPane"),
-      separator,
-      sub("Show Bookmarks Bar", [
-        cmd("setBookmarksBar", "always"),
-        cmd("setBookmarksBar", "newTab"),
-        cmd("setBookmarksBar", "never"),
+      sub("Browser Layout", [
+        cmd("setTabLayout", "sidebarLeft"),
+        cmd("setTabLayout", "sidebarRight"),
+        cmd("setTabLayout", "top"),
         separator,
-        cmd("toggleBookmarksBar"),
+        cmd("toggleAddressBar"),
+        cmd("toggleCompactToolbar"),
+        cmd("toggleFullUrl"),
+        separator,
+        cmd("toggleSidebar"),
+        cmd("toggleMinimalism"),
+        sub("Show Bookmarks Bar", [
+          cmd("setBookmarksBar", "always"),
+          cmd("setBookmarksBar", "newTab"),
+          cmd("setBookmarksBar", "never"),
+          separator,
+          cmd("toggleBookmarksBar"),
+        ]),
+        ...(disabled.has("togglePinnedFold") ? [] : [cmd("togglePinnedFold")]),
+      ]),
+      sub("Split View", [
+        cmd("openSplitPane"),
+        cmd("focusNextPane"),
+        cmd("focusPreviousPane"),
       ]),
       separator,
-      cmd("toggleFullUrl"),
-      cmd("toggleAddressBar"),
       cmd("cast"),
       separator,
       cmd("zoomReset"),
@@ -188,11 +198,10 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
       cmd("duplicateTab"),
       cmd("newGroupWithTabs"),
       separator,
-      sub("Move to Profile", [...state.profiles.map(entry("moveTabToProfile", true)), separator, cmd("moveTabToProfile", "new", "New Profile…")]),
+      sub("Move to Profile", state.profiles.map(entry("moveTabToProfile", true))),
       sub("Move to Window", [...state.windows.map(entry("moveTabToWindow")), ...(state.windows.length ? [separator] : []), cmd("moveTabToWindow", "new", "New Window")]),
       separator,
       cmd("bookmarkPage"),
-      sub("Add Bookmark to Folder", [...state.bookmarkFolders.map(entry("addBookmarkToFolder")), separator, cmd("addBookmarkToFolder", "new", "New Folder…")]),
       separator,
       cmd("renameTab"),
       cmd("changeTabIcon"),
@@ -219,9 +228,8 @@ export function appMenuItems(state: MenuState, shortcuts: AppMenuShortcuts = new
     sub("Extensions", [
       ...extensions.map((extension) => cmd("openExtension", extension.id, extension.title)),
       ...(extensions.length ? [separator] : []),
-      cmd("addExtension"),
       cmd("manageExtensions"),
-      cmd("pinExtensions"),
+      cmd("addExtension"),
     ]),
     sub("Window", [
       windowAction("minimize", "Minimize"),
@@ -258,6 +266,7 @@ export function appMenuChoice(id: string): AppMenuChoice | null {
     return WINDOW_ACTIONS.includes(action) ? { kind: "window", action: action as WindowAction } : null;
   }
   if (id === ABOUT) return { kind: "about" };
+  if (id === CHECK_FOR_UPDATES || id === RESTART_TO_UPDATE) return { kind: "updates", restart: id === RESTART_TO_UPDATE };
   const edit = editActionOf(id);
   if (edit) return { kind: "edit", action: edit };
   const standard = LINUX_STANDARD_ITEMS[id];

@@ -5,21 +5,28 @@ import { webviews } from "../../platform/webviews";
 import { useBrowser } from "../browser/store";
 import { engineProfile } from "../browser/model";
 import { usePages } from "../tabs/pageState";
+import { tabEngine } from "../engines/engines";
 import { useMedia, type TabShare } from "./media";
 import { useBrowserWhile, useStoreWhile } from "../tabs/tabWatch";
 
 export { getDisplayMediaSources, screenRecordingAllowed, type DisplayMediaAudio, type DisplayMediaSource } from "../../platform/media";
+export { getDisplayMediaThumbnails } from "../../platform/media";
 export { noteScreenRecordingMissing } from "../telemetry/usage";
+export { startSharePreviews } from "../telemetry/sharePreviewCounts";
 
-export function useShareFor(tabId: string): [string, TabShare] | null {
-  const shares = useMedia((m) => m.tabShares);
-  const sharing = Object.keys(shares).length > 0;
+export type ShareFound = [string, TabShare];
+
+const sharesOf = (m: { tabShares: Record<string, TabShare> }) => m.tabShares;
+
+export function useShareFor(tabId: string, live = true): ShareFound | null {
+  const shares = useStoreWhile(useMedia, live, sharesOf);
+  const sharing = live && Object.keys(shares).length > 0;
   const profile = useBrowserWhile(sharing, (s) => {
     const tab = s.tabs[tabId];
     return tab && /^https?:|^file:/.test(tab.url) ? engineProfile(s, tab.profileId) : null;
   });
   const capturing = useStoreWhile(usePages, sharing, (p) => Object.keys(shares).filter((id) => p.pages[id]?.mediaAccess?.screen).join(","));
-  if (profile === null) return null;
+  if (!live || profile === null) return null;
   for (const capturer of capturing ? capturing.split(",") : []) {
     const share = shares[capturer];
     if (!share || share.dismissed[tabId]) continue;
@@ -97,7 +104,7 @@ export function dismissShareBar(capturer: string, tabId: string) {
 export function shareableTabs(tabId: string) {
   const s = useBrowser.getState();
   const tab = s.tabs[tabId];
-  if (!tab) return [];
+  if (!tab || tabEngine(s, tabId) === "webkit") return [];
   const profile = engineProfile(s, tab.profileId);
   const live = usePages.getState().ready;
   return Object.values(s.tabs)

@@ -57,6 +57,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
     if Self.undoReopensClosedTab {
       dispatch("reopenClosedTab", nil, windowId: WindowManager.shared.keyWindowId)
     } else if let edits = Self.focusedTextEdits {
+      FocusHandoff.shared.countTextFieldEdit(redo: false)
       edits.undo()
     } else {
       NSApp.sendAction(Self.undoAction, to: nil, from: sender)
@@ -65,6 +66,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
 
   @objc(redo:) func redoEdit(_ sender: Any?) {
     if let edits = Self.focusedTextEdits {
+      FocusHandoff.shared.countTextFieldEdit(redo: true)
       edits.redo()
     } else {
       NSApp.sendAction(Self.redoAction, to: nil, from: sender)
