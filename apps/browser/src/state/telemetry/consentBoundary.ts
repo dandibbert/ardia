@@ -1,4 +1,6 @@
 import { setConsentEpoch } from "../../platform/focus";
+import { rendererEfficiency } from "../../platform/rendererEfficiency";
+import { windowsUpdateCounts } from "../../platform/windowsUpdateCounts";
 import { consentEpoch, onConsentPeriodChange } from "./choice";
 import { takeColdTabHoldCounts, takeContentDriftCounts, takeMainProcessWork } from "./diagnostics";
 import { takeFreezeCounts } from "./freezes";
@@ -10,6 +12,8 @@ let dropUsage = () => {};
 
 onConsentPeriodChange(() => {
   setConsentEpoch(consentEpoch());
+  rendererEfficiency.setConsentEpoch(consentEpoch());
+  windowsUpdateCounts.setConsentEpoch(consentEpoch());
   dropUsage();
   resetLocalStoreMeters();
   resetPostStats();
@@ -23,4 +27,6 @@ onConsentPeriodChange(() => {
 export function watchConsentBoundary(drop: () => void) {
   dropUsage = drop;
   setConsentEpoch(consentEpoch());
+  rendererEfficiency.setConsentEpoch(consentEpoch());
+  windowsUpdateCounts.setConsentEpoch(consentEpoch());
 }

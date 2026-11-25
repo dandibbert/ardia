@@ -11,6 +11,10 @@ on:
         description: Dry run, a release candidate that publishes nothing
         type: boolean
         default: true
+      windows:
+        description: Build and ship the Windows installers. Off skips the windows job; the Mac and Linux release publish without them and the Windows feed stays on the build before.
+        type: boolean
+        default: true
       iphone:
         description: Also build the pinned iPhone TestFlight version. Enable only when the owner asks for TestFlight. A real run uploads to Internal after the Mac release publishes.
         type: boolean
@@ -32,7 +36,7 @@ env:
 
 jobs:
   preflight:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     outputs:
       tree: ${{ steps.plan.outputs.tree }}
@@ -97,7 +101,7 @@ jobs:
 
   checks:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -109,6 +113,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: timeout and the Metal toolchain, which Blacksmith's macOS image leaves out
+        run: |
+          command -v timeout >/dev/null || brew install coreutils
+          xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .turbo/cache
@@ -122,7 +130,7 @@ jobs:
 
   build:
     needs: preflight
-    runs-on: xcode-27
+    runs-on: blacksmith-12vcpu-macos-27
     timeout-minutes: 120
     env:
       CAS_PATH: ${{ github.workspace }}/.xcode-cas
@@ -238,7 +246,7 @@ jobs:
 
   sign:
     needs: [preflight, build]
-    runs-on: xcode-27
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 150
     env:
       APPCAST_DELTAS: ${{ vars.APPCAST_DELTAS }}
@@ -349,7 +357,7 @@ jobs:
 
   linux:
     needs: preflight
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 60
     env:
       TREE: ${{ needs.preflight.outputs.linux_tree }}
@@ -365,6 +373,7 @@ jobs:
             libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 libxkbcommon0
             libgbm1 libdrm2 libexpat1 libcairo2 libpango-1.0-0 libudev1 libasound2t64 libglib2.0-0t64
             libgtk-3-0t64 libsecret-1-0
+      - uses: ./.github/actions/linux-update-verify
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: apps/browser/build-ardiacore/prebuilt-linux-x86_64
@@ -424,7 +433,7 @@ jobs:
 
   linux-sign:
     needs: [linux]
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -471,6 +480,7 @@ jobs:
 
   windows:
     needs: preflight
+    if: ${{ inputs.windows }}
     permissions:
       contents: write
       pull-requests: read
@@ -481,7 +491,7 @@ jobs:
   publish:
     needs: [preflight, checks, sign, linux, linux-sign, windows]
     if: ${{ !cancelled() && needs.checks.result == 'success' && needs.sign.result == 'success' }}
-    runs-on: macos-15
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 30
     permissions:
       contents: write
@@ -561,7 +571,11 @@ jobs:
   windows-update:
     needs: [publish, windows]
     if: ${{ !cancelled() && needs.publish.result == 'success' && needs.windows.result == 'success' }}
-    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ (inputs.dry_run == true || inputs.dry_run == 'true') && format('ardia-windows-alpha-dry-run-{0}', github.run_id) || 'ardia-windows-alpha-publish' }}
+      cancel-in-progress: false
+      queue: max
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
       contents: write
@@ -571,6 +585,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            packages/core-rs/target
+          key: win-update-verify-${{ runner.os }}-${{ hashFiles('packages/core-rs/rust-toolchain.toml', 'packages/core-rs/Cargo.lock') }}
+          restore-keys: win-update-verify-${{ runner.os }}-
+      - name: Build ardia-update-verify
+        working-directory: packages/core-rs
+        run: |
+          set -euo pipefail
+          PATH="$HOME/.cargo/bin:$PATH" rustup toolchain install
+          PATH="$HOME/.cargo/bin:$PATH" cargo build --locked --release --quiet -p ardia-update-verify
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: windows-release-*
@@ -579,21 +610,22 @@ jobs:
       - name: Offer it to installed Windows apps
         env:
           BUILD: ${{ needs.windows.outputs.build }}
+          WINDOWS_UPDATE_ED_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_ED_PRIVATE_KEY || secrets.LINUX_UPDATE_ED_PRIVATE_KEY }}
         run: |
-          args=(--installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha")
+          args=(--shell webui --installers "$RUNNER_TEMP/windows" --commit "$GITHUB_SHA" --out "$RUNNER_TEMP/windows-alpha" --verify-bin "$GITHUB_WORKSPACE/packages/core-rs/target/release/ardia-update-verify")
           if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
           scripts/windows/publish-alpha.sh "${args[@]}"
           if [ "$DRY_RUN" = true ]; then
-            echo "- Windows: build $BUILD, packed for windows-alpha, not published" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Windows: build $BUILD, signed and packed for windows-alpha, not published" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Windows: build $BUILD is the update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Windows: build $BUILD (WebUI shell) is the signed update on windows-alpha" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   aur:
     needs: [preflight, linux, publish]
     continue-on-error: true
     if: ${{ !cancelled() && needs.linux.result == 'success' && needs.publish.result == 'success' && !contains(inputs.version, '-') }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

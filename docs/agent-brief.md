@@ -57,6 +57,9 @@ variables) is in `docs/conventions.md`, enforced by `apps/browser/src/convention
 ## The engine
 - ArdiaCore is built outside the repo in `~/chromium-build` (the tree and its patches: `engine/patches`,
   `docs/engine-build.md` › "Rebuilding"; `engine/chromium/apply.sh` and `engine/ardiacore/apply.sh` copy our code in).
+  Fresh Mac Chromium builds (full rebuilds and version bumps) run on `mbp1` (MacBook M5 Pro, when plugged in) and are
+  synced to `mbp2` and `mini`; incremental builds run on whichever Mac has resources free, prioritizing plugged-in
+  machines (`pmset -g batt`; if both MacBooks are on battery, use `mini`).
   The app's build stages a copy of `out/Release_GN_arm64/Chromium Framework.framework`
   (`packages/ardiacore/scripts/stage-framework.sh`: copied and signed once per engine build into
   `apps/browser/build-ardiacore/staged`, then cloned into each build's own derived data, `ARDIACORE_STAGE_DIR`), links it
@@ -136,16 +139,43 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
   in `public/ac_engine.h` and `ac_engine.h`; a new file goes in that `BUILD.gn`; `ac_engine.exports` exports every
   `ac_*`). A private window's calls arrive with `offTheRecord: true` and are refused unless the call says
   `ardia::OffTheRecord::kAllow`: the engine alone decides which calls serve a private session; (2) `scripts/agent/engine-build`; (3) call it with
-  `ArdiaEngineBridge call:` (`callWithSecret:` for secrets); for JS, add `"verb": EngineCall.passing("ac_<domain>_<verb>")`
-  to the domain module's call table and its `"domain.verb": [args, result]` row to `packages/ardiacore/src/engine/api.ts`.
-  **Host API schema:** for a domain in `packages/hostapi/schema` (`bookmarks`, `favicons` and `history` so far), add the
-  row there instead, with its `service`, its explicit `desktop` binding (`route`, `custom` or `absent`) and any
-  `mac`/`windows` override (`custom` when that host serves it with its own code; a call no host passes straight through
-  may leave out `service`), then run `node packages/hostapi/generate.mjs --write`. It writes the domain's TS types and
-  manifest in `packages/ardiacore/src/engine/generated/`, and its whole Swift module when every call is `passing`;
-  otherwise it writes `<Domain>Calls.swift`, a `<domain>CallTable(...)` function taking one handler per Mac `custom`
-  call, which the hand-written `<Domain>Module.swift` calls for its `calls`. Never edit generated files by hand. `pnpm -C packages/hostapi test` checks they're current and that Linux's `kRoutes` and Windows'
-  `forwarded.json` agree with the schema; those two tables stay hand-written until the desktop host generates them.
+  `ArdiaEngineBridge call:` (`callWithSecret:` for secrets); for JS, add the call to its domain's host API schema
+  (below), which generates the Mac call table's `EngineCall.passing("ac_<domain>_<verb>")` row and the TS types.
+  **Host API schema:** every engine domain lives in `packages/hostapi/schema`, and `api.ts` merges only the generated
+  domains; add a new call to its domain's schema file with its `service`, its
+  explicit `desktop` binding (`route`, `custom` or `absent`) and any `mac`/`windows` override (`custom` when that host
+  serves it with its own code; a call no host passes straight through may leave out `service`). A desktop route that
+  answers with one field of the engine's reply, or with null, says so in `routeField` (`kRoutes`' third column), and a
+  non-default bootstrap timeout says so in `deadline`. Each
+  event names its `payload` and its explicit `desktop` binding (`forward`, `custom` or `absent`), with `mac`/`windows`
+  overrides (default `forward`) and a `topic` when the engine topic isn't the event's own name (`engine.cliControl`
+  comes from `cliControl`). Payload types come from paths relative to the generated folder or from a package
+  `packages/ardiacore` depends on (`@ardia/core`). Then run `node packages/hostapi/generate.mjs --write`. It writes the domain's TS types and
+  manifest in `packages/ardiacore/src/engine/generated/`, its whole Swift module when every call is `passing` (or
+  `<Domain>Calls.swift`, a `<domain>CallTable(...)` function taking one handler per Mac `custom`
+  call, which the hand-written `<Domain>Module.swift` calls for its `calls`; `.dropping(...)` removes calls a launch
+  mode doesn't serve, as Tabs and WebKit do for test-instance calls), the shared desktop route table in
+  `engine/ardiacore-desktop/src/ardia/desktop/generated/ac_desktop_routes.h`, and the bootstrap deadline map. Never edit generated files by hand. `pnpm -C packages/hostapi test`
+  checks they're current and that Linux's `EventName`, the Mac's `ForwardedTopics` and Windows'
+  `forwarded.json` agree with the schema.
+  A domain Windows has no module for (`webKit`) is absent there call by call and never named in `forwarded.json`.
+  **Module domains** (positional Expo functions: `shaders`, `shell`, `sync`, `import`) are listed in the schema's `moduleDomains`
+  through `defineModuleDomain`: the package, then per Expo module (`ArdiaWindowBackdrop`) its functions, each with
+  positional `args` (`[name, type]`, plus a Swift type when the TS one isn't a primitive), `result`, `async`, optional
+  `promise`/`queue`, `optional`, `swiftAsync`/`throws`, `instance` (`strong`, or `weak` with a `fallback`) and `debug`, and
+  explicit `mac` (`custom`/`absent`), `desktop` (`custom`, `adapted` when the UI answers in front of the host's own
+  dispatch, `host` or `absent`) and `windows` (`custom`/`absent`) bindings, plus its `constants` and module events. The generator writes `<package>/src/generated/native.ts`
+  (`<Name>Native` per module, `<Domain>Modules` for all of them; the package calls `requireNativeModule` through
+  them), `<package>/ios/<Domain>Native.swift` (a protocol of the Mac module's static functions, plus
+  `moduleName`, `<fn>Function` and `eventsDefinition` definitions), and the domain's entry under the manifest's
+  `modules`. The hand-written module conforms (`class WindowBackdropModule: Module, WindowBackdropNative`), writes
+  `Name(Self.moduleName)` and `Self.holdKeyLookFunction` in its `definition()` and implements the static bodies, so a
+  schema change that the body doesn't follow fails to compile (Swift keyword names are backticked). The manifest keeps
+  each written file's SHA-256, and `--write` never overwrites or deletes one that no longer matches it. The tests check
+  that conformance and that no function, event or name is registered by hand, that the package never types a module
+  past the generated map (both TypeScript scans use the compiler's syntax tree), that the desktop UI answers exactly the `custom` functions (a Promise when `async`), and
+  that the Linux host (`if (method == …)` dispatch outside `bool` helpers, `SendEvent`) and Windows (`REACT_METHOD`, the `writtenInJs` object's
+  members, `moduleDefaults` keys, `EmitEvent`/`emitNativeEvent`) serve exactly the functions and events bound to them.
 - **The page script** is `packages/ardiacore/ios/page_script.js`, a pod resource: `ArdiaHostEngineDelegate.mm` hands it to the
   engine at launch and the renderer runs it in every http(s) and file frame. Changing it needs an app rebuild, not an
   engine one. Its `post(kind, json)` crosses the page channel to `-[ArdiaWebView tab:didReceivePageMessage:…]` (`ArdiaWebView+PageMessages.mm`),
@@ -189,7 +219,7 @@ Engine files are in `engine/ardiacore/src/ardia/core`, app files in `packages/ar
     read-only `node_modules`. If a later build step must write into `node_modules`, it fails loudly on the
     read-only tree rather than changing it: use a real install (`--undo`) for that worktree.
   - The script drops `.metadata_never_index` into the worktree, the cache, `~/ardia-scratch` and `~/ardia-wt`. On
-    the Mac mini, run it there the same way, or `touch ~/ardia-scratch/.metadata_never_index` once.
+    the other Macs (`mbp2`, `mini`), run it there the same way, or `touch ~/ardia-scratch/.metadata_never_index` once.
 - **Commit your own work to `main`** from the shared checkout, or push a branch from your worktree (`git add -p`
   or explicit paths, only your hunks). Never commit another agent's work in progress. The index and the working
   tree are shared, and `git commit -- <paths>` (`--only`) takes the whole working-tree file, other agents' hunks included: check `git diff --cached --stat` lists only your

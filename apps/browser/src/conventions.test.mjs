@@ -58,6 +58,9 @@ const ENGINE_ENV_READS = {
 const APP_SRC = "apps/browser/src/";
 const BASELINE_PATH = `${APP_SRC}conventions-baseline.json`;
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+for (const entry of Object.values(JSON.parse(readFileSync(ROOT + "packages/ardiacore/src/engine/generated/manifest.json", "utf8")).modules ?? {})) {
+  for (const path of [entry.types, entry.swift]) if (typeof path === "string") GENERATED.add(path);
+}
 
 const SOURCE_FILE = /\.(?:tsx?|mjs|js|swift|h|m|mm|cc|mojom)$/;
 const SCOPE_FILE = /^(?:apps\/browser\/src\/|packages\/[^/]+\/(?:src|ios)\/|engine\/(?:ardiacore|chromium)\/src\/)/;
@@ -404,8 +407,8 @@ const IMPORT_SPEC =
   /\b(?:import|export)\b[^;"'`]*?\bfrom\s*(["'])([^"'\n]+)\1|\bimport\s*(?:\(\s*)?(["'])([^"'\n]+)\3|\brequire\s*\(\s*(["'])([^"'\n]+)\5/g;
 const NATIVE_PACKAGE = /^(?:@ardia\/(?:ardiacore|shell|shaders|import|sync)(?:\/.*)?|expo-modules-core)$/;
 const NATIVE_GLOBAL = /\bNativeModules\b(?!\s*[,}])|\brequireNative(?:Module|Component|ViewManager)\s*\(/g;
-const COMPONENT_FILE = /^[A-Z][A-Za-z0-9]*(?:\.(?:web|native|macos|ios|windows|linux))?\.tsx$/;
-const MODULE_FILE = /^[a-z][A-Za-z0-9]*(?:\.(?:web|native|macos|ios|windows|linux))?\.(?:ts|mjs)$/;
+const COMPONENT_FILE = /^[A-Z][A-Za-z0-9]*(?:\.(?:web|native|macos|ios|windows|linux|win|desktop))?\.tsx$/;
+const MODULE_FILE = /^[a-z][A-Za-z0-9]*(?:\.(?:web|native|macos|ios|windows|linux|win|desktop))?\.(?:ts|mjs)$/;
 const TEST_NAME = /^[A-Za-z][A-Za-z0-9]*\.test\.mjs$/;
 
 function valueAt(code, at) {

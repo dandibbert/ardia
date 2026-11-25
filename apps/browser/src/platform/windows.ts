@@ -21,6 +21,7 @@ export const closeHeard = (id: string) => void Windows.closeHeard?.(id);
 export const animateWindowClose = (id: string, after: string | null = null) => Windows.animateWindowClose(id, after);
 export const restoreFullScreen = (ids: string[], focus: string | null) => Windows.restoreFullScreen(ids, focus);
 export const focusWindow = (id: string) => Windows.focusWindow(id);
+export const setWindowShown = (id: string, shown: boolean, burst = false) => Windows.setWindowShown?.(id, shown, burst);
 export const setWindowTitle = (id: string, title: string) => Windows.setWindowTitle(id, title);
 export type LightsPlace = readonly [x: number, y: number] | readonly [fromRight: number, y: number, edge: "right"];
 export const setTrafficLightsCenter = (id: string, center: LightsPlace | null) =>

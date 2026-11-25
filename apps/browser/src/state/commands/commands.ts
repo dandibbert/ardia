@@ -102,7 +102,7 @@ export function runCommand({ command, arg, windowId: given }: CommandEvent, { st
     case "little":
       return void runLittleArdiaCommand(command, arg, target.windowId);
     case "peek":
-      return void runPeekCommand(command, target.windowId);
+      return void runPeekCommand(command, target.windowId, user?.consent ?? null);
   }
   const requested = target.invokedFrom;
   const targeted = target.targeted;

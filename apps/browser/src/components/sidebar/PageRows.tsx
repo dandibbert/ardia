@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState, type RefObject } from "react";
 import { Animated, View } from "react-native";
-import { radius, space, Symbol, Text } from "../ui";
+import { continuousCorners, radius, space, Symbol, Text } from "../ui";
 import { layout, useTheme } from "../ui/theme";
 import { useSettings } from "../../state/browser/hooks";
 import { isIncognitoProfile } from "../../state/browser/model";
@@ -10,7 +10,7 @@ import { useAddressBarInSidebar } from "../../state/windows/layout";
 import { useNewTabAtTop } from "../../state/sidebar/chrome";
 import { ClearDivider } from "./ClearDivider";
 import { DragScope, useDragController, useDragItem } from "./DragProvider";
-import { Fold, FoldSettling, useFold } from "./Fold";
+import { Fold, useFold } from "./Fold";
 import { SidebarEntry } from "./GroupBlock";
 import { GhostSlot, ListMotionContext, useListMotion } from "./ListMotion";
 import { PinnedGrid } from "./PinnedGrid";
@@ -62,11 +62,10 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
   const cap = offScreen ? 0 : visited ? undefined : rows;
   const growing = cap === undefined && mountedRows < all.length;
   const launch = useLaunchGrowth(windowId, { lazy, current, total: all.length, shownRows: Math.min(mountedRows, all.length), controller });
-  const lastBatch = cap === undefined && mountedRows === all.length;
-  const growNow = (growing || lastBatch) && !launch.holding;
+  const growNow = growing && !launch.holding;
   useEffect(() => {
     if (!growNow) return;
-    const frame = requestAnimationFrame(() => setMountedRows((n) => (n >= all.length ? Infinity : Math.min(all.length, n + ROWS_PER_FRAME))));
+    const frame = requestAnimationFrame(() => setMountedRows((n) => (n + ROWS_PER_FRAME >= all.length ? Infinity : n + ROWS_PER_FRAME)));
     return () => cancelAnimationFrame(frame);
   }, [growNow, mountedRows, all.length]);
   const limit = cap ?? (growing ? mountedRows : undefined);
@@ -90,7 +89,6 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
   if (geometry) geometry.current.newTabAtTop = newTabButtonAtTop && inlineNewTab;
   return (
     <ListMotionContext.Provider value={scope}>
-      <FoldSettling.Provider value={growing || lastBatch}>
       <View>
         {isIncognitoProfile(profileId) ? <IncognitoBadge /> : null}
         {tiles.length ? (
@@ -152,7 +150,6 @@ export function PageRows({ windowId, profileId, current, rows, lazy, offScreen, 
         {pluginViews && !offScreen && !isIncognitoProfile(profileId) ? <PluginSidebarViews windowId={windowId} /> : null}
         {current ? <CleanUpUpsell windowId={windowId} shift={motion.tail} /> : null}
       </View>
-      </FoldSettling.Provider>
     </ListMotionContext.Provider>
   );
 }
@@ -166,7 +163,7 @@ function IncognitoBadge() {
   const theme = useTheme();
   if (!useAddressBarInSidebar()) return null;
   return (
-    <View style={{ height: 30, marginBottom: space.xs, paddingHorizontal: TAB_ROW.contentLeft, flexDirection: "row", alignItems: "center", gap: space.m, borderRadius: radius.tile, backgroundColor: sidebarTokens(theme).incognitoBadge }}>
+    <View style={{ height: 30, marginBottom: space.xs, paddingHorizontal: TAB_ROW.contentLeft, flexDirection: "row", alignItems: "center", gap: space.m, ...continuousCorners(radius.tile), backgroundColor: sidebarTokens(theme).incognitoBadge }}>
       <Symbol name={INCOGNITO_ICON} size={13} weight="semibold" color={theme.textPrimary} style={{ width: 18, height: 16 }} />
       <Text size="small" weight="semibold">
         Incognito

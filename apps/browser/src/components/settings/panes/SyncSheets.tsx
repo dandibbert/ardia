@@ -199,7 +199,7 @@ function sharingDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting">): s
   return added ? `On your other devices. Shares data with ${name}, which is added too.` : `On your other devices. Shares data with ${name}.`;
 }
 
-export function remoteProfileDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting" | "sharedByOthers">): string {
+function remoteProfileDescription(p: Pick<RemoteProfile, "sharesWith" | "waiting" | "sharedByOthers">): string {
   const sharing = sharingDescription(p);
   if (!p.sharedByOthers) return sharing;
   return `${sharing.endsWith(".") ? sharing : `${sharing}.`} To remove it, first remove the profiles that share its data.`;
@@ -293,7 +293,7 @@ function ConnectDeviceSheet() {
   return (
     <Sheet size="l" onClose={closeSettingsSheet}>
       <DialogTitle
-        subtitle={`On your other ${PLATFORM_TERMS.syncedComputer}, open Ardia › Settings › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery phrase.`}
+        subtitle={`On your other ${PLATFORM_TERMS.syncedComputer}, open Ardia › Settings › General › Sync and choose the same sync folder. Then click Enter Recovery Phrase and enter the 24 words of your recovery phrase.`}
       >
         Connect Another Device
       </DialogTitle>

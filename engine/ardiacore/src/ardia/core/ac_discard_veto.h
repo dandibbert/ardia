@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include "base/time/time.h"
+
 namespace content {
 class NavigationHandle;
 class WebContents;
@@ -14,11 +16,22 @@ enum class DiscardVeto {
   kPostedDocument = 100,
   kBeforeUnload = 101,
   kDownload = 102,
+  kCliHold = 103,
 };
 
 std::vector<DiscardVeto> DiscardVetoesFor(content::WebContents* contents);
 
 void NotePostedDocument(content::NavigationHandle* handle);
+
+struct CliHold {
+  content::WebContents* contents = nullptr;
+  base::Time until;
+  bool live = false;
+};
+
+std::vector<bool> SetCliHeldTabs(const std::vector<CliHold>& held);
+
+int TakeCliHoldVetoes();
 
 void InstallDiscardVeto();
 

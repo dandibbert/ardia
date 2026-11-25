@@ -56,7 +56,7 @@ env:
 jobs:
   gate:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: read
@@ -79,7 +79,7 @@ jobs:
 
   changes:
     name: which Mac jobs run
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: read
@@ -127,6 +127,9 @@ jobs:
               - "pnpm-lock.yaml"
               - ".github/workflows/mac.yml"
             swift:
+              - "packages/core-rs/**"
+              - ".github/actions/core-rs-xcframework/**"
+              - "packages/sync/Package.swift"
               - "packages/shell/ios/PluginCore/**"
               - "packages/shell/ios/PluginProcess.swift"
               - "packages/shell/plugin-*/**"
@@ -144,7 +147,7 @@ jobs:
     name: compile (Debug)
     needs: [gate, changes]
     if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) && (needs.changes.result != 'success' || needs.changes.outputs.app == 'true') }}
-    runs-on: xcode-27
+    runs-on: blacksmith-12vcpu-macos-27
     timeout-minutes: 75
     env:
       SCRATCH: ${{ github.workspace }}/.ci
@@ -283,7 +286,7 @@ jobs:
     name: plugin sandbox, archive and import Swift tests
     needs: [gate, changes]
     if: ${{ !cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.run == 'true')) && (needs.changes.result != 'success' || needs.changes.outputs.swift == 'true') }}
-    runs-on: xcode-27
+    runs-on: blacksmith-6vcpu-macos-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -291,6 +294,8 @@ jobs:
           persist-credentials: false
       - name: Plugin core, its sandbox and the official archive reader
         run: swift test --package-path packages/shell --scratch-path "$RUNNER_TEMP/shell" --filter ArdiaPluginCoreTests
-      - name: The import package, its zip reader included
+      - uses: ./.github/actions/core-rs-xcframework
+        if: ${{ !cancelled() }}
+      - name: The import package, its zip reader and the Rust Chromium bookmarks reader included
         if: ${{ !cancelled() }}
         run: swift test --package-path packages/import --scratch-path "$RUNNER_TEMP/import"

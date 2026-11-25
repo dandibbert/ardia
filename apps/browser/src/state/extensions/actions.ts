@@ -164,7 +164,9 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
   focus(regular);
 }
 
-export const openManageExtensions = (windowId?: string | null) => openSettings("profiles", extensionsProfileId(null, windowId));
+export const openManageExtensions = (windowId?: string | null) => openSettings("profiles", extensionsProfileId(null, windowId), null, MANAGE_EXTENSIONS_ROW);
+
+const MANAGE_EXTENSIONS_ROW = "profiles.extensions";
 
 export function openExtensionDetails(profileId: string, extensionId: string) {
   if (useSettingsNav.getState().profileId !== profileId) replaceSettingsPlace(profileId);
@@ -240,7 +242,7 @@ export async function showExtensionMenu(windowId: string, ext: InstalledExtensio
   }
 }
 
-export type ExtensionListChoice = "add" | "manage";
+type ExtensionListChoice = "add" | "manage";
 
 export const EXTENSION_LIST_ITEMS: ChoiceItem<never, ExtensionListChoice>[] = [
   { id: "manage", title: "Manage Extensions…", symbol: "puzzlepiece.extension" },

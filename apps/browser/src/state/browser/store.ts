@@ -1,5 +1,5 @@
 import { create, type StateCreator, type StoreApi, type UseBoundStore } from "zustand";
-import { withToolbarKeptWhileScrolling } from "../settings/toolbarScrollDefault";
+import { withRetiredDefaults } from "../settings/retiredDefaults";
 import { setHeldReportsTransaction } from "../../platform/nativeEvents";
 import { createBookmarksSlice, ensureRoots, type BookmarksSlice } from "../bookmarks/bookmarks";
 import { changedIds } from "./changes";
@@ -23,7 +23,6 @@ import { bindLiveToBrowser, forgetAllLive } from "../tabs/tabLive";
 import { settle, SettleDidNotConverge } from "./settle";
 import { transactional, type SubscribeTo } from "./transaction";
 import { actionsApart } from "./actionsApart";
-import type { BrowserWindow, Tab } from "./types";
 import { createUiSlice, type UiSlice } from "../windows/ui";
 import { createDownloadsSlice, type DownloadsSlice } from "../downloads/downloadsSlice";
 import { createWindowsSlice, type WindowsSlice } from "../windows/windows";
@@ -69,7 +68,7 @@ export type HydrateData = Partial<
     | "settings"
     | "settingsMeta"
   >
-> & { focusedWindowId?: string | null; lastProfileId?: string | null };
+> & { focusedWindowId?: string | null; lastProfileId?: string | null; retiredDefaultsWaitForSync?: boolean };
 
 let batch = (update: () => void) => update();
 export function setStoreBatching(batchedUpdates: (update: () => void) => void) {
@@ -127,7 +126,7 @@ const createdBrowser = create<BrowserState>()(actionsApart(transactions.middlewa
       ...(data.profileOrder ?? []).filter((id) => profiles[id]),
       ...Object.keys(profiles).filter((id) => !data.profileOrder?.includes(id)),
     ];
-    const kept = withToolbarKeptWhileScrolling(data.settings, parseSettingsMeta(data.settingsMeta));
+    const kept = withRetiredDefaults(data.settings, parseSettingsMeta(data.settingsMeta), { waitForSync: data.retiredDefaultsWaitForSync });
     const settings = parseSettings(kept.settings);
     if (!profiles[settings.defaultProfileId]) settings.defaultProfileId = profileOrder[0]!;
 
@@ -183,7 +182,6 @@ const createdBrowser = create<BrowserState>()(actionsApart(transactions.middlewa
 export const useBrowser = createdBrowser as UseBoundStore<StoreApi<BrowserState>> & { subscribeTo: SubscribeTo<BrowserState> };
 bindLiveToBrowser(useBrowser, transactions.afterTransactionIdempotent);
 
-export type { CreateWindowOptions } from "../windows/windows";
 
 type StoreActions = { [K in keyof BrowserState as BrowserState[K] extends (...args: never[]) => unknown ? K : never]: BrowserState[K] };
 

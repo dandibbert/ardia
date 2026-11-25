@@ -6,6 +6,7 @@ import type {
   CallName,
   CallResult,
   ChromeWindowState,
+  CliConsoleDelta,
   CliControlStatus,
   CliTabTarget,
   EngineBookmark,
@@ -43,9 +44,14 @@ const testGlobals = globalThis as {
   acTestCliControl?: (on: boolean | null) => Promise<CliControlStatus> | undefined;
   acTestCliActive?: (tabId: string | null) => Promise<CliControlStatus> | undefined;
   acTestCliTargets?: (tabId: string) => CliTabTarget | undefined;
+  acTestCliHeld?: (tabs: { tabId: string; until: number; live?: boolean }[]) => { kept: number; marked?: string[] } | Promise<{ kept: number; marked?: string[] }> | undefined;
   acTestCliOwns?: (tabId: string) => { owned: boolean; shown: boolean };
+  acTestTabDiagnostics?: (args: { tabId: string; since?: number; clearBefore?: number }) => CallResult<"tabs.diagnostics">;
+  acTestTabInput?: (args: CallArgs<"tabs.input">) => CallResult<"tabs.input">;
   acTestCliMoveOffscreen?: (tabId: string) => { ok: boolean; reason?: string };
   acTestCliCloseOffscreen?: () => void;
+  acTestCliConsole?: (args: { tabId: string; after?: number; generation?: number; limit?: number }) => CliConsoleDelta;
+  acTestCliEngine?: (call: string, args: any) => any;
   acTestTasks?: () => EngineTask[];
   acTestComponents?: () => EngineComponent[];
   acTestEngineInfo?: () => CallResult<"engine.info">;
@@ -379,7 +385,7 @@ const cliControl = (on: boolean | null) => testGlobals.acTestCliControl?.(on) ??
 export const cancelledDownloads: string[] = [];
 export const downloadSettingsWrites: { profile: string; folder?: string; askWhereToSave?: boolean }[] = [];
 export const clearedSiteData: { profile: string; origin: string; engine?: string }[] = [];
-export const endedWebKitSessions: string[] = [];
+const endedWebKitSessions: string[] = [];
 export const removedStagings: string[] = [];
 export const stagingRemovals = { ok: true };
 export const deletedProfileData: string[] = [];
@@ -391,7 +397,7 @@ export const discardedOffers: string[] = [];
 export const installedCrx: { path: string; profile: string }[] = [];
 export const chosenExtensionFolder: { next: string | null } = { next: null };
 export const crxInstallFailure: { next: string | null } = { next: null };
-export const linkRoute: { next: LinkRoute } = { next: {} };
+const linkRoute: { next: LinkRoute } = { next: {} };
 export const resolvedPermissions: { id: string; result: string; remember: boolean }[] = [];
 
 export const extensionAnswers = {
@@ -459,6 +465,32 @@ const fakeModules = {
       cliOwnsTab: ({ tabId }) => testGlobals.acTestCliOwns?.(tabId) ?? { owned: false, shown: false },
       cliMoveOffscreen: ({ tabId }) => testGlobals.acTestCliMoveOffscreen?.(tabId) ?? { ok: false },
       cliCloseOffscreenTabs: () => (testGlobals.acTestCliCloseOffscreen?.(), null),
+      cliConsoleDelta: (args) => testGlobals.acTestCliConsole?.(args) ?? { entries: [], generation: 1, reset: false, next: args.after ?? 0, last: 0, dropped: 0, withheld: 0, errors: 0, more: false },
+      setCliHeldTabs: async ({ tabs }) => {
+        const answer = (await testGlobals.acTestCliHeld?.(tabs)) ?? { kept: 0 };
+        return { kept: answer.kept, marked: answer.marked ?? tabs.filter((t) => t.until > Date.now()).map((t) => t.tabId) };
+      },
+      cliDevToolsOpen: (args) => testGlobals.acTestCliEngine?.("cliDevToolsOpen", args) ?? { session: 1, targetId: "T", scope: args.scope },
+      cliDevToolsSend: (args) => testGlobals.acTestCliEngine?.("cliDevToolsSend", args) ?? { result: {} },
+      cliDevToolsClose: (args) => testGlobals.acTestCliEngine?.("cliDevToolsClose", args) ?? { closed: true },
+      cliCancel: (args) => testGlobals.acTestCliEngine?.("cliCancel", args) ?? { cancelled: 0 },
+      cliSnapshot: (args) =>
+        testGlobals.acTestCliEngine?.("cliSnapshot", args) ?? { generation: 1, viewport: [800, 600], scope: "page", refs: [], truncated: false, counts: { nodes: 1, frames: 1, interactive: 0, occluded: 0, framesTruncated: false } },
+      cliWaitSettled: (args) =>
+        testGlobals.acTestCliEngine?.("cliWaitSettled", args) ?? {
+          settled: true,
+          waitedMs: 0,
+          navigations: { pending: 0, seen: 0 },
+          network: { inflight: 0, longLived: 0, seen: 0, tracked: true },
+          idle: "idle",
+          frame: "committed",
+          loops: 0,
+          idleMs: 0,
+          frameMs: 0,
+        },
+      cliHitTest: (args) => testGlobals.acTestCliEngine?.("cliHitTest", args) ?? { point: [0, 0], verified: false, blocked: false },
+      cliClick: (args) => testGlobals.acTestCliEngine?.("cliClick", args) ?? { point: [0, 0], verified: false, blocked: false, clicked: true },
+      cliScreenshot: (args) => testGlobals.acTestCliEngine?.("cliScreenshot", args) ?? { data: "", format: "jpeg", width: 1, height: 1, hidden: true, freshFrame: true },
       cliTabTargets: ({ tabIds }) => Object.fromEntries(tabIds.map((id) => [id, testGlobals.acTestCliTargets?.(id) ?? { targetId: null, pageGeneration: 0 }])),
     },
     { inputIdleSeconds: () => 3600 },
@@ -470,6 +502,14 @@ const fakeModules = {
       stripCommand: async ({ id, command }) => (await tabStripHost().command(command, id), null),
       strips: () => tabStripHost().snapshot(),
       lastTabPolicy: () => ({ closesWindow: true }),
+      diagnostics: (args) => {
+        if (!testGlobals.acTestTabDiagnostics) throw Object.assign(new Error("tabs.diagnostics has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return testGlobals.acTestTabDiagnostics(args);
+      },
+      input: (args) => {
+        if (!testGlobals.acTestTabInput) throw Object.assign(new Error("tabs.input has no test fake yet"), { code: "ERR_UNKNOWN_CALL" });
+        return testGlobals.acTestTabInput(args);
+      },
       reportCommits: ({ on }) => {
         commitReports.push(on);
         if (commitReportFailures.next > 0) {

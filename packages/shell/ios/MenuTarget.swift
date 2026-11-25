@@ -12,7 +12,7 @@ final class MenuTarget: NSObject, NSMenuItemValidation {
     let body: [String: Any] = [
       "command": command, "arg": arg as Any, "windowId": windowId as Any, "focusGeneration": FocusHandoff.shared.takeBegun() as Any,
     ]
-    ShellEvents.send(.command, mouseButton.map { ArdiaConsentStamp.begin().onto(body.merging(["mouseButton": $0]) { $1 }) } ?? body)
+    ShellEvents.send(.command, ArdiaConsentStamp.begin().onto(mouseButton.map { body.merging(["mouseButton": $0]) { $1 } } ?? body))
   }
 
   private static let focusMovingCommands: Set<String> = ["newTab", "focusCommandBar", "findInPage", "showHistory"]

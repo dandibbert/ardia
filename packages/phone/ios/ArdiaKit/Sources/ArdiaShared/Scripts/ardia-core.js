@@ -64,7 +64,7 @@ if (typeof scope.URL === "undefined") scope.URL = HostURL;
                              
                
   
-                                                                                                               
+                                                                                                        
 
 let source                   = { tabs: [], history: [], bookmarks: [] };
 let engines                 = allEngines();
@@ -374,7 +374,7 @@ function appUrlOrigin(url        )                {
   return parts ? `${APP_SCHEME}://${parts.host}` : null;
 }
 
-                         
+                  
                                        
                                                 
                       
@@ -949,7 +949,7 @@ function convert(input        )                                         {
   return { value: (amount * a.factor) / b.factor, unit: b.label };
 }
 
-                                                                                 
+                                                                          
 
 function calculate(raw        )                     {
   const expression = raw.trim().replace(/^=\s*/, "").replace(/\s*=\s*\??$/, "");
@@ -1027,7 +1027,7 @@ function isTrackingParam(name        , hostname = "")          {
 
                                                                                
                                                                                                  
-                                                                                            
+                                                                                     
 
 function cleanUrlReport(url        )                 {
   const unchanged = Object.freeze({ url: url              , removedTracker: false });
@@ -1298,7 +1298,7 @@ const { cleanUrl } = __require("packages/core/src/cleanUrl.ts");
 const { displayHost, punycodeEncode } = __require("packages/core/src/idn.ts");
 const { PSL_TLDS } = __require("packages/core/src/tlds.ts");
 
-                                                                                                                  
+                                                                                                           
 
 const URL_PARTS = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?(\[[^\]]*\]|[^:/?#]*)(?::(\d+))?([^?#]*)(\?[^#]*)?(#.*)?$/i;
 
@@ -1322,12 +1322,14 @@ const LOCAL_TLDS = new Set(["meta", "local", "localhost", "test", "internal", "l
 let registries                         ;
 const knownTld = (tld        ) => LOCAL_TLDS.has(tld) || (registries ??= new Set(PSL_TLDS.split(/\s+/))).has(tld);
 
+const isIPv4 = (host        ) => /^(\d{1,3}\.){3}\d{1,3}$/.test(host) && host.split(".").every((octet) => Number(octet) <= 255);
+
 function isLocalHost(host        )          {
   return (
     host === "localhost" ||
     !host.includes(".") ||
     host.startsWith("[") ||
-    /^(\d{1,3}\.){3}\d{1,3}$/.test(host) ||
+    isIPv4(host) ||
     /\.(local|localhost|test|internal|lan|home\.arpa)$/.test(host)
   );
 }
@@ -1337,7 +1339,7 @@ const isLabel = (part        ) => LABEL_CHARS.test(part) && part[0] !== "-" && !
 const isTld = (part        ) => (isLabel(part) && !/^\d/.test(part)) || /^xn--[a-z0-9-]+$/i.test(part);
 
 function isHostName(name        )          {
-  if (name.toLowerCase() === "localhost" || /^\[[0-9a-f:.]+\]$/i.test(name) || /^(\d{1,3}\.){3}\d{1,3}$/.test(name)) return true;
+  if (name.toLowerCase() === "localhost" || /^\[[0-9a-f:.]+\]$/i.test(name) || isIPv4(name)) return true;
   const labels = name.split(".");
   return labels.length === 1 ? isLabel(name) : labels.slice(0, -1).every(isLabel) && isTld(labels.at(-1) );
 }
@@ -1385,7 +1387,7 @@ function spacedAddress(input        )                       {
   const port = Number(host.port.slice(1));
   if (host.port && (port < 1 || port > 65535)) return null;
   const dotted = name.includes(".") && !/^[\d.]+$/.test(name);
-  const ip = name.startsWith("[") || /^(\d{1,3}\.){3}\d{1,3}$/.test(name);
+  const ip = name.startsWith("[") || isIPv4(name);
   const local = name === "localhost" || ip || (!!host.port && !(dotted && !isLocalHost(name) && (port === 80 || port === 443)));
   if (!dotted && !local) return null;
   const rest = input.slice(host.authority.length);
@@ -1729,7 +1731,7 @@ const DANGEROUS = new RegExp(
   "u",
 );
 
-                         
+                  
              
                          
                
@@ -1977,7 +1979,7 @@ const { matchActions } = __require("packages/core/src/fuzzy.ts");
                    
   
 
-                                                                   
+                                                            
 
 const NONE                = { rows: [], exact: false };
 const MIN_PARTIAL_QUERY = 3;
@@ -2112,7 +2114,7 @@ const SITE_INGEST_KEY = "ak_site_6b26588b3764ae7d0f6d63d7";
 
 const INGEST_KEY_HEADER = "X-Ardia-Key";
 
-                                                  
+                                           
 
 const INGEST_KEYS                                         = {
   app: APP_INGEST_KEY,
@@ -2439,6 +2441,8 @@ function globalProviderRows(sections                            , shown         
 });
 __define("packages/core/src/pageText.ts", function (exports, __require) {
   __export(exports, "displayUrl", () => displayUrl);
+  __export(exports, "documentKey", () => documentKey);
+  __export(exports, "routeOf", () => routeOf);
   __export(exports, "pageKey", () => pageKey);
   __export(exports, "withRootSlash", () => withRootSlash);
   __export(exports, "hasPageText", () => hasPageText);
@@ -2457,13 +2461,24 @@ function displayUrl(url        )         {
   return urlForDisplay(url).replace(/\/$/, "");
 }
 
-const pageKey = (url        ) => url.replace(/#.*$/, "").replace(/\/$/, "");
+const documentKey = (url        ) => {
+  const at = url.indexOf("#");
+  return (at < 0 ? url : url.slice(0, at)).replace(/\/$/, "");
+};
+
+const routeOf = (url        ) => {
+  const at = url.indexOf("#");
+  return at >= 0 && (url.startsWith("#/", at) || url.startsWith("#!/", at)) ? url.slice(at) : "";
+};
+
+const pageKey = (url        ) => documentKey(url) + routeOf(url);
 
 const withRootSlash = (url        ) => url.replace(/^(https?:\/\/[^/?#]*)(?=[?#]|$)/i, "$1/");
 
                         
               
               
+                    
                 
                      
                      
@@ -2502,7 +2517,10 @@ function pageText(row                                )           {
     const shown = displayUrl(row.url);
     const shownLower = shown.toLowerCase();
     const titleLower = row.title.toLowerCase();
-    text = { url: row.url, key: pageKey(row.url), shown, shownLower, titleLower, titleWords: wordsOf(titleLower) };
+    const document = documentKey(row.url);
+    const route = routeOf(row.url);
+    text = { url: row.url, key: document + route, shown, shownLower, titleLower, titleWords: wordsOf(titleLower) };
+    if (route) text.document = document;
     rememberPageText(row, text);
   }
   return text;
@@ -2637,7 +2655,7 @@ const providerApprovalKey = (definition         ) => `omnibox-provider:${sha256H
 });
 __define("packages/core/src/quickCreate.ts", function (exports, __require) {
   __export(exports, "matchQuickCreate", () => matchQuickCreate);
-                           
+                    
              
                 
               
@@ -2697,9 +2715,9 @@ const SECRET_KINDS = ["password", "oauthToken", "oauthClientSecret", "apiToken",
 
                                                        
 
-                                                                                     
+                                                                              
 
-                                                
+                                         
 
 const REDACTED_SECRET = "<secret>";
 
@@ -2824,7 +2842,7 @@ function withoutSecrets   (value   , where              , seen = new WeakSet    
                                                
                                            
 
-                                                         
+                                                  
                        
            
                              
@@ -2894,7 +2912,7 @@ const POPULAR_SITE_SEARCHES                        = [
 
                                                                                                           
 
-                            
+                     
                                    
                                 
                             
@@ -2966,14 +2984,14 @@ function offeredSiteSearch(typed        , completion        , sources           
                     
   
 
-                                                                                                                    
+                                                                                                             
 
-                           
+                    
                                                        
                                    
                                      
 
-                                                               
+                                                        
 
 function keywordBySpace(typed        , next        )                        {
   if (!typed.trim() || /\s$/.test(typed) || next !== `${typed} `) return null;
@@ -3002,6 +3020,7 @@ __define("packages/core/src/suggest.ts", function (exports, __require) {
   __export(exports, "displayUrl", () => __require("packages/core/src/pageText.ts")["displayUrl"]);
   __export(exports, "prepareSuggestions", () => __require("packages/core/src/candidatePool.ts")["prepareSuggestions"]);
   __export(exports, "dedupeSuggestions", () => __require("packages/core/src/suggestionRows.ts")["dedupeSuggestions"]);
+  __export(exports, "listsRoutesApart", () => __require("packages/core/src/suggestionRows.ts")["listsRoutesApart"]);
   __export(exports, "suggestionKey", () => __require("packages/core/src/suggestionRows.ts")["suggestionKey"]);
 const { findBang } = __require("packages/core/src/bangs.ts");
 const { calculate } = __require("packages/core/src/calculator.ts");
@@ -3011,7 +3030,7 @@ const { BUILT_IN_ENGINES, searchUrl } = __require("packages/core/src/engines.ts"
 const { matchActions } = __require("packages/core/src/fuzzy.ts");
 const { fixupUrl, hostOf, sameAddress, searchUrlFor, spacedAddressGuess } = __require("packages/core/src/omnibox.ts");
 const { leadingRows, matchScore, matchScoreWord, narrowing, parseQuery, remember, TabList, TopList } = __require("packages/core/src/pageMatch.ts");
-const { hostLowerOfPage, hostOfPage, hostPart, originOfPage, pageKey, withRootSlash } = __require("packages/core/src/pageText.ts");
+const { documentKey, hostLowerOfPage, hostOfPage, hostPart, originOfPage, pageKey, routeOf, withRootSlash } = __require("packages/core/src/pageText.ts");
 const { globalProviderRows, providerUrl, safeProviderRows } = __require("packages/core/src/providerRows.ts");
 const { matchQuickCreate } = __require("packages/core/src/quickCreate.ts");
 const { scopedSearchUrl } = __require("packages/core/src/siteSearch.ts");
@@ -3026,6 +3045,15 @@ const { actionRow, createRow, dedupeSuggestions, Output, pageSuggestion, suggest
 const DAY = 86_400_000;
 const lowerOrigin = (url        ) => url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, (origin) => origin.toLowerCase());
 const withoutFragment = (url        ) => url.replace(/#.*$/, "");
+function withoutLead(listed                   , lead                   )           {
+  const rest           = [];
+  for (const x of listed) {
+    let inLead = false;
+    for (const y of lead) if (y === x) inLead = true;
+    if (!inLead) rest[rest.length] = x;
+  }
+  return rest;
+}
 
 function buildSuggestions(raw        , source                  , options                 = {})                   {
   const { limit = 8, now = Date.now(), engine = BUILT_IN_ENGINES[0] , preference = "website", remote = [], actions = [], scope, preventInline = false } = options;
@@ -3049,7 +3077,8 @@ function buildSuggestions(raw        , source                  , options        
   }
 
   const pool = poolFor(source.history, source.bookmarks ?? NO_BOOKMARKS);
-  const { tabIds, extra, renamed } = tabsOver(pool, source.tabs, options.currentTabId);
+  const tabsNow = tabsOver(pool, source.tabs, options.currentTabId);
+  const { tabIds, extra, renamed } = tabsNow;
   const currentKey = options.currentUrl ? pageKey(options.currentUrl) : null;
   const via = new Map                           ();
   const tag = (s            , as                                   )             => {
@@ -3058,7 +3087,11 @@ function buildSuggestions(raw        , source                  , options        
   };
   const known = (url        ) => {
     const key = pageKey(url);
-    const c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
+    let c = pool.byKey.get(key) ?? extra.find((x) => x.text.key === key);
+    if (!c && !routeOf(url)) {
+      const document = documentKey(url);
+      c = pool.byDocument.get(document) ?? extra.find((x) => x.text.document === document);
+    }
     if (!c) return undefined;
     const shown = { ...c, title: c.pageTitle ?? c.title };
     const opened = withRootSlash(url);
@@ -3073,7 +3106,12 @@ function buildSuggestions(raw        , source                  , options        
     if (!options.switchToOpenTab) return undefined;
     const opened = withRootSlash(lowerOrigin(url));
     if (!tabIds.has(pageKey(opened))) return undefined;
-    const tab = source.tabs.find((t) => t.url && t.id !== options.currentTabId && withoutFragment(withRootSlash(lowerOrigin(t.url))) === withoutFragment(opened));
+    const route = routeOf(opened);
+    const tab = source.tabs.find((t) => {
+      if (!t.url || t.id === options.currentTabId) return false;
+      const at = withRootSlash(lowerOrigin(t.url));
+      return withoutFragment(at) === withoutFragment(opened) && routeOf(at) === route;
+    });
     if (!tab) return undefined;
     const visit = savedVisit(source.history, opened);
     const bookmark = savedBookmark(source.bookmarks ?? NO_BOOKMARKS, opened);
@@ -3124,12 +3162,15 @@ function buildSuggestions(raw        , source                  , options        
         age = d < 0 ? 0 : d > 30 ? 30 : d;
       }
       const base = c.logVisits - age + (c.bookmarked ? 20 : 0);
-      const tabId = c.tabId ?? tabIds.get(key);
-      if (!bound && !tabId && top.floor >= m + base - derank + 7) {
-        if (!completes) continue;
-        if (inline === null ? false : inline.s >= m + base - derank + 7) continue;
-        if (c.visits <= 0 || !c.text.shownLower.startsWith(q)) continue;
+      const upper = m + base - derank + 7;
+      const belowTop = !bound && top.floor >= upper;
+      let cannotLead                     ;
+      if (belowTop && !tabTop.takes(m, upper)) {
+        cannotLead = !completes || (inline !== null && inline.s >= upper) || c.visits <= 0 || !c.text.shownLower.startsWith(q);
+        if (cannotLead) continue;
       }
+      const tabId = c.tabId ?? (c.openIn === tabsNow.mark ? c.openTabId : undefined);
+      if (belowTop && !tabId && (cannotLead ?? (!completes || (inline !== null && inline.s >= upper) || c.visits <= 0 || !c.text.shownLower.startsWith(q)))) continue;
       const s = m + (base + (tabId ? 6 : 0)) - derank;
       let r                    ;
       if (top.floor < s || top.items.length < limit + 1) {
@@ -3202,10 +3243,10 @@ function buildSuggestions(raw        , source                  , options        
   out.push(...remoteSites.map((site)             => known(site.url) ?? tag({ kind: "page", url: site.url, title: site.title, favicon: null }, "engine_site")));
   const providerAt = out.items.length;
   out.push(...remoteRows((text) => searchUrl(engine, text), engine.name));
-  const trailing = listed.filter((x) => !lead.includes(x));
+  const trailing = withoutLead(listed, lead);
   const providerRows = options.providers?.length ? globalProviderRows(options.providers, [...out.items, ...trailing.filter((x) => x.tabId).map((x) => rowOf(x))]) : [];
-  const offered = new Set(providerRows.map((row) => pageKey(row.url)));
-  if (!options.remotePending) out.push(...trailing.filter((x) => x.tabId || !offered.has(pageKey(x.c.url))).map((x) => rowOf(x)));
+  const offered = providerRows.length ? new Set(providerRows.map((row) => pageKey(row.url))) : null;
+  if (!options.remotePending) out.push(...(offered ? trailing.filter((x) => x.tabId || !offered.has(pageKey(x.c.url))) : trailing).map((x) => rowOf(x)));
   const items = providerRows.length ? [...out.items.slice(0, providerAt), ...providerRows, ...out.items.slice(providerAt)] : out.items;
   if (guessRow && out.items.includes(guessRow)) tag(guessRow, "spaced_address");
   const shownVia = via.size ? viaOf(items, via) : undefined;
@@ -3290,17 +3331,21 @@ const { hasPageText, logVisits, pageText, tabPageText, withRootSlash } = __requi
                   
                  
                    
+                    
+                     
+                        
   
 
                                                                                      
-                                                        
+                                                                                         
 
-                                                                                                        
+                                                                                                                                            
                 
                      
                                  
                     
                                 
+                                     
                         
                          
                     
@@ -3314,8 +3359,13 @@ const SLICE_CHECK = 64;
 
 function baseFor(bookmarks                        )               {
   let base = bases.get(bookmarks);
-  if (!base) bases.set(bookmarks, (base = { list: [], byKey: new Map(), cursor: 0, done: false }));
+  if (!base) bases.set(bookmarks, (base = { list: [], byKey: new Map(), byDocument: new Map(), cursor: 0, done: false }));
   return base;
+}
+
+function addTo(byKey                        , byDocument                        , c           ) {
+  byKey.set(c.text.key, c);
+  if (c.text.document !== undefined && !byDocument.has(c.text.document)) byDocument.set(c.text.document, c);
 }
 
 function advance(b         , bookmarks                        , deadline        )          {
@@ -3329,7 +3379,7 @@ function advance(b         , bookmarks                        , deadline        
     if (!base.byKey.has(text.key)) {
       const c            = { url: row.url, title: row.title, favicon: row.favicon, visits: 0, lastVisit: 0, logVisits: 0, bookmarked: true, text };
       base.list.push(c);
-      base.byKey.set(text.key, c);
+      addTo(base.byKey, base.byDocument, c);
     }
     if (late()) return false;
   }
@@ -3346,7 +3396,7 @@ function advance(b         , bookmarks                        , deadline        
         historyCandidates.set(h, c);
       }
       b.list.push(c);
-      b.byKey.set(text.key, c);
+      addTo(b.byKey, b.byDocument, c);
     }
     if (late()) return false;
   }
@@ -3356,9 +3406,11 @@ function advance(b         , bookmarks                        , deadline        
     if (late()) return false;
   }
   const history = b.byKey;
+  const historyDocuments = b.byDocument;
   b.pool = {
     list: b.list,
     byKey: { get: (key) => history.get(key) ?? base.byKey.get(key), has: (key) => history.has(key) || base.byKey.has(key) },
+    byDocument: { get: (document) => historyDocuments.get(document) ?? base.byDocument.get(document) },
   };
   return true;
 }
@@ -3367,7 +3419,7 @@ function builderFor(history                       , bookmarks                   
   let byBookmarks = builders.get(history);
   if (!byBookmarks) builders.set(history, (byBookmarks = new WeakMap()));
   let b = byBookmarks.get(bookmarks);
-  if (!b) byBookmarks.set(bookmarks, (b = { base: baseFor(bookmarks), history, list: [], byKey: new Map(), historyCursor: 0, bookmarkCursor: 0, pool: null }));
+  if (!b) byBookmarks.set(bookmarks, (b = { base: baseFor(bookmarks), history, list: [], byKey: new Map(), byDocument: new Map(), historyCursor: 0, bookmarkCursor: 0, pool: null }));
   return b;
 }
 
@@ -3410,15 +3462,31 @@ function exactRows                             (rows                )           
 const savedVisit = (history                       , url        )                         => exactRows(history).get(withRootSlash(url));
 const savedBookmark = (bookmarks                        , url        )                          => exactRows(bookmarks).get(withRootSlash(url));
 
-                                                                                                                                                        
+                                             
+                                                                                                                                                                               
 const tabsOverCache = new WeakMap                             ();
+let lastMarked                  = null;
+
+function marked(result          )           {
+  if (lastMarked === result.mark) return result;
+  for (const [key, tabId] of result.tabIds) {
+    const c = result.pool.byKey.get(key);
+    if (c) {
+      c.openIn = result.mark;
+      c.openTabId = tabId;
+      c.openRenamed = false;
+    }
+  }
+  lastMarked = result.mark;
+  return result;
+}
 
 function tabsOver(pool      , tabs                   , currentTabId         )           {
   const cached = tabsOverCache.get(tabs);
   if (cached && cached.pool === pool && cached.currentTabId === currentTabId && cached.rows.length === tabs.length) {
     let same = true;
     for (let i = 0; same && i < tabs.length; i++) same = cached.rows[i] === tabs[i];
-    if (same) return cached;
+    if (same) return marked(cached);
   }
   const tabIds = new Map                ();
   const renamedTabKeys = new Set        ();
@@ -3439,11 +3507,18 @@ function tabsOver(pool      , tabs                   , currentTabId         )   
   }
   const extra              = [];
   const renamed = new Set        ();
+  const mark           = {};
+  const result           = { pool, currentTabId, rows: tabs.slice(), tabIds, extra, renamed, mark };
   for (let i = 0; i < tabs.length; i++) {
     const t = tabs[i] ;
     if (!t.url || t.id === currentTabId) continue;
     const key = pageText(t).key;
     const listed = pool.byKey.get(key);
+    if (listed && (listed.openIn !== mark || (t.customTitle && !listed.openRenamed))) {
+      listed.openIn = mark;
+      listed.openTabId = t.id;
+      listed.openRenamed = !!t.customTitle;
+    }
     if (!t.customTitle) {
       if (!listed && firstOfPage[i] && (renamedTabKeys.size === 0 || !renamedTabKeys.has(key))) extra.push({ url: t.url, title: t.title, pageTitle: t.title, favicon: t.favicon, visits: 0, lastVisit: 0, logVisits: 0, fresh: true, bookmarked: false, tabId: t.id, text: tabPageText(t) });
     } else if (!listed) {
@@ -3453,8 +3528,8 @@ function tabsOver(pool      , tabs                   , currentTabId         )   
       extra.push({ url: t.url, title: t.customTitle, renamed: true, favicon: t.favicon ?? listed.favicon, visits: listed.visits, lastVisit: listed.lastVisit, logVisits: listed.logVisits, bookmarked: listed.bookmarked, tabId: t.id, text: tabPageText(t, listed.text), named: listed.named });
     }
   }
-  const result = { pool, currentTabId, rows: tabs.slice(), tabIds, extra, renamed };
   tabsOverCache.set(tabs, result);
+  lastMarked = result.mark;
   return result;
 }
 
@@ -3462,12 +3537,13 @@ function tabsOver(pool      , tabs                   , currentTabId         )   
 __define("packages/core/src/suggestionRows.ts", function (exports, __require) {
   __export(exports, "pageSuggestion", () => pageSuggestion);
   __export(exports, "suggestionKey", () => suggestionKey);
+  __export(exports, "listsRoutesApart", () => listsRoutesApart);
   __export(exports, "Output", () => Output);
   __export(exports, "createRow", () => createRow);
   __export(exports, "actionRow", () => actionRow);
   __export(exports, "dedupeSuggestions", () => dedupeSuggestions);
                                                     
-const { pageKey, withRootSlash } = __require("packages/core/src/pageText.ts");
+const { documentKey, pageKey, routeOf, withRootSlash } = __require("packages/core/src/pageText.ts");
                                                                  
 
                                                                                                        
@@ -3499,6 +3575,20 @@ function suggestionKey(s            )         {
     case "provider":
       return `provider:${s.providerId}:${pageKey(s.url)}`;
   }
+}
+
+function listsRoutesApart(items                       )          {
+  const routes = new Map                ();
+  for (const s of items) {
+    if (s.kind !== "page") continue;
+    const route = routeOf(s.url);
+    if (!route) continue;
+    const document = documentKey(s.url);
+    const seen = routes.get(document);
+    if (seen === undefined) routes.set(document, route);
+    else if (seen !== route) return true;
+  }
+  return false;
 }
 
 class Output {
@@ -3551,7 +3641,7 @@ __define("packages/core/src/pageMatch.ts", function (exports, __require) {
                                                           
 const { shownWordsOf } = __require("packages/core/src/pageText.ts");
 
-                     
+              
             
                                          
                 
@@ -3660,7 +3750,7 @@ class TopList {
   offer(r        ) {
     const items = this.items;
     if (items.length === this.size && items[items.length - 1] .s >= r.s) return;
-    const same = items.findIndex((x) => x.c.text.key === r.c.text.key);
+    const same = r.c.renamed ? sameKeyAt(items, r) : -1;
     if (same >= 0) {
       if (items[same] .s >= r.s) return;
       items.splice(same, 1);
@@ -3678,11 +3768,20 @@ const LEADING_ROWS = 5;
 
 const matchesAhead = (a        , b        ) => a.m > b.m || (a.m === b.m && a.s > b.s);
 
+function sameKeyAt(items                   , r        )         {
+  for (let i = 0; i < items.length; i++) if (items[i] .c.text.key === r.c.text.key) return i;
+  return -1;
+}
+
 class TabList {
            items           = [];
+  takes(m        , s        )          {
+    const last = this.items[LEADING_ROWS - 1];
+    return !last || m > last.m || (m === last.m && s > last.s);
+  }
   offer(r        ) {
     const items = this.items;
-    const same = items.findIndex((x) => x.c.text.key === r.c.text.key);
+    const same = r.c.renamed ? sameKeyAt(items, r) : -1;
     if (same >= 0) {
       if (!matchesAhead(r, items[same] )) return;
       items.splice(same, 1);
@@ -3699,12 +3798,12 @@ function leadingRows(ranked                   , tabs                   )        
   const lead           = [];
   for (const x of ranked) {
     if (lead.length >= LEADING_PAGE_ROWS) break;
-    if (!lead.some((y) => y.c.text.key === x.c.text.key)) lead.push(x);
+    if (sameKeyAt(lead, x) < 0) lead.push(x);
   }
   const bar = lead.length === LEADING_PAGE_ROWS ? lead[LEADING_PAGE_ROWS - 1] .m : 0;
   for (const t of tabs) {
     if (lead.length >= LEADING_ROWS) break;
-    if (t.m >= bar && !lead.some((x) => x.c.text.key === t.c.text.key)) lead.push(t);
+    if (t.m >= bar && sameKeyAt(lead, t) < 0) lead.push(t);
   }
   return lead;
 }
@@ -3809,7 +3908,7 @@ __define("packages/core/src/textFragment.ts", function (exports, __require) {
   __export(exports, "chooseTextFragment", () => chooseTextFragment);
   __export(exports, "withTextFragment", () => withTextFragment);
 
-                                                                                             
+                                                                                      
 
                                 
                    
@@ -4297,7 +4396,7 @@ __define("packages/core/src/webStore.ts", function (exports, __require) {
   __export(exports, "isExtensionId", () => isExtensionId);
   __export(exports, "webStoreExtensionId", () => webStoreExtensionId);
   __export(exports, "permissionWarnings", () => permissionWarnings);
-                                                                                        
+                                                                                 
 
 const isExtensionId = (s        ) => /^[a-p]{32}$/.test(s);
 

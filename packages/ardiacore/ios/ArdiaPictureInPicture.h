@@ -8,6 +8,8 @@
 namespace ardia_pip {
 
 void WatchZoom();
+void RefreshPinchesFromOtherApps();
+void ForgetSavedSize();
 
 NSWindow *GrabbedWindow();
 

@@ -37,6 +37,7 @@ All of them are in `apps/browser/scripts/perf/`.
 | `bookmark-move-bench.mjs` | Node | A Bookmarks page drag of a selection into another folder: CPU time of the store update and of the diff sent to Chrome, and how many ops it sends (`--each` and `--slice`/`--flat` time older code). No app needed. |
 | `ratchet.mjs`, `ratchet.json` | ratchet | Ceilings on counts that can only go down, and the commands that check, lower and rebuild them. |
 | `ratchet-app.js`, `ops.mjs` | ratchet | The `launch` scenario the ratchet adds to js-bench, and the builtin-call counter micro-bench uses. |
+| `median.mjs`, `processes.mjs` | shared | The median the app benches and the gate report (session-save-bench keeps its own upper-middle sample), and the process-table helpers (a launched app's process tree, Chromium process kinds) the benches and the gate share. |
 
 Every bench that runs a copy of the app (js-bench, render-bench, census, native-bench, tab-actions) makes it with
 `prepareApp` in `scripts/lib/app-copy.mjs`: an APFS clone with the bundle swapped in, re-signed with the original's identity
@@ -687,7 +688,8 @@ run on the main thread right after the same tab changes that schedule a save.
 `freeze_duration` (400ms_1s … over_30s), `freeze_ms`, `input_wait_ms`, `gc_ms`, `gc_count`, `heap_mb_floor`,
 `activity`, `js_activity` (main-thread freezes: the JS-only job alongside), `tabs_floor`, `windows`, `sync_on`, `layout`, `action_in_flight` (the journeys' pending new tab, switch,
 navigation or launch), `memory_pressure`, `thermal`, `on_battery`, `uptime`, `signature` (`sig_` and the FNV-1a, in hex, of the top three frames
-from our own images), `samples`, and `freeze_frames`/`freeze_images` in the crash reports' shape. At most 5 a session and
+from our own images), `samples`, `freeze_frames`/`freeze_images` in the crash reports' shape, and `freeze_system_cache` (the
+dyld shared cache UUID that `system` frames are offsets into, from its base, or null without a system frame). At most 5 a session and
 20 a UTC day, one per signature a day, counted in `freeze-sends.json` (the day, its send count and its signatures; apart from the 20-slot local ring, which wraps). The dashboard's Performance › Freezes card
 ranks signatures over 7 days by people affected, then total time frozen.
 

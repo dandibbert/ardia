@@ -71,7 +71,7 @@ import {
 } from "../../state/browse/store";
 import { menuOpenedHaptic } from "../../state/browse/tabMenus";
 import { useCanReopen, useHasArchivedTabs, useIncognito, usePrivateCount, useShownSpace } from "../../state/tabs/hooks";
-import { archiveCardLayout, chromeLayout, ConfirmSheet, deckChromeLayout, DeckLookBackdrop, iPhoneOr, DeckLookBackdropBase, FrostSource, measureAnchor, Menu, menuExitMs, MenuFloorProvider, moveTo, pointPlacer, Portal, ScrollActions, Shade, space, tabsCurve, tabsLayout, tabsMotion, type Confirmation, type MenuItem, useDesign, useFocusReturn, useReduceMotion, usesGlass, useTheme } from "../ui";
+import { archiveCardLayout, chromeLayout, ConfirmSheet, deckChromeLayout, DeckLookBackdrop, iPhoneOr, DeckLookBackdropBase, FrostSource, GlassSource, measureAnchor, Menu, menuExitMs, MenuFloorProvider, moveTo, pointPlacer, Portal, ScrollActions, Shade, space, tabsCurve, tabsLayout, tabsMotion, type Confirmation, type MenuItem, useDesign, useFocusReturn, useReduceMotion, usesGlass, useTheme } from "../ui";
 import { openSettings } from "../../state/settings/hooks";
 import { confirmInSheet, nativeMenus } from "../ui/MenuTrigger";
 import { useSyncEnabled } from "../../state/sync/hooks";
@@ -96,6 +96,7 @@ import { MaterialDeckBackdrop, MaterialDeckChrome, MaterialDeckEmpty } from "./M
 import { MATERIAL_DECK, materialBottomRowCenter, materialCloseAt, materialDeckGeometry } from "./MaterialDeckLayout";
 import { materialDuration, materialMove, materialSize } from "../ui/materialTokens";
 import { PageBarGhost } from "../browsing/PageBarGhost";
+import { materialMenuWidth } from "../ui/MaterialSurfaces";
 import { useMaterialBarHosted } from "../browsing/PersistentMaterialBar";
 import { screenCornerRadius } from "../../state/app/displayCorner";
 import { TabGrid, type GridFrame } from "./TabGrid";
@@ -523,6 +524,7 @@ export const TabDeck = memo(function TabDeck() {
       const kept = sideScrolls.current[side ? "incognito" : "normal"];
       showSide(ids, alive, kept === null ? initialDeckScroll(ids.length) : Math.min(Math.max(kept, 0), Math.max(ids.length - 1, 0)), sideLeaving.current);
       sideLeaving.current = false;
+      if (!side && offerArchiveAgain(sideTabs.length)) countUsage("archive_card_reoffers");
       return;
     }
     const next = mergeDeckOrder(order, ids);
@@ -547,8 +549,10 @@ export const TabDeck = memo(function TabDeck() {
 
   const showNewSpace = (ids: string[], alive: ReadonlySet<string>) => {
     showSide(ids, alive, initialDeckScroll(ids.length));
-    if (!archiveOffered && !redesigned) offerArchiveCard(ids.length);
+    offerArchiveAgain(sideTabs.length);
   };
+
+  const offerArchiveAgain = (openTabs: number) => !archiveOffered && !redesigned && offerArchiveCard(openTabs);
 
   const showSide = (ids: string[], alive: ReadonlySet<string>, to: number, faded = false) => {
     for (const id of hidden.current) if (!alive.has(id)) hidden.current.delete(id);
@@ -1012,7 +1016,7 @@ export const TabDeck = memo(function TabDeck() {
   const cardMenuItems = (index: number): MenuItem[] => {
     const tab = tabs.get(order[index] ?? "");
     const closeCard = () => close(index, 0);
-    if (!tab) return [{ label: "Close Tab", destructive: true, onPress: closeCard }];
+    if (!tab) return [{ label: "Close Tab", icon: "xmark", destructive: true, onPress: closeCard }];
     return deckCardMenu(tab, { devices: sendTargetsFor(tab), pinned: isTabPinned(tab), syncEnabled, spaces: redesigned ? spaceMoveTargets(tab) : [], icons: true }, closeCard);
   };
 
@@ -1141,6 +1145,7 @@ export const TabDeck = memo(function TabDeck() {
           </>
         )}
       </Animated.View>
+      <GlassSource name={DECK_FROST}>
       <Shade shaded={menu !== null || (chromeMenu && !nativeMenus()) || cardMenu !== null || confirmation !== null}>
         <StackLayer available={gridAvailable} grid={grid} motion={crossfade} onFaded={() => setStackLayer(!grid)}>
         <ScrollActions
@@ -1292,6 +1297,7 @@ export const TabDeck = memo(function TabDeck() {
         )}
         </MotionView>
       </Shade>
+      </GlassSource>
       <DeckLookProbe
         busy={phase.kind !== "settled" || menu !== null || chromeMenu || cardMenu !== null || confirmation !== null || deckSheet !== null || trayOpen || deckSurface !== "deck" || archiveCard}
         touch={probeTouch}
@@ -1399,9 +1405,10 @@ const styles = StyleSheet.create({
 
 function CardMenuAt({ items, privately, at, control, floor, screen, onDismiss }: { items: MenuItem[]; privately: boolean; at: { x: number; y: number }; control?: Rect; floor: number; screen: { width: number; height: number }; onDismiss: (chosen?: boolean) => void }) {
   const insets = useSafeAreaInsets();
+  const width = useDesign() === "material" ? materialMenuWidth(items) : tabsLayout.menuWidth;
   return (
     <Portal exitMs={menuExitMs(true)}>
-      <Menu items={items} placer={pointPlacer(at, screen, insets, tabsLayout.menuWidth, { floor, control })} privately={privately} dimmed onDismiss={onDismiss} />
+      <Menu items={items} placer={pointPlacer(at, screen, insets, width, { floor, control })} privately={privately} dimmed onDismiss={onDismiss} />
     </Portal>
   );
 }

@@ -55,5 +55,6 @@ export async function diagnostics(): Promise<string> {
     ...(engine?.focus ? [`Focus: ${engine.focus.replace(/\n/g, "\n  ")}`] : []),
     ...(engine?.pictureInPictureCloses ? [`Picture in Picture closes: ${engine.pictureInPictureCloses.replace(/ \| /g, "\n  ")}`] : []),
     ...(focusState ? [focusState] : []),
+    ...(engine?.pictureInPictureGestures ? [`Picture in Picture gestures:\n  ${engine.pictureInPictureGestures.replace(/\n/g, "\n  ")}`] : []),
   ].join("\n");
 }

@@ -1,12 +1,11 @@
 import { Button, ListRow, NativeFormContext, space, Symbol, Text, VisualEffect, WindowDragRegion } from "../ui";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { useTheme } from "../ui/theme";
 import { useProfile } from "../../state/browser/hooks";
 import { usePluginTitle } from "../../state/plugins/hooks";
 import { trackSettingsSection } from "../../state/telemetry/track";
 import { preparePane, usePaneLoaded } from "../../state/settings/paneData";
-import { clearSettingsReveal, flashSetting, settingsSearchHost, useSettingsSearch } from "../../state/settings/searchState";
+import { dropReveal, revealTargetShown, revealWanted, runReveal, settingsSearchHost, useSettingsSearch } from "../../state/settings/searchState";
 import { anchorView } from "./anchors";
 import { findSetting, resolveSettingId, PANES, paneTitle } from "./settingsIndex";
 import { SettingsPaneContext, UnshownSettingsProvider } from "./Form";
@@ -120,25 +119,31 @@ export function SettingsWindow() {
   const switched = useRef(key);
   useEffect(() => {
     if (!reveal) return;
-    if (nav.pane !== revealPane) return void clearSettingsReveal();
-    if (shown?.pane !== revealPane) return;
+    if (!revealWanted(reveal, nav) || revealPane !== reveal.target.pane) return void dropReveal(reveal.token);
+    if (!revealTargetShown(shown, reveal)) return;
     const animated = switched.current === key;
-    const frame = requestAnimationFrame(() => {
-      const target = anchorView(resolveSettingId(reveal.id));
+    const id = resolveSettingId(reveal.id);
+    let stop = () => {};
+    const locate = () => {
+      const target = anchorView(id);
       const container = content.current;
-      if (!target || !container) return flashSetting("");
-      target.measureLayout(
-        container,
-        (_x, y, _w, h) => {
-          const top = animated ? scrollTop.current : 0;
-          const inView = y >= top + REVEAL_MARGIN && y + h <= top + viewport.current - REVEAL_MARGIN;
-          if (!inView) scroller.current?.scrollTo({ y: Math.max(0, y - viewport.current / 3), animated });
-          flashSetting(resolveSettingId(reveal.id));
-        },
-        () => flashSetting(resolveSettingId(reveal.id)),
-      );
+      if (!target || !container) return null;
+      return {
+        measure: (found: (y: number, height: number) => void, failed: () => void) => target.measureLayout(container, (_x, y, _w, h) => found(y, h), failed),
+        still: () => anchorView(id) === target && content.current === container,
+      };
+    };
+    const frame = requestAnimationFrame(() => {
+      stop = runReveal(reveal, id, locate, (y, h) => {
+        const top = animated ? scrollTop.current : 0;
+        const inView = y >= top + REVEAL_MARGIN && y + h <= top + viewport.current - REVEAL_MARGIN;
+        if (!inView) scroller.current?.scrollTo({ y: Math.max(0, y - viewport.current / 3), animated });
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      stop();
+    };
   }, [reveal, key]);
   useEffect(() => {
     switched.current = key;
@@ -233,4 +238,3 @@ function SidebarItem({ title, icon, tint, selected, onPress }: { title: string; 
 const SIDEBAR_ITEM_HEIGHT = 30;
 const PANE_TILE = { width: paneTile.size, height: paneTile.size, borderRadius: paneTile.radius, alignItems: "center", justifyContent: "center" } as const;
 const PANE_TILE_SYMBOL = { width: paneTile.size, height: paneTile.size } as const;
-

@@ -1,4 +1,5 @@
 import type { IntroMusicCues } from "./app";
+import type { DevNative } from "./generated/native";
 
 export type SidebarEdgeStats = { wakes?: { global: number; local: number }; global?: boolean; local?: boolean; watched?: number };
 export type KeyTiming = { due: number; handled: number; drawn: number };
@@ -55,25 +56,4 @@ export type PointerSweepResult = {
   heldHovers: number;
 };
 
-export type DevNative = {
-  devCrash(kind?: "exception"): Promise<void>;
-  devBlockMain(ms: number): Promise<number>;
-  devRenderIntroMusic(cues: IntroMusicCues, path: string): Promise<number | null>;
-  devRunAppleScript(source: string): Promise<{ ok: boolean; result?: unknown; error?: string; number?: number }>;
-  devSnapshotWindow(windowId: string, path: string, transparent?: boolean): Promise<boolean>;
-  devSetPointer(windowId: string, x: number, y: number, on: boolean): Promise<boolean>;
-  devPointerSweep(windowId: string, sweep: PointerSweep): Promise<PointerSweepResult | null>;
-  devSetMouseButtons(pressed: number): Promise<boolean>;
-  devSidebarEdgePointer(windowId: string, x: number, y: number, on: boolean): Promise<boolean>;
-  devSidebarEdgeStats(reset: boolean): Promise<SidebarEdgeStats>;
-  devHoverStats(reset: boolean): Promise<{ passes?: number; log?: [string, number, number][]; registered?: number }>;
-  devMenuCommand(command: string, arg: string | null): Promise<void>;
-  devTypeKeys(windowId: string, text: string, interval: number): Promise<KeyTiming[]>;
-  devFieldTrace?(on: boolean): Promise<{ at: number; text: string; start: number; end: number }[]>;
-  devKeyEquivalent(windowId: string, press: KeyPress): Promise<KeyPressResult>;
-  devClick(windowId: string, click: Click): Promise<ClickResult>;
-  devShortcutRecording(): Promise<boolean>;
-  devReceiveURLsWhenDetached(urls: string[], timeoutMs: number): void;
-  devOpenURLDeliveries(): Promise<{ urls: string[]; pointer: [number, number]; source?: { bundleId: string | null; appName: string | null } }[]>;
-  devURLDelivery(): Promise<{ state?: "waiting" | "received" | "neverDetached"; waitedMs?: number; attachedAfter?: boolean }>;
-};
+export type { DevNative };

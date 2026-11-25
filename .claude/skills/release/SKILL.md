@@ -495,9 +495,8 @@ still ships, and `publish` warns that Linux was skipped. After a stable release 
 `ardia-bin` to it (`scripts/linux/arch/publish-aur.sh`) when the `AUR_SSH_PRIVATE_KEY` secret is set; a dry run, or a
 missing secret, only shows the commit it would push.
 
-Linux engines are built on a Boat VM (boat.dev, `boat new --type xlarge --ttl 21600`, or resumed from a saved
-builder snapshot and stopped right after publishing — never `--no-auto-stop`, and never in GitHub Actions). On the
-VM, at the commit whose engine key needs one:
+Linux engines are built in `msi`'s WSL 2 Ubuntu (never in GitHub Actions). On `msi`'s WSL, at the commit whose engine
+key needs one:
 
 ```bash
 scripts/linux/build.sh --apply
@@ -526,7 +525,8 @@ refuses the installers without their source. After `publish`, the
 `windows-alpha` prerelease and points `windows-update.json` at them, so installed Windows apps offer the release. A dry
 run checks the files in `publish.sh --dry-run` and packs the feed with `publish-alpha.sh --dry-run`; nothing goes up.
 
-A failed `windows` job never blocks the Mac: `publish` warns, the release ships without Windows and the feed stays on
+`-f windows=false` on the dispatch skips the `windows` job when the owner wants a Mac-focused release: `publish` ships without the
+installers and `windows-update` leaves the feed on the build before, as after a failed job. A failed `windows` job never blocks the Mac: `publish` warns, the release ships without Windows and the feed stays on
 the build before. Say so in the report. Don't re-run the release's failed jobs for it (that re-runs `publish`). If the
 cause is outside the code, dispatch `windows.yml` at `v<version>` with `-f version=<version>`, then upload its
 `windows-release-*` files and run `publish-alpha.sh --installers` (`docs/windows.md` › Releases has the four lines). If it's

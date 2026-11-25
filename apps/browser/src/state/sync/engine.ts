@@ -4,10 +4,10 @@ import { create } from "zustand";
 import { useBrowser } from "../browser/store";
 import { engineProfile } from "../browser/model";
 import { historyExpired } from "./historyAdapter";
-import { settingsToReapply } from "./settingsAdapter";
+import { settleRetiredDefaultsWithoutSync, settleSettingsFromSavedSync } from "./settingsAdapter";
 import { watchExtensionIntents } from "./extensions";
 import { appAdapters, extensionsOf, forgetScopeAdapters, profileAdapters, typeSynced } from "./scopeAdapters";
-import { APP_SCOPE, emptyDoc, emptyUi, type DataType, type SendTarget, type SyncDoc, type SyncUi } from "./syncDoc";
+import { APP_SCOPE, emptyDoc, emptyUi, typeSyncedFor, type DataType, type SendTarget, type SyncDoc, type SyncUi } from "./syncDoc";
 import { syncFiles } from "./syncFiles";
 import { settleThemeAdoption, themeChosenHere } from "./syncThemes";
 import { editClock, startEditClock } from "./editClock";
@@ -35,7 +35,7 @@ const CYCLE_MS = 15_000;
 const AFTER_EDIT_MS = 3_000;
 
 export const useSync = create<SyncUi>()(() => emptyUi(SyncNative ? "off" : "unavailable"));
-export const syncCore = () => SyncNative?.core ?? "native";
+export const whenSyncCore = <Consent>(consent: Consent, emit: (core: "rust" | "native", consent: Consent) => void) => emit(SyncNative?.core === "rust" ? "rust" : "native", consent);
 
 export const currentSyncFolder = () => useSync.getState().folder;
 
@@ -52,6 +52,7 @@ function load() {
 }
 
 function publishUi(patch: Partial<SyncUi> = {}) {
+  if (!doc.enabled || !typeSyncedFor(doc.types, "settings", true)) settleRetiredDefaultsWithoutSync();
   useSync.setState({
     enabled: doc.enabled,
     joining: doc.enabled && doc.joining,
@@ -204,11 +205,11 @@ export function adoptProfileTheme(profileId: string) {
 }
 
 async function loadSavedState() {
-  await loadState();
+  const loading = doc;
+  const installed = await loadState(loading);
   startEditClock(doc.deviceId ?? "", doc.clock);
-  const app = doc.scopes[APP_SCOPE];
-  if (app) app.unapplied = [...new Set([...app.unapplied, ...settingsToReapply(app.records)])];
-  settleThemeAdoption(doc.profiles, app, false);
+  settleSettingsFromSavedSync(doc.scopes[APP_SCOPE], installed && doc === loading && doc.enabled && !stopping && typeSyncedFor(doc.types, "settings", true));
+  settleThemeAdoption(doc.profiles, doc.scopes[APP_SCOPE], false);
 }
 
 async function resetFromElsewhere() {

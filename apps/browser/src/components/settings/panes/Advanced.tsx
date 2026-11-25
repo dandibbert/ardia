@@ -84,6 +84,7 @@ export function AdvancedPane(_: SettingsPlace) {
       <SectionHeader title="Browsing" />
       <Group>
         <SettingToggle anchor="advanced.showFullUrl" />
+        <SettingToggle anchor="advanced.commandScrollZoom" />
         <Row anchor="advanced.chromeSettings">
           <Button title="Open Chromium Settings" onPress={openChromeSettings} />
         </Row>
@@ -144,7 +145,7 @@ function PerformanceSection() {
 
 const viaPlugin = PLATFORM_FEATURES.plugins;
 
-export function programsLine(programs: ProgramsState | undefined): string {
+function programsLine(programs: ProgramsState | undefined): string {
   if (programs?.state === "linked") {
     const refused = Object.entries(programs.refused).map(([name, reason]) => `${name}: ${reason}`);
     if (refused.length) return refused.join("; ");
