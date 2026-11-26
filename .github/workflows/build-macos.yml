@@ -2,6 +2,11 @@ name: Build macOS app
 
 on:
   workflow_dispatch:
+    inputs:
+      check_hub_token:
+        description: "Only check that M1_BUILD_HUB_TOKEN can start mac-build-hub workflows; build nothing"
+        type: boolean
+        default: false
   push:
     branches:
       - "claude/**"
@@ -14,9 +19,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  hub-token-check:
+    name: M1 hub token check
+    if: inputs.check_hub_token
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read the hub's Ardia workflow and start its harmless release token check
+        env:
+          M1_BUILD_HUB_TOKEN: ${{ secrets.M1_BUILD_HUB_TOKEN }}
+        run: |
+          [ -n "$M1_BUILD_HUB_TOKEN" ] || { echo "::error::M1_BUILD_HUB_TOKEN is not set in this repository"; exit 1; }
+          api=https://api.github.com/repos/dandibbert/mac-build-hub/actions/workflows
+          headers=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer $M1_BUILD_HUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28")
+          read_status=$(curl -sS -o /dev/null -w '%{http_code}' "${headers[@]}" "$api/ardia-macos.yml")
+          echo "read ardia-macos.yml: $read_status" | tee -a "$GITHUB_STEP_SUMMARY"
+          start_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${headers[@]}" "$api/ardia-token-check.yml/dispatches" -d '{"ref":"main"}')
+          echo "start ardia-token-check.yml: $start_status" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$read_status" = 200 ] && [ "$start_status" = 204 ] || { echo "::error::M1_BUILD_HUB_TOKEN needs Actions read and write on dandibbert/mac-build-hub"; exit 1; }
+          echo "M1_BUILD_HUB_TOKEN can hand builds to the M1" | tee -a "$GITHUB_STEP_SUMMARY"
+
   m1-fallback:
     name: M1 fallback
-    if: github.repository == 'dandibbert/ardia'
+    if: github.repository == 'dandibbert/ardia' && !inputs.check_hub_token
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
@@ -43,6 +68,7 @@ jobs:
         run: node .github/test-build/m1-queue-fallback.mjs
 
   build:
+    if: ${{ !inputs.check_hub_token }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
