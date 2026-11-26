@@ -175,6 +175,13 @@ export const advancedRows = {
           keywords: ["agent", "ai", "browser use", "automation", "background", "cli", "group"],
           shown: () => PLATFORM_FEATURES.ardiaCommand,
         },
+        showCliPill: {
+          title: "Show the control pill",
+          explained: true,
+          description: "Shows who is controlling Ardia at the bottom of the page with a Stop button. You can still stop programs above.",
+          keywords: ["cli", "control pill", "is controlling", "agent", "claude code", "codex", "hide", "dismiss", "turn off", "banner", "indicator", "stop"],
+          shown: () => PLATFORM_FEATURES.ardiaCommand,
+        },
         compactCliPill: {
           title: "Show the control pill as an icon and Stop",
           explained: true,

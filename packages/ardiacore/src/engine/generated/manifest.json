@@ -247,6 +247,11 @@
           "windows": "custom",
           "routeField": "tasks"
         },
+        "nativeMessagingHosts": {
+          "mac": "custom",
+          "desktop": "absent",
+          "windows": "absent"
+        },
         "childProcessCpu": {
           "mac": "custom",
           "desktop": "custom",
@@ -943,11 +948,6 @@
           "desktop": "custom",
           "windows": "absent"
         },
-        "ctrlTabMru": {
-          "mac": "custom",
-          "desktop": "absent",
-          "windows": "absent"
-        },
         "release": {
           "mac": "custom",
           "desktop": "custom",
@@ -1403,6 +1403,11 @@
           "windows": "absent"
         },
         "takeContentDrift": {
+          "mac": "custom",
+          "desktop": "absent",
+          "windows": "absent"
+        },
+        "takePageMetrics": {
           "mac": "custom",
           "desktop": "absent",
           "windows": "absent"

@@ -21,12 +21,17 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   transcript activity, a pending tool call, `/tmp/ac-*.holder`, its processes). A stuck agent means a root
   cause to fix (a lock, a wait, a hang), not just a restart. Send new feedback to the agent that owns
   that area (SendMessage) instead of starting a new one, and batch finished fixes into the next release.
+- **Say when an instruction caused it.** When the owner asks for a change to something you did and it came out
+  that way because you followed an instruction (this file, a doc, a skill), say so at once and name the
+  instruction, so it can be fixed where it is written.
 - **Ask Codex for a second opinion** on risky logic (races, lifetimes, security, migrations, sync) and reviews,
   before and after the change. Ask a Codex subagent, not the CLI: T3's `delegate_task` with
   `target: {providerInstanceId: "codex", model: "gpt-6.2-sol", options: {reasoningEffort: "high", serviceTier: "priority"}}`,
-  `role: "review"`, `mode: "async"`, and a new `clientRequestId` per round. Tell it to review only and edit
-  nothing, and give it the full brief each round (it doesn't share your context). It reads more than it runs:
-  reproduce each finding before fixing it. Cap review loops at 5 rounds per PR (stop earlier once approved
+  `role: "review"`, `mode: "async"`, and a new `clientRequestId` per round. Codex may run any command it needs
+  (builds, tests, scripts, hidden instances, captures) in its own target and data dirs, but never writes, edits,
+  formats or stages code. Give it the full brief each round (it doesn't share your context), including what you
+  changed since the last round, how you verified it and which earlier findings you fixed or rejected and why.
+  Reproduce each finding before fixing it. Cap review loops at 5 rounds per PR (stop earlier once approved
   or only nits remain; if blockers stay open after round 5, stop and escalate to the owner).
 - **Worktrees are fine.** Use a git worktree or a scratch clone for isolated feature, PR and full-send work, so
   you can switch branches, reset and stash without touching anyone else. `scripts/agent/guard-git` only blocks
@@ -105,9 +110,12 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
   (`@ts-expect-error`, `eslint-disable`, `#pragma`, `swiftlint:`, `# noqa`), and the header a script prints as its
   `--help`.
 - **The Chromium build cache is sacred.** Never touch `~/chromium-build/chromium_git/chromium/src/out`,
-  and never run `gclient sync` or `gn clean`: a full rebuild costs about 5 hours. Engine changes are
-  incremental builds only, holding the chromium lock (`scripts/agent/locked chromium`,
-  `docs/engine-build.md`). When freeing disk space, stay out of `~/chromium-build`.
+  and never run `gclient sync` or `gn clean`: a full rebuild costs about 5 hours. `engine/` itself is
+  not off-limits: when a fix or feature belongs in the engine, make the change, run an incremental
+  build under the chromium lock (`scripts/agent/engine-build` on a plugged-in Mac, `scripts/linux/build.sh --apply`
+  on `msi` WSL 2, or the Windows engine cross-build in `docs/engine-build-windows.md`), and publish
+  the updated prebuilt engine (`scripts/publish-engine.sh`, `docs/engine-build.md`) rather than working
+  around it in JS or parking the PR. When freeing disk space, stay out of `~/chromium-build`.
 - **Never steal focus.** Run builds only as hidden instances:
   `open -g -n --env ARDIA_BACKGROUND=1 --env ARDIA_DATA_DIR=<throwaway dir> --env ARDIA_REMOTE_DEBUGGING_PORT=<port> <app>`.
   Never use plain `open`. Background mode logs context menus and file panels instead of showing them.
@@ -147,14 +155,16 @@ cross-builds. Don't spin up Boat VMs.
   Each platform has its own engine key (`engine/engine-key.sh --platform macos|linux`): a change only Linux builds
   (`engine/ardiacore-linux`, a `linux` line of `engine/patches/series` and its patch) needs a new Linux engine and
   keeps the Mac's, and the reverse; a shared change needs both. CI: `.github/workflows/linux.yml` (`docs/linux-ci.md`); acceptance: `docs/linux-acceptance.md`.
-- **Windows** (`docs/windows.md`): `apps/browser/windows` (React Native Windows) and `packages/expo-windows` host
-  Chromium's `chrome.dll`, renamed Ardia, with each tab's page in its own window under the app's. The x64 engine is
+- **Windows** (`docs/windows.md`): Chromium's `chrome.exe`, renamed `Ardia.exe`, is the app and serves the shared
+  desktop UI (`apps/desktop`, its `--mode win` build) from `chrome://ardia/`, as on Linux; `scripts/windows/engine/src/ardia/win`
+  is its native layer. The React Native Windows app is gone (#4143); `ardia-webui-migrate.exe` still moves an old
+  install's data on its first WebUI start. The x64 engine is
   cross-built in `msi`'s WSL 2 Ubuntu in `~/chromium-build-win`, and the ARM64 engine
   is cross-built on `mini` in `~/chromium-build-win` (`docs/engine-build-windows.md`; never `~/chromium-build`), because
   x86_64 hosts hit V8's `mksnapshot` arm64 simulator crash. Its
   sources and patches live in `scripts/windows/engine/` (never under `engine/`, which would move the Mac's engine
   key), and `scripts/windows/engine/prebuilt.json` pins the release CI fetches. CI: `.github/workflows/windows.yml`
-  builds x64 and ARM64 on Windows runners, launches the app, tours pages with real input and installs the
+  builds the WebUI shell for x64 and ARM64 on Windows runners, tours it with real input and installs the
   installer. To run or test it yourself, use **`msi`** natively on Windows 11.
 
 ## Building features
@@ -276,8 +286,8 @@ cross-builds. Don't spin up Boat VMs.
 - Write simple, concise English. Pinned attention items are goals: show progress and the next step, not the original issue again.
 
 ## Repo map
-`apps/browser` is the React Native macOS app; `apps/browser/windows` and `packages/expo-windows` are the Windows
-app (`docs/windows.md`), and `apps/desktop` the Linux UI (and the Windows WebUI build, `--mode win`) with `scripts/linux` for its build, packaging and engine. `scripts/windows` holds
+`apps/browser` is the React Native macOS app; `apps/desktop` is the Linux UI and the Windows app (its `--mode win`
+WebUI build, `docs/windows.md`; `apps/browser/windows/Ardia` keeps only the icon and `EngineApi.h`, which the Windows engine reads, and `SyncWordlist.h`, which the sync vectors check) with `scripts/linux` for its build, packaging and engine. `scripts/windows` holds
 the Windows packaging, checks and engine build. The native Expo modules are in `packages/{ardiacore,shell,shaders,import,sync}`; `engine/chromium` is our Chrome-services code (the `ac_*` C calls) and `engine/ardiacore` ArdiaCore's window and tab layer
 (`engine/ardiacore-linux` on Linux),
 and `packages/core` holds the omnibox logic and its tests. `packages/demo` is the app on the web (the site's demo).
