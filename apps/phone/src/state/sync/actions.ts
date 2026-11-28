@@ -21,7 +21,7 @@ import { findTab } from "../tabs/tabsState";
 import { moveTargets } from "../tabs/spaces";
 import { showToast, TOAST_LONG_DURATION_MS } from "../toasts/store";
 import { isPinnedOnMac, pinsOnTheirWay } from "./spaces";
-import { noteLocalChange, notePinSent, selectedProfile, selectedProfileId, startSyncSources, syncData, useSync } from "./store";
+import { noteLocalChange, notePinSent, pickSpace, selectedProfile, selectedProfileId, startSyncSources, syncData, useSync } from "./store";
 import { copy } from "../../lib/platformCopy";
 import { countUsage, usageCountingWindow } from "../telemetry/telemetry";
 import {
@@ -171,9 +171,7 @@ export const syncNow = () => settled(() => sync.syncNow(), undefined);
 
 export const setDeviceName = (name: string) => quietly(() => sync.setDeviceName(name));
 
-export function selectProfile(profileSyncId: string) {
-  quietly(() => sync.selectProfile(profileSyncId));
-}
+export const selectProfile = (profileSyncId: string) => pickSpace(profileSyncId);
 
 export function matchMyMac(on: boolean, look: ProfileLook) {
   const choice = choiceAfterMatchToggle(on, look, "plum") as ColorChoice | null;
@@ -225,8 +223,10 @@ export async function pinToMac(tab: BrowserTab, onSetup: () => void, showInTitle
   announce(pinned ? "pinned" : "failed");
 }
 
+export const opensRemotely = (url: string) => /^https?:\/\//i.test(url);
+
 export function openRemote(url: string, title: string, profileSyncId: string | null, pinnedKey: string | null = null) {
-  if (!/^https?:\/\//i.test(url)) return;
+  if (!opensRemotely(url)) return;
   useBrowse.setState({ sheet: null });
   setIncognito(false);
   if (profileSyncId && syncData().status.isEnabled && profileSyncId !== selectedProfileId()) selectProfile(profileSyncId);

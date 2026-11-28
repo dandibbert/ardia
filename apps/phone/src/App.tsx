@@ -37,6 +37,7 @@ import { startLinks } from "./state/links/links";
 import { useBaseSystemBars, useSystemBars } from "./state/app/systemBars";
 import { useSearchFromDockedMenu, useSearchOpen } from "./state/search/hooks";
 import { useLeavingTab, useOpeningTab, useSheet, useSurface } from "./state/browse/hooks";
+import { reportShownPage, startShownPage } from "./state/browse/shownPageSource";
 import { appBecameActive, appWillResignActive, closeArchive, deckPullInFlight, goBackToStartIfEmpty, keepFrontPictureCurrent, startBrowser, type Surface } from "./state/browse/store";
 import { refreshHiddenDeck, resizeRoot } from "./state/browse/deckHold";
 import { useDeckStandbyWanted } from "./state/browse/deckStandby";
@@ -51,6 +52,8 @@ import { useVoicePresented } from "./state/voice/store";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { closeSettings } from "./state/settings/nav";
 import { applyLaunchSettings, runLaunchScenario } from "./state/app/launch";
+import { appStateChanged } from "./state/app/appStateChange";
+import { rememberLaunchLookOnLeaving, useLaunchLook } from "./state/app/launchLook";
 import { frontSheet } from "./state/settings/settingsRules";
 import { inkLayer, lightStatusIcons } from "./lib/statusInk";
 import { whenIdle } from "./lib/whenIdle";
@@ -67,6 +70,7 @@ import { useMaterialTheme } from "./components/ui/materialTheme";
 import type { Design } from "./lib/design";
 import { onMaterialBackSwiped } from "./components/ui/MaterialSurfaces";
 import { useTabs } from "./state/tabs/store";
+import { startUpdateChecks } from "./state/appUpdate/store";
 
 export default function App() {
   useState(() =>
@@ -77,6 +81,7 @@ export default function App() {
       followDesign(applyDesign);
       startTelemetry();
       startBrowser(applyLaunchSettings);
+      startShownPage();
       startPageUi();
       startSettingsSources();
       if (syncOffered()) startSync();
@@ -92,6 +97,7 @@ export default function App() {
     const frame = requestAnimationFrame(() => {
       if (Platform.OS === "android") followDynamicScheme();
       void reportLaunch(Date.now());
+      startUpdateChecks();
     });
     return () => cancelAnimationFrame(frame);
   }, [ready]);
@@ -103,13 +109,13 @@ export default function App() {
   }, [drawnSomething]);
   const dark = useDarkScheme();
   const look = useLook(PROFILE_PRESETS, DEFAULT_PROFILE_COLOR);
+  useLaunchLook(PROFILE_PRESETS, DEFAULT_PROFILE_COLOR);
   useBaseSystemBars(dark);
   useEffect(() => {
     const back = BackHandler.addEventListener("hardwareBackPress", () => useBoot.getState().ready && handleSystemBack());
     const state = AppState.addEventListener("change", (next) => {
       if (!useBoot.getState().ready) return;
-      if (next === "active") appBecameActive();
-      else appWillResignActive();
+      appStateChanged(next, { becameActive: appBecameActive, resignActive: appWillResignActive, reportShownPage, rememberLaunchLook: rememberLaunchLookOnLeaving });
     });
     return () => {
       back.remove();

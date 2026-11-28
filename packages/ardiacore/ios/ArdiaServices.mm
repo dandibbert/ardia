@@ -165,6 +165,13 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
       completion:^(NSDictionary *result) { Answer(result, reply); }];
 }
 
++ (void)replacePassword:(NSString *)profile origin:(NSString *)origin username:(NSString *)username password:(NSString *)password
+               expected:(NSString *)expected reply:(ArdiaServiceReply)reply {
+  [self call:@"ac_passwords_replace" profile:profile args:Login(origin, username)
+      secrets:@{@"password" : password ?: @"", @"expected" : expected ?: @""}
+      completion:^(NSDictionary *result) { Answer(result, reply); }];
+}
+
 + (void)updatePassword:(NSString *)profile origin:(NSString *)origin username:(NSString *)username
            newUsername:(NSString *)newUsername newPassword:(NSString *)newPassword reply:(ArdiaServiceReply)reply {
   NSMutableDictionary *args = [Login(origin, username) mutableCopy];
@@ -283,6 +290,7 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
     NSArray *infos = result[@"extensions"];
     if (![infos isKindOfClass:NSArray.class]) return reply(nil, @"Unexpected extension list");
     NSMutableArray *list = [NSMutableArray array];
+    NSDictionary<NSString *, NSNumber *> *newTabRanks = ardia_extensions::NewTabOverrideRanks([ProfileDirectory(profile) stringByAppendingPathComponent:@"Preferences"]);
     for (NSDictionary *info in infos) {
       if (![info isKindOfClass:NSDictionary.class]) continue;
       NSMutableDictionary *item = [info mutableCopy];
@@ -291,8 +299,9 @@ NSString *StoreFolder(NSString *profile, NSString *extensionId, id version) {
       NSString *path = [info[@"path"] isKindOfClass:NSString.class] ? info[@"path"] : nil;
       NSString *folder = path ?: StoreFolder(profile, info[@"id"], info[@"version"]);
       NSDictionary *manifest = folder ? ardia_extensions::ReadManifest(folder) : nil;
-      for (NSString *key in @[ @"popup", @"actionTitle", @"actionIcon", @"sidePanel", @"hasAction" ])
+      for (NSString *key in @[ @"popup", @"actionTitle", @"actionIcon", @"sidePanel", @"hasAction", @"newTabPage" ])
         if (manifest[key]) item[key] = manifest[key];
+      if (item[@"newTabPage"] && [info[@"id"] isKindOfClass:NSString.class] && newTabRanks[info[@"id"]]) item[@"newTabRank"] = newTabRanks[info[@"id"]];
       item[@"incognitoSplit"] = @([manifest[@"incognitoSplit"] boolValue]);
       item[@"incognitoAllowed"] = manifest[@"incognitoAllowed"] ?: NSNull.null;
       for (NSString *key in @[ @"siteAccess", @"optionsUrl", @"path", @"homepageUrl" ])

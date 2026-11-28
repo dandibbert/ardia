@@ -13,7 +13,7 @@ import { consentToken, stillValid, type ConsentToken } from "../telemetry/client
 import { noteTabStripCommandRefused } from "../telemetry/tabStripCounts";
 import { changedIds } from "../browser/changes";
 import { chromeChanged, groupStep, stripActual, stripPlan, type GroupBindings } from "./liveTabs";
-import { recordAppSelection, judgeStripSelection } from "./stripBounce";
+import { recordAppSelection, judgeStripSelection, switchedWindows, type StripNote } from "./stripBounce";
 
 type Sync = { phase: "idle" } | { phase: "snapshotting"; early: TabStripTransaction[] } | { phase: "synced"; rev: number };
 let sync: Sync = { phase: "idle" };
@@ -26,6 +26,7 @@ const groups: GroupBindings = new Map();
 const tried = new Map<string, { sig: string; since: number }>();
 const changedAt = new Map<number, number>();
 const madeInFront = new Map<number, { browser: number; over: string | null }>();
+const acked = new Map<number, { at: number; cmd: number; consent: ConsentToken }>();
 let applyingStrip = false;
 
 if (__DEV__) {
@@ -38,7 +39,30 @@ if (__DEV__) {
   };
 }
 
-export const chromeTabsBookkeeping = () => ({ groups: groups.size, tried: tried.size, changedAt: changedAt.size });
+export const chromeTabsBookkeeping = () => ({ groups: groups.size, tried: tried.size, changedAt: changedAt.size, acked: acked.size });
+
+function noteAck(strip: number, cmd: number, at: number, stamped: string | undefined) {
+  const consent = consentToken();
+  if (consent && stamped === consent) acked.set(strip, { at, cmd, consent });
+  else acked.delete(strip);
+}
+
+function noteFor(tx: TabStripTransaction, strip: number, waiting: { kind: Kind; cmd: number; successor?: boolean } | undefined, siblings: boolean, now: number): StripNote {
+  const recorded = acked.get(strip);
+  const ack = recorded && stillValid(recorded.consent) ? recorded : undefined;
+  const deferredFor = tx.deferredCmd === undefined ? "none" : tx.deferredCmd === ack?.cmd ? "lastAck" : tx.deferredCmd === waiting?.cmd ? "inflight" : "older";
+  return {
+    trigger: tx.trigger ?? "unknown",
+    deferred: !!tx.deferred,
+    deferredInferred: !!tx.deferredInferred,
+    deferredFor,
+    activeFallback: !!tx.activeFallback,
+    sinceAckMs: ack ? now - ack.at : -1,
+    inflight: waiting?.kind ?? "none",
+    pendingActive: waiting?.kind === "activate" && !waiting.successor,
+    siblings,
+  };
+}
 
 export function startChromeTabs() {
   if (sync.phase !== "idle") return;
@@ -79,6 +103,8 @@ function receive(tx: TabStripTransaction) {
     if (made && f.makes) groups.set(made, f.makes);
   }
   const start = useBrowser.getState();
+  const now = Date.now();
+  const notes = new Map<string, StripNote>();
   let s = start;
   for (const strip of tx.strips) {
     const before = mirror.get(strip.strip);
@@ -86,6 +112,7 @@ function receive(tx: TabStripTransaction) {
       mirror.delete(strip.strip);
       madeInFront.delete(strip.strip);
       changedAt.delete(strip.strip);
+      acked.delete(strip.strip);
       for (const kind of KINDS) tried.delete(`${strip.strip}:${kind}`);
     } else mirror.set(strip.strip, strip);
     if (!strip.closed && (tx.cmd === null || tx.cmd < 0)) changedAt.set(strip.strip, tx.rev);
@@ -94,6 +121,7 @@ function receive(tx: TabStripTransaction) {
       const siblings = [...mirror.values()].filter((x) => x.window === strip.window && x.strip !== strip.strip);
       const made = strip.tabs.find((t) => t.active && !t.key && !before?.tabs.some((b) => b.browser === t.browser));
       if (made) madeInFront.set(strip.strip, { browser: made.browser, over: stripPlan(s, strip)?.active ?? null });
+      const unchanged = s;
       s = chromeChanged(s, before, strip, {
         seen,
         siblings,
@@ -105,12 +133,13 @@ function receive(tx: TabStripTransaction) {
           active: waiting?.kind === "activate" && !waiting.successor,
         },
       });
-    }
+      if (s !== unchanged) for (const windowId of switchedWindows(unchanged, s)) notes.set(windowId, noteFor(tx, strip.strip, waiting, siblings.length > 0, now));
+    } else if (!strip.closed && tx.cmd >= 0) noteAck(strip.strip, tx.cmd, now, tx.consent);
     for (const t of strip.tabs) if (t.key) seen.add(t.key);
   }
   if (seen.size > 2 * Object.keys(s.tabs).length + 64) for (const key of seen) if (!s.tabs[key]) seen.delete(key);
   if (s !== start) {
-    judgeStripSelection(start, s);
+    judgeStripSelection(start, s, now, notes);
     applyingStrip = true;
     try {
       useBrowser.setState(s);

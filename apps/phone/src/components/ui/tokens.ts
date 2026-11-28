@@ -262,7 +262,7 @@ const iPhoneMenuLook = {
   labelLines: 3,
   iconSide: "leading" as "leading" | "trailing",
   disabledOpacity: 0.4,
-  frost: "thin" as const,
+  frost: "glass" as "thin" | "glass",
   frosted: true,
   shadow: "0px 10px 40px rgba(0,0,0,0.12)",
 };
@@ -423,11 +423,10 @@ export const voiceInk = {
   bar: "rgba(255,255,255,0.85)",
   glass: "rgba(255,255,255,0.18)",
   transcript: "rgba(0,0,0,0.18)",
-  logoShadow: "0px 6px 12px rgba(0, 0, 0, 0.15)",
 } as const;
 
 export const voiceLayout = {
-  logo: 128,
+  appIcon: 104,
   pill: 50,
   cancel: 44,
   icon: 17,
@@ -763,6 +762,14 @@ export const browseLayout = {
   hostPillHeight: 40,
   accessory: { width: 32, height: 40 },
   traySurfaceInset: 8,
+} as const;
+
+export const loadWashLayout = {
+  feather: 28,
+  accentAlpha: { light: 0.16, dark: 0.24 },
+  privateAlpha: { light: 0.08, dark: 0.12 },
+  materialAlpha: 0.16,
+  materialPrivateAlpha: 0.1,
 } as const;
 
 export const logoInk = {

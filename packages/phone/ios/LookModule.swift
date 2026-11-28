@@ -13,6 +13,10 @@ public final class LookModule: Module {
       GlassReport.render(classic: false).rawValue
     }
 
+    Function("rememberLaunchLook") { (saved: [String: Any]) -> Bool in
+      LaunchLookWrites.remember(LaunchLook.recalled(saved: saved))
+    }
+
     OnCreate {
       DispatchQueue.main.async {
         MainActor.assumeIsolated {
@@ -118,6 +122,8 @@ public final class LookModule: Module {
       Prop("classicChrome") { (view: GlassView, value: ClassicChrome?) in view.classicChrome = value ?? ClassicChrome() }
       Prop("shown") { (view: GlassView, value: Bool?) in view.shown = value ?? true }
       Prop("shownMs") { (view: GlassView, value: Double?) in view.shownDuration = max(0, value ?? 200) / 1000 }
+      Prop("privately") { (view: GlassView, value: Bool?) in view.privately = value == true }
+      Prop("overlay") { (view: GlassView, value: Bool?) in view.overlay = value == true }
       Prop("color") { (view: GlassView, value: String?) in view.colors.color = value }
       Prop("themeColors") { (view: GlassView, value: [String]?) in view.colors.themeColors = value }
       Prop("darkThemeColors") { (view: GlassView, value: [String]?) in view.colors.darkThemeColors = value }
@@ -227,27 +233,8 @@ final class ProfileBackdropView: LookHostView {
   var softened = false
   var fadesOut = false
 
-  required init(appContext: AppContext? = nil) {
-    super.init(appContext: appContext)
-    registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ProfileBackdropView, _: UITraitCollection) in
-      view.rememberLaunchLook()
-    }
-  }
-
-  override func didMoveToWindow() {
-    super.didMoveToWindow()
-    rememberLaunchLook()
-  }
-
   func render() {
-    rememberLaunchLook()
     show(ProfileBackdrop(look: colors.look, themeLook: colors.shownThemeLook, themed: themed, softened: softened, fadesOut: fadesOut), dark: colors.isIncognito ? true : dark)
-  }
-
-  private func rememberLaunchLook() {
-    guard themed, window != nil else { return }
-    let appDark = traitCollection.userInterfaceStyle == .dark
-    LaunchLook.remember(colors, drawnDark: dark ?? appDark, appDark: appDark)
   }
 }
 
@@ -313,6 +300,8 @@ final class GlassView: ExpoView {
   var classicChrome = ClassicChrome()
   var shown = true
   var shownDuration: TimeInterval = 0.2
+  var privately = false
+  var overlay = false
   var colors = LookColors()
   var source: String?
 
@@ -364,6 +353,8 @@ final class GlassView: ExpoView {
     let classic = isSolid
     glass.batch {
       glass.label = accessibilityIdentifier ?? "-"
+      glass.privately = privately || colors.isIncognito
+      glass.overlay = overlay
       glass.source = source
       glass.dark = dark
       glass.tint = tint
@@ -385,7 +376,9 @@ final class GlassView: ExpoView {
       glass.alpha = shown ? 1 : 0
     }
     if turning, PhoneTestBuild.isOn { traceShown("turning") }
-    if turning, window != nil, shownDuration > 0, !UIAccessibility.isReduceMotionEnabled {
+    let shadowWas = layer.presentation()?.shadowOpacity ?? layer.shadowOpacity
+    let fades = turning && window != nil && shownDuration > 0 && !UIAccessibility.isReduceMotionEnabled
+    if fades {
       UIView.animate(withDuration: shownDuration, delay: 0, options: [shown ? .curveEaseOut : .curveEaseIn, .beginFromCurrentState], animations: surface) { [weak self] finished in
         guard PhoneTestBuild.isOn else { return }
         MainActor.assumeIsolated {
@@ -396,6 +389,20 @@ final class GlassView: ExpoView {
       surface()
     }
     applyShape()
+    fadeShadow(from: shadowWas, animated: fades)
+  }
+
+  private func fadeShadow(from: Float, animated: Bool) {
+    guard case let .fade(start, end) = LiquidGlassRules.shadowFade(from: Double(from), to: Double(layer.shadowOpacity), animated: animated) else {
+      layer.removeAnimation(forKey: "shownShadow")
+      return
+    }
+    let fade = CABasicAnimation(keyPath: "shadowOpacity")
+    fade.fromValue = Float(start)
+    fade.toValue = Float(end)
+    fade.duration = shownDuration
+    fade.timingFunction = CAMediaTimingFunction(name: shown ? .easeOut : .easeIn)
+    layer.add(fade, forKey: "shownShadow")
   }
 
   private func pressed(_ down: Bool) {
@@ -444,7 +451,7 @@ final class GlassView: ExpoView {
     classicView.layer.borderWidth = classic ? CGFloat(classicChrome.edgeWidth) : 0
     classicView.layer.borderColor = classic ? classicChrome.edge?.resolvedColor(with: traitCollection).cgColor : nil
     let shadows = classic && barShadow && classicChrome.shadow != nil
-    layer.shadowOpacity = shadows ? 1 : 0
+    layer.shadowOpacity = shadows && shown ? 1 : 0
     guard shadows else {
       layer.shadowPath = nil
       return

@@ -16,6 +16,7 @@ import { plusMenuItems } from "../tabs/ChromeButtons";
 import type { SearchTabs } from "../tabs/DeckBottomBar";
 import { MATERIAL_DECK } from "../tabs/MaterialDeckLayout";
 import { Favicon, screenReaderActions, Symbol, type SymbolName } from "./index";
+import { LoadWash, materialWashTint, type LoadWashValues } from "./LoadWash";
 import { IncognitoEyes } from "./IncognitoEyes";
 import { MaterialIconButton } from "./MaterialIconButton";
 import { MenuTrigger } from "./MenuTrigger";
@@ -28,6 +29,7 @@ export type MaterialPageBarProps = {
   order: BrowserTab[];
   showsPlus: boolean;
   addressDocked?: boolean;
+  wash?: LoadWashValues | null;
   onTabs: () => void;
   onTabsMenu: () => void;
   onStep: (delta: -1 | 1) => void;
@@ -42,6 +44,7 @@ type OverviewProps = {
   incognito: boolean;
   privateCount?: number;
   onCloseIncognito?: () => void;
+  onCloseAll?: () => void;
   canReopen: boolean;
   menusShown: boolean;
   onMenu: (open: boolean) => void;
@@ -81,7 +84,7 @@ export function MaterialBottomBarSurface({ scheme, container, children }: { sche
   );
 }
 
-function PageControls({ scheme, tab, order, showsPlus, addressDocked, onTabs, onTabsMenu, onStep, onAddress, onPlus, onMore, onSiteSettings }: MaterialPageBarProps & { scheme: MaterialScheme }) {
+function PageControls({ scheme, tab, order, showsPlus, addressDocked, wash, onTabs, onTabsMenu, onStep, onAddress, onPlus, onMore, onSiteSettings }: MaterialPageBarProps & { scheme: MaterialScheme }) {
   const field = useMaterialRipple();
   const address = barAddress(tab);
   const count = order.length;
@@ -127,6 +130,7 @@ function PageControls({ scheme, tab, order, showsPlus, addressDocked, onTabs, on
           onLongPress={openMenuFromField}
           style={[styles.fieldContainer, styles.fieldPressable, { backgroundColor: scheme.surfaceContainerHigh }, addressDocked ? styles.docked : null]}
         >
+          {wash ? <LoadWash testID="materialBarLoadWash" values={wash} tint={materialWashTint(scheme, tab.isPrivate)} cornerRadius={materialShape.full} /> : null}
           <MaterialAddressContent address={address} scheme={scheme} testID="materialBarHost" />
           <MaterialIconButton
             testID="materialBarSiteSettings"
@@ -167,7 +171,7 @@ export function MaterialAddressContent({ address, scheme, testID }: { address: R
   );
 }
 
-function OverviewControls({ scheme, search, incognito, privateCount = 0, onCloseIncognito, canReopen, menusShown, onMenu }: OverviewProps & { scheme: MaterialScheme }) {
+function OverviewControls({ scheme, search, incognito, privateCount = 0, onCloseIncognito, onCloseAll, canReopen, menusShown, onMenu }: OverviewProps & { scheme: MaterialScheme }) {
   const { input, text, change, focus, blur } = search;
   const fabLabel = incognito ? actionWords.newIncognitoTab : actionWords.newTab;
   const closesIncognito = menusShown && privateCount > 0 && onCloseIncognito !== undefined;
@@ -225,7 +229,7 @@ function OverviewControls({ scheme, search, incognito, privateCount = 0, onClose
         {text ? <MaterialBarIconButton testID="materialDeckSearchClear" icon="xmark" label={actionWords.clearText} scheme={scheme} onPress={() => change("")} /> : null}
       </Pressable>
       <MenuTrigger
-        items={plusMenuItems(incognito, canReopen)}
+        items={plusMenuItems(incognito, canReopen, onCloseAll)}
         trigger="longPress"
         frost={null}
         privately={incognito}
